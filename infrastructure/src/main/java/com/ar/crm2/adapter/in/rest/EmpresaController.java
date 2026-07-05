@@ -14,8 +14,11 @@ import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
+import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
 import com.ar.crm2.application.security.ActorContext;
+import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.entity.Empresa;
+import com.ar.crm2.model.vo.UsuarioId;
 import com.ar.crm2.security.ActorContextRequestAttributeFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -69,10 +72,38 @@ public class EmpresaController {
      * Retrieves all Empresas.
      */
     @GetMapping("/get-all")
+    public ResponseEntity<List<EmpresaResponse>> getAll(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) EstadoRelacion estadoRelacion,
+            @RequestParam(required = false) String sector,
+            @RequestParam(required = false) UUID responsableId,
+            @RequestParam(required = false) String web
+    ) {
+        EmpresaFilterCriteria criteria = new EmpresaFilterCriteria(
+                search,
+                estadoRelacion,
+                sector,
+                responsableId != null ? UsuarioId.from(responsableId) : null,
+                parseWebFilter(web)
+        );
+        List<Empresa> empresas = getAllUseCase.getAll(criteria);
+        List<EmpresaResponse> responses = empresas.stream().map(EmpresaResponse::fromDomain).toList();
+        return ResponseEntity.ok(responses);
+    }
+
     public ResponseEntity<List<EmpresaResponse>> getAll() {
         List<Empresa> empresas = getAllUseCase.getAll();
         List<EmpresaResponse> responses = empresas.stream().map(EmpresaResponse::fromDomain).toList();
         return ResponseEntity.ok(responses);
+    }
+
+    private EmpresaFilterCriteria.WebFilter parseWebFilter(String web) {
+        if (web == null || web.isBlank()) return null;
+        return switch (web) {
+            case "con-web" -> EmpresaFilterCriteria.WebFilter.CON_WEB;
+            case "sin-web" -> EmpresaFilterCriteria.WebFilter.SIN_WEB;
+            default -> null;
+        };
     }
 
     /**

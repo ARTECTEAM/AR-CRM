@@ -1,5 +1,6 @@
 package com.ar.crm2.application.empresa.port.in;
 
+import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
 import com.ar.crm2.model.entity.Empresa;
 
 import java.util.List;
@@ -15,5 +16,9 @@ public interface GetAllEmpresasUseCase {
      *
      * @return list of all domain entities
      */
-    List<Empresa> getAll();
+    default List<Empresa> getAll() {
+        return getAll(EmpresaFilterCriteria.empty());
+    }
+
+    List<Empresa> getAll(EmpresaFilterCriteria criteria);
 }

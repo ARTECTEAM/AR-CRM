@@ -2,6 +2,7 @@ package com.ar.crm2.application.empresa.service;
 
 import com.ar.crm2.application.empresa.port.out.FindAllEmpresasPort;
 import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
+import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
 import com.ar.crm2.model.entity.Empresa;
 import lombok.RequiredArgsConstructor;
 
@@ -18,7 +19,7 @@ public class GetAllEmpresasService implements GetAllEmpresasUseCase {
     private final FindAllEmpresasPort findAllPort;
 
     @Override
-    public List<Empresa> getAll() {
-        return findAllPort.findAll();
+    public List<Empresa> getAll(EmpresaFilterCriteria criteria) {
+        return findAllPort.findAll(criteria);
     }
 }
