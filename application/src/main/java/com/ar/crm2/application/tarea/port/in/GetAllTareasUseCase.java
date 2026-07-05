@@ -1,5 +1,6 @@
 package com.ar.crm2.application.tarea.port.in;
 
+import com.ar.crm2.application.tarea.query.TareaFilterCriteria;
 import com.ar.crm2.model.entity.Tarea;
 
 import java.util.List;
@@ -14,5 +15,9 @@ public interface GetAllTareasUseCase {
      *
      * @return list of all Tareas
      */
-    List<Tarea> getAll();
+    default List<Tarea> getAll() {
+        return getAll(TareaFilterCriteria.empty());
+    }
+
+    List<Tarea> getAll(TareaFilterCriteria criteria);
 }

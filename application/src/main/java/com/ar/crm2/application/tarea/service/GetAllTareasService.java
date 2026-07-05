@@ -2,6 +2,7 @@ package com.ar.crm2.application.tarea.service;
 
 import com.ar.crm2.application.tarea.port.out.FindAllTareasPort;
 import com.ar.crm2.application.tarea.port.in.GetAllTareasUseCase;
+import com.ar.crm2.application.tarea.query.TareaFilterCriteria;
 import com.ar.crm2.model.entity.Tarea;
 import lombok.RequiredArgsConstructor;
 
@@ -18,7 +19,7 @@ public class GetAllTareasService implements GetAllTareasUseCase {
     private final FindAllTareasPort findAllPort;
 
     @Override
-    public List<Tarea> getAll() {
-        return findAllPort.findAll();
+    public List<Tarea> getAll(TareaFilterCriteria criteria) {
+        return findAllPort.findAll(criteria);
     }
 }
