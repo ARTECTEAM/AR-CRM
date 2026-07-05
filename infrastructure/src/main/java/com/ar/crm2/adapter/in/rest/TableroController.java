@@ -21,7 +21,9 @@ import com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase;
 import com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase;
 import com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase;
 import com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase;
+import com.ar.crm2.application.tablero.query.TableroFilterCriteria;
 import com.ar.crm2.application.security.ActorContext;
+import com.ar.crm2.model.enums.TipoTablero;
 import com.ar.crm2.model.entity.Tablero;
 import com.ar.crm2.security.ActorContextRequestAttributeFilter;
 import jakarta.servlet.http.HttpServletRequest;
@@ -109,6 +111,16 @@ public class TableroController {
      * Retrieves all Tableros.
      */
     @GetMapping("/get-all")
+    public ResponseEntity<List<TableroResponse>> getAll(
+            @RequestParam(required = false) TipoTablero tipoTablero
+    ) {
+        List<Tablero> tableros = getAllUseCase.getAll(new TableroFilterCriteria(tipoTablero));
+        List<TableroResponse> responses = tableros.stream()
+            .map(responseAssembler::assemble)
+            .toList();
+        return ResponseEntity.ok(responses);
+    }
+
     public ResponseEntity<List<TableroResponse>> getAll() {
         List<Tablero> tableros = getAllUseCase.getAll();
         List<TableroResponse> responses = tableros.stream()

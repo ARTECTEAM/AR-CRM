@@ -16,8 +16,12 @@ import com.ar.crm2.application.ficha.port.in.EditFichaUseCase;
 import com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase;
 import com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase;
 import com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase;
+import com.ar.crm2.application.ficha.query.FichaFilterCriteria;
 import com.ar.crm2.application.security.ActorContext;
+import com.ar.crm2.model.enums.TipoFicha;
 import com.ar.crm2.model.entity.Ficha;
+import com.ar.crm2.model.vo.TareaId;
+import com.ar.crm2.model.vo.TratoId;
 import com.ar.crm2.security.ActorContextRequestAttributeFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -34,7 +38,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * REST controller for Ficha operations.
@@ -72,10 +78,39 @@ public class FichaController {
      * Retrieves all Fichas.
      */
     @GetMapping("/get-all")
+    public ResponseEntity<List<FichaResponse>> getAll(
+            @RequestParam(required = false) TipoFicha tipoFicha,
+            @RequestParam(required = false) UUID tratoId,
+            @RequestParam(required = false) UUID tareaId,
+            @RequestParam(required = false) List<UUID> tratoIds,
+            @RequestParam(required = false) List<UUID> tareaIds
+    ) {
+        FichaFilterCriteria criteria = new FichaFilterCriteria(
+                tipoFicha,
+                tratoId != null ? TratoId.from(tratoId) : null,
+                tareaId != null ? TareaId.from(tareaId) : null,
+                toTratoIds(tratoIds),
+                toTareaIds(tareaIds)
+        );
+        List<Ficha> fichas = getAllUseCase.getAll(criteria);
+        List<FichaResponse> responses = fichas.stream().map(FichaResponse::fromDomain).toList();
+        return ResponseEntity.ok(responses);
+    }
+
     public ResponseEntity<List<FichaResponse>> getAll() {
         List<Ficha> fichas = getAllUseCase.getAll();
         List<FichaResponse> responses = fichas.stream().map(FichaResponse::fromDomain).toList();
         return ResponseEntity.ok(responses);
+    }
+
+    private Set<TratoId> toTratoIds(List<UUID> ids) {
+        if (ids == null) return Set.of();
+        return ids.stream().map(TratoId::from).collect(Collectors.toSet());
+    }
+
+    private Set<TareaId> toTareaIds(List<UUID> ids) {
+        if (ids == null) return Set.of();
+        return ids.stream().map(TareaId::from).collect(Collectors.toSet());
     }
 
     /**

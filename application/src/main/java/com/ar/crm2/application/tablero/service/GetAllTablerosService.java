@@ -2,6 +2,7 @@ package com.ar.crm2.application.tablero.service;
 
 import com.ar.crm2.application.tablero.port.out.FindAllTablerosPort;
 import com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase;
+import com.ar.crm2.application.tablero.query.TableroFilterCriteria;
 import com.ar.crm2.model.entity.Tablero;
 import lombok.RequiredArgsConstructor;
 
@@ -18,7 +19,7 @@ public class GetAllTablerosService implements GetAllTablerosUseCase {
     private final FindAllTablerosPort findAllPort;
 
     @Override
-    public List<Tablero> getAll() {
-        return findAllPort.findAll();
+    public List<Tablero> getAll(TableroFilterCriteria criteria) {
+        return findAllPort.findAll(criteria);
     }
 }

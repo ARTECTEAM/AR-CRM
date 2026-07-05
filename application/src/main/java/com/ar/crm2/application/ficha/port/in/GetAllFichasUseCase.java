@@ -1,5 +1,6 @@
 package com.ar.crm2.application.ficha.port.in;
 
+import com.ar.crm2.application.ficha.query.FichaFilterCriteria;
 import com.ar.crm2.model.entity.Ficha;
 
 import java.util.List;
@@ -14,5 +15,9 @@ public interface GetAllFichasUseCase {
      *
      * @return list of all Fichas
      */
-    List<Ficha> getAll();
+    default List<Ficha> getAll() {
+        return getAll(FichaFilterCriteria.empty());
+    }
+
+    List<Ficha> getAll(FichaFilterCriteria criteria);
 }

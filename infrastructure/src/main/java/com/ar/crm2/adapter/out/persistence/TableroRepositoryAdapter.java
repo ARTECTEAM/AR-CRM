@@ -13,6 +13,7 @@ import com.ar.crm2.application.tablero.port.out.FindColumnaByIdPort;
 import com.ar.crm2.application.tablero.port.out.FindInitialColumnPort;
 import com.ar.crm2.application.tablero.port.out.FindTableroByIdPort;
 import com.ar.crm2.application.tablero.port.out.SaveTableroPort;
+import com.ar.crm2.application.tablero.query.TableroFilterCriteria;
 import com.ar.crm2.model.entity.Columna;
 import com.ar.crm2.model.entity.Tablero;
 import com.ar.crm2.model.vo.ColumnaId;
@@ -70,8 +71,14 @@ public class TableroRepositoryAdapter implements SaveTableroPort, FindAllTablero
 
     @Override
     public List<Tablero> findAll() {
+        return findAll(TableroFilterCriteria.empty());
+    }
+
+    @Override
+    public List<Tablero> findAll(TableroFilterCriteria criteria) {
         return repository.findAll().stream()
             .map(mapper::toDomain)
+            .filter(tablero -> criteria == null || criteria.tipoTablero() == null || tablero.getTipoTablero() == criteria.tipoTablero())
             .toList();
     }
 
