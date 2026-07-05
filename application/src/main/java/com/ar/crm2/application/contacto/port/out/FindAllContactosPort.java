@@ -1,5 +1,6 @@
 package com.ar.crm2.application.contacto.port.out;
 
+import com.ar.crm2.application.contacto.query.ContactoFilterCriteria;
 import com.ar.crm2.model.entity.Contacto;
 
 import java.util.List;
@@ -16,4 +17,8 @@ public interface FindAllContactosPort {
      * @return list of all Contacto domain entities
      */
     List<Contacto> findAll();
+
+    default List<Contacto> findAll(ContactoFilterCriteria criteria) {
+        return findAll();
+    }
 }

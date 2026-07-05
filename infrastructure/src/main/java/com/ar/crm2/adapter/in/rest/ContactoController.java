@@ -16,8 +16,12 @@ import com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase;
+import com.ar.crm2.application.contacto.query.ContactoFilterCriteria;
 import com.ar.crm2.application.security.ActorContext;
+import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.entity.Contacto;
+import com.ar.crm2.model.vo.EmpresaId;
+import com.ar.crm2.model.vo.UsuarioId;
 import com.ar.crm2.security.ActorContextRequestAttributeFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -72,6 +76,25 @@ public class ContactoController {
      * Retrieves all Contactos.
      */
     @GetMapping("/get-all")
+    public ResponseEntity<List<ContactoResponse>> getAll(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) EstadoRelacion estadoRelacion,
+            @RequestParam(required = false) UUID empresaId,
+            @RequestParam(required = false) UUID responsableId,
+            @RequestParam(required = false) String comoNosConocio
+    ) {
+        ContactoFilterCriteria criteria = new ContactoFilterCriteria(
+                search,
+                estadoRelacion,
+                empresaId != null ? EmpresaId.from(empresaId) : null,
+                responsableId != null ? UsuarioId.from(responsableId) : null,
+                comoNosConocio
+        );
+        List<Contacto> contactos = getAllUseCase.getAll(criteria);
+        List<ContactoResponse> responses = contactos.stream().map(ContactoResponse::fromDomain).toList();
+        return ResponseEntity.ok(responses);
+    }
+
     public ResponseEntity<List<ContactoResponse>> getAll() {
         List<Contacto> contactos = getAllUseCase.getAll();
         List<ContactoResponse> responses = contactos.stream().map(ContactoResponse::fromDomain).toList();

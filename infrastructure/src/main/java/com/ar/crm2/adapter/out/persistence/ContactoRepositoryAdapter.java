@@ -8,6 +8,7 @@ import com.ar.crm2.application.contacto.port.out.ExistsTratosByContactoIdPort;
 import com.ar.crm2.application.contacto.port.out.FindAllContactosPort;
 import com.ar.crm2.application.contacto.port.out.FindContactoByIdPort;
 import com.ar.crm2.application.contacto.port.out.SaveContactoPort;
+import com.ar.crm2.application.contacto.query.ContactoFilterCriteria;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.vo.ContactoId;
 import lombok.RequiredArgsConstructor;
@@ -29,9 +30,41 @@ public class ContactoRepositoryAdapter implements SaveContactoPort, FindAllConta
 
     @Override
     public List<Contacto> findAll() {
+        return findAll(ContactoFilterCriteria.empty());
+    }
+
+    @Override
+    public List<Contacto> findAll(ContactoFilterCriteria criteria) {
         return repository.findAll().stream()
             .map(ContactoMapper::toDomain)
+            .filter(contacto -> matches(contacto, criteria))
             .toList();
+    }
+
+    private boolean matches(Contacto contacto, ContactoFilterCriteria criteria) {
+        if (criteria == null) criteria = ContactoFilterCriteria.empty();
+        String term = normalize(criteria.search());
+        String origen = normalize(criteria.comoNosConocio());
+
+        if (term != null && !containsAny(term, contacto.getNombre(), contacto.getCorreo(), contacto.getCargo(), contacto.getTelefono())) return false;
+        if (criteria.estadoRelacion() != null && contacto.getEstadoRelacion() != criteria.estadoRelacion()) return false;
+        if (criteria.empresaId() != null && !criteria.empresaId().equals(contacto.getEmpresaId())) return false;
+        if (criteria.responsableId() != null && !criteria.responsableId().equals(contacto.getResponsableId())) return false;
+        if (origen != null && !origen.equals(normalize(contacto.getComoNosConocio()))) return false;
+        return true;
+    }
+
+    private boolean containsAny(String term, String... values) {
+        for (String value : values) {
+            String normalized = normalize(value);
+            if (normalized != null && normalized.contains(term)) return true;
+        }
+        return false;
+    }
+
+    private String normalize(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     @Override
