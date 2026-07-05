@@ -19,7 +19,12 @@ import com.ar.crm2.application.trato.port.in.DeleteTratoUseCase;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.application.trato.port.in.GetAllTratosUseCase;
 import com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase;
+import com.ar.crm2.application.trato.query.TratoFilterCriteria;
+import com.ar.crm2.model.enums.EstadoTrato;
+import com.ar.crm2.model.enums.TipoContrato;
 import com.ar.crm2.model.entity.Trato;
+import com.ar.crm2.model.vo.ContactoId;
+import com.ar.crm2.model.vo.UsuarioId;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +41,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 /**
  * REST controller for Trato operations.
@@ -72,10 +78,47 @@ public class TratoController {
      * Retrieves all Tratos.
      */
     @GetMapping("/get-all")
+    public ResponseEntity<List<TratoResponse>> getAll(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) EstadoTrato estado,
+            @RequestParam(required = false) TipoContrato tipoContrato,
+            @RequestParam(required = false) UUID responsableId,
+            @RequestParam(required = false) UUID contactoId,
+            @RequestParam(required = false) BigDecimal valorMin,
+            @RequestParam(required = false) BigDecimal valorMax,
+            @RequestParam(required = false) String cierreEsperado
+    ) {
+        TratoFilterCriteria criteria = new TratoFilterCriteria(
+                search,
+                estado,
+                tipoContrato,
+                responsableId != null ? UsuarioId.from(responsableId) : null,
+                contactoId != null ? ContactoId.from(contactoId) : null,
+                valorMin,
+                valorMax,
+                parseCierreEsperado(cierreEsperado)
+        );
+        List<Trato> tratos = getAllUseCase.getAll(criteria);
+        List<TratoResponse> responses = tratos.stream().map(TratoResponse::fromDomain).toList();
+        return ResponseEntity.ok(responses);
+    }
+
     public ResponseEntity<List<TratoResponse>> getAll() {
         List<Trato> tratos = getAllUseCase.getAll();
         List<TratoResponse> responses = tratos.stream().map(TratoResponse::fromDomain).toList();
         return ResponseEntity.ok(responses);
+    }
+
+    private TratoFilterCriteria.CierreEsperadoFilter parseCierreEsperado(String value) {
+        if (value == null || value.isBlank()) return null;
+        return switch (value) {
+            case "todas" -> TratoFilterCriteria.CierreEsperadoFilter.TODAS;
+            case "vencidas" -> TratoFilterCriteria.CierreEsperadoFilter.VENCIDAS;
+            case "proximos-7" -> TratoFilterCriteria.CierreEsperadoFilter.PROXIMOS_7;
+            case "proximos-30" -> TratoFilterCriteria.CierreEsperadoFilter.PROXIMOS_30;
+            case "sin-fecha" -> TratoFilterCriteria.CierreEsperadoFilter.SIN_FECHA;
+            default -> null;
+        };
     }
 
     /**

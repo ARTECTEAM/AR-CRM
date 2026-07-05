@@ -2,6 +2,7 @@ package com.ar.crm2.application.trato.service;
 
 import com.ar.crm2.application.trato.port.out.FindAllTratosPort;
 import com.ar.crm2.application.trato.port.in.GetAllTratosUseCase;
+import com.ar.crm2.application.trato.query.TratoFilterCriteria;
 import com.ar.crm2.model.entity.Trato;
 import lombok.RequiredArgsConstructor;
 
@@ -18,7 +19,7 @@ public class GetAllTratosService implements GetAllTratosUseCase {
     private final FindAllTratosPort findAllPort;
 
     @Override
-    public List<Trato> getAll() {
-        return findAllPort.findAll();
+    public List<Trato> getAll(TratoFilterCriteria criteria) {
+        return findAllPort.findAll(criteria);
     }
 }
