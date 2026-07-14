@@ -123,6 +123,51 @@ class FichaMapperTest {
             // And, critically, the row id is NOT the catalog id
             assertThat(row.getId()).isNotEqualTo(row.getEtiquetaId());
         }
+
+        @Test
+        @DisplayName("reuses persisted child row id when existingChildRowIds contains etiquetaId")
+        void toEntity_existingChildRowIds_preservesPersistedRowId() {
+            UUID etiquetaCatalogId = UUID.fromString("dddddddd-dddd-dddd-dddd-dddddddddddd");
+            String persistedRowId = UUID.fromString("99999999-9999-9999-9999-999999999991").toString();
+            FichaEtiqueta fe = FichaEtiqueta.create(EtiquetaId.from(etiquetaCatalogId), TipoEtiqueta.TAREA);
+
+            FichaEntity entity = FichaMapper.toEntity(
+                domainFichaWithEtiquetas(List.of(fe)),
+                java.util.Map.of(etiquetaCatalogId.toString(), persistedRowId)
+            );
+
+            assertThat(entity.getEtiquetas()).hasSize(1);
+            assertThat(entity.getEtiquetas().get(0).getId())
+                .as("existing etiqueta relation must keep its persisted row id on updates")
+                .isEqualTo(persistedRowId);
+        }
+
+        @Test
+        @DisplayName("generates UUID for new child when existingChildRowIds lacks etiquetaId")
+        void toEntity_existingChildRowIds_newChildGeneratesUuid() {
+            UUID existingEtiquetaId = UUID.fromString("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1");
+            UUID newEtiquetaId = UUID.fromString("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee2");
+            String persistedRowId = UUID.fromString("99999999-9999-9999-9999-999999999992").toString();
+            List<FichaEtiqueta> etiquetas = List.of(
+                FichaEtiqueta.create(EtiquetaId.from(existingEtiquetaId), TipoEtiqueta.TAREA),
+                FichaEtiqueta.create(EtiquetaId.from(newEtiquetaId), TipoEtiqueta.TAREA)
+            );
+
+            FichaEntity entity = FichaMapper.toEntity(
+                domainFichaWithEtiquetas(etiquetas),
+                java.util.Map.of(existingEtiquetaId.toString(), persistedRowId)
+            );
+
+            FichaEtiquetaEntity existingRow = entity.getEtiquetas().get(0);
+            FichaEtiquetaEntity newRow = entity.getEtiquetas().get(1);
+
+            assertThat(existingRow.getId()).isEqualTo(persistedRowId);
+            assertThat(newRow.getId())
+                .isNotNull()
+                .isNotEqualTo(persistedRowId)
+                .isNotEqualTo(newEtiquetaId.toString());
+            UUID.fromString(newRow.getId());
+        }
     }
 
     // ── toEntity: other fields ──────────────────────────────────────

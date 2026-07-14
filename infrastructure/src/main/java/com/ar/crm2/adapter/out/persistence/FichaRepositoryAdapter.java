@@ -1,6 +1,7 @@
 package com.ar.crm2.adapter.out.persistence;
 
 import com.ar.crm2.adapter.out.persistence.entity.FichaEntity;
+import com.ar.crm2.adapter.out.persistence.entity.FichaEtiquetaEntity;
 import com.ar.crm2.adapter.out.persistence.mapper.FichaMapper;
 import com.ar.crm2.adapter.out.persistence.repository.FichaRepository;
 import com.ar.crm2.application.ficha.port.out.DeleteFichaByIdPort;
@@ -14,7 +15,9 @@ import com.ar.crm2.model.vo.ColumnaId;
 import com.ar.crm2.model.vo.FichaId;
 import lombok.RequiredArgsConstructor;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @RequiredArgsConstructor
@@ -26,9 +29,34 @@ public class FichaRepositoryAdapter
 
     @Override
     public Ficha save(Ficha ficha) {
-        FichaEntity entity = FichaMapper.toEntity(ficha);
+        Map<String, String> existingChildRowIds = loadExistingChildRowIds(ficha);
+        FichaEntity entity = FichaMapper.toEntity(ficha, existingChildRowIds);
         FichaEntity saved = repository.save(entity);
         return FichaMapper.toDomain(saved);
+    }
+
+    /**
+     * Returns a map of {@code etiquetaId → persisted row id} for etiqueta
+     * relations already stored for this Ficha.
+     *
+     * <p>Moving a Ficha changes only {@code columnaId}, but the domain object
+     * still carries its etiquetas. Reusing each existing relation row id prevents
+     * Hibernate from trying to INSERT duplicate (ficha_id, etiqueta_id) rows when
+     * the Ficha is saved after a move.
+     */
+    private Map<String, String> loadExistingChildRowIds(Ficha ficha) {
+        Optional<FichaEntity> existing = repository.findById(ficha.getId().value().toString());
+        if (existing.isEmpty() || existing.get().getEtiquetas() == null
+            || existing.get().getEtiquetas().isEmpty()) {
+            return Map.of();
+        }
+        Map<String, String> map = new HashMap<>(existing.get().getEtiquetas().size());
+        for (FichaEtiquetaEntity child : existing.get().getEtiquetas()) {
+            if (child.getEtiquetaId() != null && child.getId() != null) {
+                map.put(child.getEtiquetaId(), child.getId());
+            }
+        }
+        return map;
     }
 
     @Override

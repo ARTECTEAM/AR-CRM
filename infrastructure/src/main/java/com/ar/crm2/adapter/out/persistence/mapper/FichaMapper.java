@@ -12,6 +12,7 @@ import com.ar.crm2.model.vo.TareaId;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -28,15 +29,29 @@ import java.util.UUID;
  * {@code FichaMapperTest#toEntity_childRowId_isGeneratedUuidNotEqualToEtiquetaId}
  * and is the same strategy used by {@code TableroMapper#toEntity} for
  * {@code ColumnaTableroEntity}.
+ *
+ * <p>For existing Fichas, callers may pass a map of
+ * {@code etiquetaId → existing relation row id} so unchanged etiqueta
+ * relations keep their persisted primary key during updates. Without that,
+ * JPA may treat unchanged relation rows as new inserts and collide with
+ * {@code uk_fichas_etiquetas_ficha_etiqueta}.
  */
 public final class FichaMapper {
 
     private FichaMapper() {}
 
     public static FichaEntity toEntity(Ficha domain) {
+        return toEntity(domain, java.util.Collections.emptyMap());
+    }
+
+    public static FichaEntity toEntity(Ficha domain, Map<String, String> existingChildRowIds) {
         if (domain == null) {
             return null;
         }
+        Map<String, String> safeExisting = existingChildRowIds != null
+            ? existingChildRowIds
+            : java.util.Collections.emptyMap();
+
         FichaEntity entity = FichaEntity.builder()
             .id(domain.getId().value().toString())
             .columnaId(domain.getColumnaId().value().toString())
@@ -48,10 +63,11 @@ public final class FichaMapper {
             .build();
 
         for (FichaEtiqueta fe : domain.getEtiquetas()) {
+            String etiquetaId = fe.getEtiquetaId().value().toString();
             FichaEtiquetaEntity child = FichaEtiquetaEntity.builder()
-                .id(UUID.randomUUID().toString())
+                .id(safeExisting.getOrDefault(etiquetaId, UUID.randomUUID().toString()))
                 .ficha(entity)
-                .etiquetaId(fe.getEtiquetaId().value().toString())
+                .etiquetaId(etiquetaId)
                 .tipoEtiqueta(fe.getTipoEtiqueta())
                 .build();
             entity.getEtiquetas().add(child);
