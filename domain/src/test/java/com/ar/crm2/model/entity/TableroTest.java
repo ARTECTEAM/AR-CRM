@@ -63,6 +63,31 @@ class TableroTest {
     }
 
     @Nested
+    @DisplayName("requiredDefaultColumns")
+    class RequiredDefaultColumns {
+
+        @Test
+        @DisplayName("TRATOS defaults are pipeline stages, not commercial outcomes")
+        void tratosDefaults_arePipelineStages() {
+            List<Tablero.DefaultColumnSpec> specs = Tablero.requiredDefaultColumns(TipoTablero.TRATOS);
+
+            assertThat(specs)
+                .extracting(Tablero.DefaultColumnSpec::name)
+                .containsExactly("Nuevo", "Calificado", "Propuesta", "Negociación");
+        }
+
+        @Test
+        @DisplayName("TAREAS defaults remain operational workflow stages")
+        void tareasDefaults_areOperationalWorkflowStages() {
+            List<Tablero.DefaultColumnSpec> specs = Tablero.requiredDefaultColumns(TipoTablero.TAREAS);
+
+            assertThat(specs)
+                .extracting(Tablero.DefaultColumnSpec::name)
+                .containsExactly("Pendiente", "En Curso", "Finalizada", "Cancelada");
+        }
+    }
+
+    @Nested
     @DisplayName("eliminarColumnaDelTablero")
     class EliminarColumnaDelTablero {
 

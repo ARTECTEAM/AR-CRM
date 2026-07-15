@@ -7,6 +7,7 @@ import com.ar.crm2.adapter.out.persistence.mapper.TableroMapper;
 import com.ar.crm2.adapter.out.persistence.repository.ColumnaRepository;
 import com.ar.crm2.adapter.out.persistence.repository.TableroRepository;
 import com.ar.crm2.application.tablero.port.out.DeleteTableroByIdPort;
+import com.ar.crm2.application.ficha.port.out.ExistsColumnaCompatibleConFichaPort;
 import com.ar.crm2.application.tablero.port.out.ExistsColumnaEnTableroPort;
 import com.ar.crm2.application.tablero.port.out.FindAllTablerosPort;
 import com.ar.crm2.application.tablero.port.out.FindColumnaByIdPort;
@@ -27,7 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @RequiredArgsConstructor
-public class TableroRepositoryAdapter implements SaveTableroPort, FindAllTablerosPort, FindTableroByIdPort, DeleteTableroByIdPort, ExistsColumnaEnTableroPort, FindColumnaByIdPort, FindInitialColumnPort {
+public class TableroRepositoryAdapter implements SaveTableroPort, FindAllTablerosPort, FindTableroByIdPort, DeleteTableroByIdPort, ExistsColumnaEnTableroPort, FindColumnaByIdPort, FindInitialColumnPort, ExistsColumnaCompatibleConFichaPort {
 
     private final TableroRepository repository;
     private final ColumnaRepository columnaRepository;
@@ -115,5 +116,13 @@ public class TableroRepositoryAdapter implements SaveTableroPort, FindAllTablero
                 .findFirst()
                 .flatMap(ct -> findById(ct.getColumnaId()))
             );
+    }
+
+    @Override
+    public boolean existsCompatibleColumn(ColumnaId columnaId, TipoTablero expectedTipoTablero) {
+        return repository.existsByColumnasTableroColumnaIdAndColumnasTableroTipoTablero(
+            columnaId.value().toString(),
+            expectedTipoTablero
+        );
     }
 }

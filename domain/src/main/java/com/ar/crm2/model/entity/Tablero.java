@@ -191,7 +191,7 @@ public class Tablero {
      * <p>Default board shape:
      * <ul>
      *   <li>TAREAS: Pendiente (WIP 5), En Curso (WIP 3), Finalizada (WIP 5), Cancelada (WIP 5)</li>
-     *   <li>TRATOS: Abierto (WIP 10), Ganado (WIP 10), Perdido (WIP 10), Archived (WIP 10)</li>
+     *   <li>TRATOS: Nuevo (WIP 10), Calificado (WIP 10), Propuesta (WIP 10), Negociación (WIP 10)</li>
      * </ul>
      *
      * <p>This is a domain behavior because the board shape (which columns a
@@ -212,10 +212,10 @@ public class Tablero {
                 new DefaultColumnSpec("Cancelada", 5)
             );
             case TRATOS -> List.of(
-                new DefaultColumnSpec("Abierto", 10),
-                new DefaultColumnSpec("Ganado", 10),
-                new DefaultColumnSpec("Perdido", 10),
-                new DefaultColumnSpec("Archived", 10)
+                new DefaultColumnSpec("Nuevo", 10),
+                new DefaultColumnSpec("Calificado", 10),
+                new DefaultColumnSpec("Propuesta", 10),
+                new DefaultColumnSpec("Negociación", 10)
             );
         };
     }

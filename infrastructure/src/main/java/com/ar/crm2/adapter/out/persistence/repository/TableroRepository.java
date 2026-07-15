@@ -36,4 +36,17 @@ public interface TableroRepository extends JpaRepository<TableroEntity, String> 
      * @return true if the column is assigned to at least one board
      */
     boolean existsByColumnasTableroColumnaId(String columnaId);
+
+    /**
+     * Checks whether a Columna is assigned to at least one tablero of the
+     * expected workflow type.
+     *
+     * @param columnaId the string form of the ColumnaId
+     * @param tipoTablero the target board workflow type
+     * @return true if the column is assigned to a board of that type
+     */
+    boolean existsByColumnasTableroColumnaIdAndColumnasTableroTipoTablero(
+        String columnaId,
+        TipoTablero tipoTablero
+    );
 }

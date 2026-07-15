@@ -680,9 +680,10 @@ public class WiringConfig {
     @Bean
     public MoverColumnaFichaUseCase moverColumnaFichaUseCase(
             FichaRepositoryAdapter findPort,
-            FichaRepositoryAdapter savePort
+            FichaRepositoryAdapter savePort,
+            TableroRepositoryAdapter compatibilityPort
     ) {
-        return new MoverColumnaFichaService(findPort, savePort);
+        return new MoverColumnaFichaService(findPort, savePort, compatibilityPort);
     }
 
 

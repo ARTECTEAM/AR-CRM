@@ -290,6 +290,38 @@ class TableroRepositoryAdapterTest {
         );
     }
 
+    @Test
+    void existsCompatibleColumn_shouldDelegateWithColumnaIdAndTipoTablero() {
+        UUID columnaId = UUID.randomUUID();
+
+        when(repository.existsByColumnasTableroColumnaIdAndColumnasTableroTipoTablero(
+            columnaId.toString(),
+            TipoTablero.TRATOS
+        )).thenReturn(true);
+
+        boolean result = adapter.existsCompatibleColumn(ColumnaId.from(columnaId), TipoTablero.TRATOS);
+
+        assertTrue(result);
+        verify(repository).existsByColumnasTableroColumnaIdAndColumnasTableroTipoTablero(
+            columnaId.toString(),
+            TipoTablero.TRATOS
+        );
+    }
+
+    @Test
+    void existsCompatibleColumn_shouldReturnFalseWhenColumnIsNotAssignedToExpectedType() {
+        UUID columnaId = UUID.randomUUID();
+
+        when(repository.existsByColumnasTableroColumnaIdAndColumnasTableroTipoTablero(
+            columnaId.toString(),
+            TipoTablero.TAREAS
+        )).thenReturn(false);
+
+        boolean result = adapter.existsCompatibleColumn(ColumnaId.from(columnaId), TipoTablero.TAREAS);
+
+        assertFalse(result);
+    }
+
     // ── findById (Columna) ──────────────────────────────────────────
     // Implements FindColumnaByIdPort from tablero package
 

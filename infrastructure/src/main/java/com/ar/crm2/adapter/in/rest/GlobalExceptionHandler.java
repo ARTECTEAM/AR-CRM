@@ -9,6 +9,7 @@ import com.ar.crm2.application.empresa.exception.EmpresaHasAssociatedTratosExcep
 import com.ar.crm2.application.empresa.exception.EmpresaNotFoundException;
 import com.ar.crm2.application.etiqueta.exception.EtiquetaNotFoundException;
 import com.ar.crm2.application.etiqueta.exception.EtiquetaRequiresConfirmationException;
+import com.ar.crm2.application.ficha.exception.FichaMovimientoIncompatibleException;
 import com.ar.crm2.application.ficha.exception.FichaNotFoundException;
 import com.ar.crm2.application.identity.model.IdentityProvisioningException;
 import com.ar.crm2.application.rol.exception.RolHasAssociatedUsuariosException;
@@ -128,6 +129,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(FichaNotFoundException.class)
     public ResponseEntity<Map<String, String>> handleFichaNotFoundException(FichaNotFoundException ex) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
+            .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(FichaMovimientoIncompatibleException.class)
+    public ResponseEntity<Map<String, String>> handleFichaMovimientoIncompatibleException(FichaMovimientoIncompatibleException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
             .body(Map.of("error", ex.getMessage()));
     }
 

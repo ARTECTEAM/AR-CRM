@@ -20,9 +20,9 @@ ALTER TABLE IF EXISTS agendas ADD COLUMN IF NOT EXISTS recordatorio_estado VARCH
 ALTER TABLE IF EXISTS agendas ADD COLUMN IF NOT EXISTS recordatorio_enviado_en TIMESTAMP;
 ALTER TABLE IF EXISTS agendas ADD COLUMN IF NOT EXISTS ultimo_intento_en TIMESTAMP;
 
--- ColumnaTablero: drop the obsolete contextual semantic state columns. The
--- column-board relation no longer carries estadoTarea/estadoTrato; only the
--- catalog Columna holds semantic state.
+-- ColumnaTablero: drop obsolete duplicated semantic state columns. The
+-- workflow source is now Ficha.columna_id resolved against the tablero columns;
+-- neither ColumnaTablero nor catalog Columna stores estadoTarea/estadoTrato.
 ALTER TABLE IF EXISTS columnas_tablero DROP COLUMN IF EXISTS estado_tarea;
 ALTER TABLE IF EXISTS columnas_tablero DROP COLUMN IF EXISTS estado_trato;
 
