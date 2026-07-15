@@ -4,6 +4,7 @@ import com.ar.crm2.adapter.in.rest.dto.request.CambiarEstadoContactoRequest;
 import com.ar.crm2.adapter.in.rest.dto.request.CreateContactoRequest;
 import com.ar.crm2.adapter.in.rest.dto.request.EditContactoRequest;
 import com.ar.crm2.adapter.in.rest.dto.response.ContactoResponse;
+import com.ar.crm2.adapter.in.rest.dto.response.PageResponse;
 import com.ar.crm2.adapter.in.rest.mapper.ContactoCommandMapper;
 import com.ar.crm2.application.contacto.command.CambiarEstadoContactoCommand;
 import com.ar.crm2.application.contacto.command.CreateContactoCommand;
@@ -18,6 +19,7 @@ import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase;
 import com.ar.crm2.application.contacto.query.ContactoFilterCriteria;
 import com.ar.crm2.application.security.ActorContext;
+import com.ar.crm2.application.shared.query.ListPageRequest;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.vo.EmpresaId;
@@ -76,20 +78,29 @@ public class ContactoController {
      * Retrieves all Contactos.
      */
     @GetMapping("/get-all")
-    public ResponseEntity<List<ContactoResponse>> getAll(
+    public ResponseEntity<?> getAll(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) EstadoRelacion estadoRelacion,
             @RequestParam(required = false) UUID empresaId,
             @RequestParam(required = false) UUID responsableId,
-            @RequestParam(required = false) String comoNosConocio
+            @RequestParam(required = false) String comoNosConocio,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer pageSize,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDirection
     ) {
+        ListPageRequest pageRequest = pageRequest(page, pageSize, sortBy, sortDirection);
         ContactoFilterCriteria criteria = new ContactoFilterCriteria(
                 search,
                 estadoRelacion,
                 empresaId != null ? EmpresaId.from(empresaId) : null,
                 responsableId != null ? UsuarioId.from(responsableId) : null,
-                comoNosConocio
+                comoNosConocio,
+                pageRequest
         );
+        if (pageRequest.isPaged()) {
+            return ResponseEntity.ok(PageResponse.from(getAllUseCase.getPage(criteria), ContactoResponse::fromDomain));
+        }
         List<Contacto> contactos = getAllUseCase.getAll(criteria);
         List<ContactoResponse> responses = contactos.stream().map(ContactoResponse::fromDomain).toList();
         return ResponseEntity.ok(responses);
@@ -99,6 +110,15 @@ public class ContactoController {
         List<Contacto> contactos = getAllUseCase.getAll();
         List<ContactoResponse> responses = contactos.stream().map(ContactoResponse::fromDomain).toList();
         return ResponseEntity.ok(responses);
+    }
+
+    private ListPageRequest pageRequest(Integer page, Integer pageSize, String sortBy, String sortDirection) {
+        return new ListPageRequest(page, pageSize, sortBy, parseSortDirection(sortDirection));
+    }
+
+    private ListPageRequest.SortDirection parseSortDirection(String value) {
+        if (value == null || value.isBlank()) return null;
+        return "asc".equalsIgnoreCase(value) ? ListPageRequest.SortDirection.ASC : ListPageRequest.SortDirection.DESC;
     }
 
     /**

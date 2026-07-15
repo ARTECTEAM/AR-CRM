@@ -4,6 +4,7 @@ import com.ar.crm2.adapter.in.rest.dto.request.CambiarEstadoEmpresaRequest;
 import com.ar.crm2.adapter.in.rest.dto.request.CreateEmpresaRequest;
 import com.ar.crm2.adapter.in.rest.dto.request.EditEmpresaRequest;
 import com.ar.crm2.adapter.in.rest.dto.response.EmpresaResponse;
+import com.ar.crm2.adapter.in.rest.dto.response.PageResponse;
 import com.ar.crm2.adapter.in.rest.mapper.EmpresaCommandMapper;
 import com.ar.crm2.application.empresa.command.CambiarEstadoEmpresaCommand;
 import com.ar.crm2.application.empresa.command.CreateEmpresaCommand;
@@ -16,6 +17,7 @@ import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
 import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
 import com.ar.crm2.application.security.ActorContext;
+import com.ar.crm2.application.shared.query.ListPageRequest;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.entity.Empresa;
 import com.ar.crm2.model.vo.UsuarioId;
@@ -72,20 +74,29 @@ public class EmpresaController {
      * Retrieves all Empresas.
      */
     @GetMapping("/get-all")
-    public ResponseEntity<List<EmpresaResponse>> getAll(
+    public ResponseEntity<?> getAll(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) EstadoRelacion estadoRelacion,
             @RequestParam(required = false) String sector,
             @RequestParam(required = false) UUID responsableId,
-            @RequestParam(required = false) String web
+            @RequestParam(required = false) String web,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer pageSize,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDirection
     ) {
+        ListPageRequest pageRequest = pageRequest(page, pageSize, sortBy, sortDirection);
         EmpresaFilterCriteria criteria = new EmpresaFilterCriteria(
                 search,
                 estadoRelacion,
                 sector,
                 responsableId != null ? UsuarioId.from(responsableId) : null,
-                parseWebFilter(web)
+                parseWebFilter(web),
+                pageRequest
         );
+        if (pageRequest.isPaged()) {
+            return ResponseEntity.ok(PageResponse.from(getAllUseCase.getPage(criteria), EmpresaResponse::fromDomain));
+        }
         List<Empresa> empresas = getAllUseCase.getAll(criteria);
         List<EmpresaResponse> responses = empresas.stream().map(EmpresaResponse::fromDomain).toList();
         return ResponseEntity.ok(responses);
@@ -104,6 +115,15 @@ public class EmpresaController {
             case "sin-web" -> EmpresaFilterCriteria.WebFilter.SIN_WEB;
             default -> null;
         };
+    }
+
+    private ListPageRequest pageRequest(Integer page, Integer pageSize, String sortBy, String sortDirection) {
+        return new ListPageRequest(page, pageSize, sortBy, parseSortDirection(sortDirection));
+    }
+
+    private ListPageRequest.SortDirection parseSortDirection(String value) {
+        if (value == null || value.isBlank()) return null;
+        return "asc".equalsIgnoreCase(value) ? ListPageRequest.SortDirection.ASC : ListPageRequest.SortDirection.DESC;
     }
 
     /**

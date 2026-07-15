@@ -1,6 +1,7 @@
 package com.ar.crm2.application.empresa.port.out;
 
 import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
+import com.ar.crm2.application.shared.query.PagedResult;
 import com.ar.crm2.model.entity.Empresa;
 
 import java.util.List;
@@ -21,5 +22,11 @@ public interface FindAllEmpresasPort {
 
     default List<Empresa> findAll(EmpresaFilterCriteria criteria) {
         return findAll();
+    }
+
+    default PagedResult<Empresa> findPage(EmpresaFilterCriteria criteria) {
+        List<Empresa> items = findAll(criteria);
+        int size = items.size();
+        return new PagedResult<>(items, size, 0, size, 1, false, false);
     }
 }

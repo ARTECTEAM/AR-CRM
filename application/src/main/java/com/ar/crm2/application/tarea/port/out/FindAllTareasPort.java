@@ -1,6 +1,7 @@
 package com.ar.crm2.application.tarea.port.out;
 
 import com.ar.crm2.application.tarea.query.TareaFilterCriteria;
+import com.ar.crm2.application.shared.query.PagedResult;
 import com.ar.crm2.model.entity.Tarea;
 
 import java.util.List;
@@ -20,5 +21,11 @@ public interface FindAllTareasPort {
 
     default List<Tarea> findAll(TareaFilterCriteria criteria) {
         return findAll();
+    }
+
+    default PagedResult<Tarea> findPage(TareaFilterCriteria criteria) {
+        List<Tarea> items = findAll(criteria);
+        int size = items.size();
+        return new PagedResult<>(items, size, 0, size, 1, false, false);
     }
 }

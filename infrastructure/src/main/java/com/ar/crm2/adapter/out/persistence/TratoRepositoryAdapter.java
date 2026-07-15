@@ -8,10 +8,19 @@ import com.ar.crm2.application.trato.port.out.FindAllTratosPort;
 import com.ar.crm2.application.trato.port.out.FindTratoByIdPort;
 import com.ar.crm2.application.trato.port.out.SaveTratoPort;
 import com.ar.crm2.application.trato.query.TratoFilterCriteria;
+import com.ar.crm2.application.shared.query.ListPageRequest;
+import com.ar.crm2.application.shared.query.PagedResult;
 import com.ar.crm2.model.entity.Trato;
 import com.ar.crm2.model.vo.TratoId;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.time.LocalDate;
@@ -35,38 +44,70 @@ public class TratoRepositoryAdapter implements SaveTratoPort, FindAllTratosPort,
 
     @Override
     public List<Trato> findAll(TratoFilterCriteria criteria) {
-        return repository.findAll().stream()
+        return repository.findAll(spec(criteria), sort(criteria))
+            .stream()
             .map(TratoMapper::toDomain)
-            .filter(trato -> matches(trato, criteria))
             .toList();
     }
 
-    private boolean matches(Trato trato, TratoFilterCriteria criteria) {
-        if (criteria == null) criteria = TratoFilterCriteria.empty();
-        String term = normalize(criteria.search());
-        if (term != null && !normalize(trato.getNombre()).contains(term)) return false;
-        if (criteria.estado() != null && trato.getEstado() != criteria.estado()) return false;
-        if (criteria.tipoContrato() != null && trato.getTipoContrato() != criteria.tipoContrato()) return false;
-        if (criteria.responsableId() != null && !criteria.responsableId().equals(trato.getResponsableId())) return false;
-        if (criteria.contactoId() != null && !criteria.contactoId().equals(trato.getContactoId())) return false;
-        if (criteria.valorMin() != null && (trato.getValorEstimado() == null || trato.getValorEstimado().compareTo(criteria.valorMin()) < 0)) return false;
-        if (criteria.valorMax() != null && (trato.getValorEstimado() == null || trato.getValorEstimado().compareTo(criteria.valorMax()) > 0)) return false;
-        return matchesCierre(trato.getFechaCierreEsperada(), criteria.cierreEsperado());
+    @Override
+    public PagedResult<Trato> findPage(TratoFilterCriteria criteria) {
+        TratoFilterCriteria resolved = criteria == null ? TratoFilterCriteria.empty() : criteria;
+        ListPageRequest pageRequest = resolved.pageRequest() == null ? ListPageRequest.unpaged() : resolved.pageRequest();
+        Pageable pageable = PageRequest.of(pageRequest.normalizedPage(), pageRequest.normalizedPageSize(), sort(resolved));
+        Page<Trato> page = repository.findAll(spec(resolved), pageable).map(TratoMapper::toDomain);
+        return new PagedResult<>(page.getContent(), page.getTotalElements(), page.getNumber(), page.getSize(), page.getTotalPages(), page.hasNext(), page.hasPrevious());
     }
 
-    private boolean matchesCierre(LocalDate fecha, TratoFilterCriteria.CierreEsperadoFilter filter) {
-        if (filter == null || filter == TratoFilterCriteria.CierreEsperadoFilter.TODAS) return true;
-        if (filter == TratoFilterCriteria.CierreEsperadoFilter.SIN_FECHA) return fecha == null;
-        if (fecha == null) return false;
+    private Specification<TratoEntity> spec(TratoFilterCriteria criteria) {
+        TratoFilterCriteria resolved = criteria == null ? TratoFilterCriteria.empty() : criteria;
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            String term = normalize(resolved.search());
+            if (term != null) predicates.add(cb.like(cb.lower(root.get("nombre")), "%" + term + "%"));
+            if (resolved.estado() != null) predicates.add(cb.equal(root.get("estado"), resolved.estado()));
+            if (resolved.tipoContrato() != null) predicates.add(cb.equal(root.get("tipoContrato"), resolved.tipoContrato()));
+            if (resolved.responsableId() != null) predicates.add(cb.equal(root.get("responsableId"), resolved.responsableId().value().toString()));
+            if (resolved.contactoId() != null) predicates.add(cb.equal(root.get("contactoId"), resolved.contactoId().value().toString()));
+            if (resolved.valorMin() != null) predicates.add(cb.greaterThanOrEqualTo(root.get("valorEstimado"), resolved.valorMin()));
+            if (resolved.valorMax() != null) predicates.add(cb.lessThanOrEqualTo(root.get("valorEstimado"), resolved.valorMax()));
+            addCierrePredicate(predicates, root, cb, resolved.cierreEsperado());
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+    }
+
+    private void addCierrePredicate(List<Predicate> predicates, jakarta.persistence.criteria.Root<TratoEntity> root,
+            jakarta.persistence.criteria.CriteriaBuilder cb, TratoFilterCriteria.CierreEsperadoFilter filter) {
+        if (filter == null || filter == TratoFilterCriteria.CierreEsperadoFilter.TODAS) return;
+        if (filter == TratoFilterCriteria.CierreEsperadoFilter.SIN_FECHA) {
+            predicates.add(cb.isNull(root.get("fechaCierreEsperada")));
+            return;
+        }
         LocalDate today = LocalDate.now();
-        if (filter == TratoFilterCriteria.CierreEsperadoFilter.VENCIDAS) return fecha.isBefore(today);
+        if (filter == TratoFilterCriteria.CierreEsperadoFilter.VENCIDAS) {
+            predicates.add(cb.lessThan(root.get("fechaCierreEsperada"), today));
+            return;
+        }
         int days = filter == TratoFilterCriteria.CierreEsperadoFilter.PROXIMOS_7 ? 7 : 30;
-        LocalDate limit = today.plusDays(days);
-        return !fecha.isBefore(today) && !fecha.isAfter(limit);
+        predicates.add(cb.between(root.get("fechaCierreEsperada"), today, today.plusDays(days)));
+    }
+
+    private Sort sort(TratoFilterCriteria criteria) {
+        ListPageRequest pageRequest = criteria == null || criteria.pageRequest() == null ? ListPageRequest.unpaged() : criteria.pageRequest();
+        String property = switch (pageRequest.sortBy() == null ? "creadoEn" : pageRequest.sortBy()) {
+            case "nombre" -> "nombre";
+            case "valorEstimado" -> "valorEstimado";
+            case "fechaCierreEsperada" -> "fechaCierreEsperada";
+            case "estado" -> "estado";
+            case "actualizadoEn" -> "actualizadoEn";
+            default -> "creadoEn";
+        };
+        Sort.Direction direction = pageRequest.normalizedSortDirection() == ListPageRequest.SortDirection.ASC ? Sort.Direction.ASC : Sort.Direction.DESC;
+        return Sort.by(direction, property);
     }
 
     private String normalize(String value) {
-        if (value == null || value.isBlank()) return "";
+        if (value == null || value.isBlank()) return null;
         return value.trim().toLowerCase(java.util.Locale.ROOT);
     }
 

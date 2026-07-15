@@ -1,6 +1,7 @@
 package com.ar.crm2.application.trato.port.in;
 
 import com.ar.crm2.application.trato.query.TratoFilterCriteria;
+import com.ar.crm2.application.shared.query.PagedResult;
 import com.ar.crm2.model.entity.Trato;
 
 import java.util.List;
@@ -20,4 +21,6 @@ public interface GetAllTratosUseCase {
     }
 
     List<Trato> getAll(TratoFilterCriteria criteria);
+
+    PagedResult<Trato> getPage(TratoFilterCriteria criteria);
 }

@@ -1,6 +1,7 @@
 package com.ar.crm2.application.empresa.port.in;
 
 import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
+import com.ar.crm2.application.shared.query.PagedResult;
 import com.ar.crm2.model.entity.Empresa;
 
 import java.util.List;
@@ -21,4 +22,6 @@ public interface GetAllEmpresasUseCase {
     }
 
     List<Empresa> getAll(EmpresaFilterCriteria criteria);
+
+    PagedResult<Empresa> getPage(EmpresaFilterCriteria criteria);
 }

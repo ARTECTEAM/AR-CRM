@@ -3,6 +3,7 @@ package com.ar.crm2.adapter.in.rest;
 import com.ar.crm2.adapter.in.rest.dto.request.CreateTratoRequest;
 import com.ar.crm2.adapter.in.rest.dto.request.EditTratoRequest;
 import com.ar.crm2.adapter.in.rest.dto.response.TratoResponse;
+import com.ar.crm2.adapter.in.rest.dto.response.PageResponse;
 import com.ar.crm2.adapter.in.rest.mapper.TratoCommandMapper;
 import com.ar.crm2.application.trato.command.CreateTratoCommand;
 import com.ar.crm2.application.trato.command.DeleteTratoCommand;
@@ -20,6 +21,7 @@ import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.application.trato.port.in.GetAllTratosUseCase;
 import com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase;
 import com.ar.crm2.application.trato.query.TratoFilterCriteria;
+import com.ar.crm2.application.shared.query.ListPageRequest;
 import com.ar.crm2.model.enums.EstadoTrato;
 import com.ar.crm2.model.enums.TipoContrato;
 import com.ar.crm2.model.entity.Trato;
@@ -78,7 +80,7 @@ public class TratoController {
      * Retrieves all Tratos.
      */
     @GetMapping("/get-all")
-    public ResponseEntity<List<TratoResponse>> getAll(
+    public ResponseEntity<?> getAll(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) EstadoTrato estado,
             @RequestParam(required = false) TipoContrato tipoContrato,
@@ -86,8 +88,13 @@ public class TratoController {
             @RequestParam(required = false) UUID contactoId,
             @RequestParam(required = false) BigDecimal valorMin,
             @RequestParam(required = false) BigDecimal valorMax,
-            @RequestParam(required = false) String cierreEsperado
+            @RequestParam(required = false) String cierreEsperado,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer pageSize,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDirection
     ) {
+        ListPageRequest pageRequest = pageRequest(page, pageSize, sortBy, sortDirection);
         TratoFilterCriteria criteria = new TratoFilterCriteria(
                 search,
                 estado,
@@ -96,8 +103,12 @@ public class TratoController {
                 contactoId != null ? ContactoId.from(contactoId) : null,
                 valorMin,
                 valorMax,
-                parseCierreEsperado(cierreEsperado)
+                parseCierreEsperado(cierreEsperado),
+                pageRequest
         );
+        if (pageRequest.isPaged()) {
+            return ResponseEntity.ok(PageResponse.from(getAllUseCase.getPage(criteria), TratoResponse::fromDomain));
+        }
         List<Trato> tratos = getAllUseCase.getAll(criteria);
         List<TratoResponse> responses = tratos.stream().map(TratoResponse::fromDomain).toList();
         return ResponseEntity.ok(responses);
@@ -119,6 +130,15 @@ public class TratoController {
             case "sin-fecha" -> TratoFilterCriteria.CierreEsperadoFilter.SIN_FECHA;
             default -> null;
         };
+    }
+
+    private ListPageRequest pageRequest(Integer page, Integer pageSize, String sortBy, String sortDirection) {
+        return new ListPageRequest(page, pageSize, sortBy, parseSortDirection(sortDirection));
+    }
+
+    private ListPageRequest.SortDirection parseSortDirection(String value) {
+        if (value == null || value.isBlank()) return null;
+        return "asc".equalsIgnoreCase(value) ? ListPageRequest.SortDirection.ASC : ListPageRequest.SortDirection.DESC;
     }
 
     /**

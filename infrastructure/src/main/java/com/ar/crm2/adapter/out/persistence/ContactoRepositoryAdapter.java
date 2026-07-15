@@ -9,10 +9,19 @@ import com.ar.crm2.application.contacto.port.out.FindAllContactosPort;
 import com.ar.crm2.application.contacto.port.out.FindContactoByIdPort;
 import com.ar.crm2.application.contacto.port.out.SaveContactoPort;
 import com.ar.crm2.application.contacto.query.ContactoFilterCriteria;
+import com.ar.crm2.application.shared.query.ListPageRequest;
+import com.ar.crm2.application.shared.query.PagedResult;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.vo.ContactoId;
+import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -35,31 +44,56 @@ public class ContactoRepositoryAdapter implements SaveContactoPort, FindAllConta
 
     @Override
     public List<Contacto> findAll(ContactoFilterCriteria criteria) {
-        return repository.findAll().stream()
+        return repository.findAll(spec(criteria), sort(criteria))
+            .stream()
             .map(ContactoMapper::toDomain)
-            .filter(contacto -> matches(contacto, criteria))
             .toList();
     }
 
-    private boolean matches(Contacto contacto, ContactoFilterCriteria criteria) {
-        if (criteria == null) criteria = ContactoFilterCriteria.empty();
-        String term = normalize(criteria.search());
-        String origen = normalize(criteria.comoNosConocio());
-
-        if (term != null && !containsAny(term, contacto.getNombre(), contacto.getCorreo(), contacto.getCargo(), contacto.getTelefono())) return false;
-        if (criteria.estadoRelacion() != null && contacto.getEstadoRelacion() != criteria.estadoRelacion()) return false;
-        if (criteria.empresaId() != null && !criteria.empresaId().equals(contacto.getEmpresaId())) return false;
-        if (criteria.responsableId() != null && !criteria.responsableId().equals(contacto.getResponsableId())) return false;
-        if (origen != null && !origen.equals(normalize(contacto.getComoNosConocio()))) return false;
-        return true;
+    @Override
+    public PagedResult<Contacto> findPage(ContactoFilterCriteria criteria) {
+        ContactoFilterCriteria resolved = criteria == null ? ContactoFilterCriteria.empty() : criteria;
+        ListPageRequest pageRequest = resolved.pageRequest() == null ? ListPageRequest.unpaged() : resolved.pageRequest();
+        Pageable pageable = PageRequest.of(pageRequest.normalizedPage(), pageRequest.normalizedPageSize(), sort(resolved));
+        Page<Contacto> page = repository.findAll(spec(resolved), pageable).map(ContactoMapper::toDomain);
+        return new PagedResult<>(page.getContent(), page.getTotalElements(), page.getNumber(), page.getSize(), page.getTotalPages(), page.hasNext(), page.hasPrevious());
     }
 
-    private boolean containsAny(String term, String... values) {
-        for (String value : values) {
-            String normalized = normalize(value);
-            if (normalized != null && normalized.contains(term)) return true;
-        }
-        return false;
+    private Specification<ContactoEntity> spec(ContactoFilterCriteria criteria) {
+        ContactoFilterCriteria resolved = criteria == null ? ContactoFilterCriteria.empty() : criteria;
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            String term = normalize(resolved.search());
+            if (term != null) {
+                String like = "%" + term + "%";
+                predicates.add(cb.or(
+                    cb.like(cb.lower(root.get("nombre")), like),
+                    cb.like(cb.lower(root.get("correo")), like),
+                    cb.like(cb.lower(root.get("cargo")), like),
+                    cb.like(cb.lower(root.get("telefono")), like)
+                ));
+            }
+            if (resolved.estadoRelacion() != null) predicates.add(cb.equal(root.get("estadoRelacion"), resolved.estadoRelacion()));
+            if (resolved.empresaId() != null) predicates.add(cb.equal(root.get("empresaId"), resolved.empresaId().value().toString()));
+            if (resolved.responsableId() != null) predicates.add(cb.equal(root.get("responsableId"), resolved.responsableId().value().toString()));
+            String origen = normalize(resolved.comoNosConocio());
+            if (origen != null) predicates.add(cb.equal(cb.lower(root.get("comoNosConocio")), origen));
+            return cb.and(predicates.toArray(Predicate[]::new));
+        };
+    }
+
+    private Sort sort(ContactoFilterCriteria criteria) {
+        ListPageRequest pageRequest = criteria == null || criteria.pageRequest() == null ? ListPageRequest.unpaged() : criteria.pageRequest();
+        String property = switch (pageRequest.sortBy() == null ? "creadoEn" : pageRequest.sortBy()) {
+            case "nombre" -> "nombre";
+            case "correo" -> "correo";
+            case "empresaId" -> "empresaId";
+            case "estadoRelacion" -> "estadoRelacion";
+            case "actualizadoEn" -> "actualizadoEn";
+            default -> "creadoEn";
+        };
+        Sort.Direction direction = pageRequest.normalizedSortDirection() == ListPageRequest.SortDirection.ASC ? Sort.Direction.ASC : Sort.Direction.DESC;
+        return Sort.by(direction, property);
     }
 
     private String normalize(String value) {

@@ -1,6 +1,7 @@
 package com.ar.crm2.application.contacto.port.in;
 
 import com.ar.crm2.application.contacto.query.ContactoFilterCriteria;
+import com.ar.crm2.application.shared.query.PagedResult;
 import com.ar.crm2.model.entity.Contacto;
 
 import java.util.List;
@@ -20,4 +21,6 @@ public interface GetAllContactosUseCase {
     }
 
     List<Contacto> getAll(ContactoFilterCriteria criteria);
+
+    PagedResult<Contacto> getPage(ContactoFilterCriteria criteria);
 }

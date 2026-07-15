@@ -3,6 +3,7 @@ package com.ar.crm2.adapter.in.rest;
 import com.ar.crm2.adapter.in.rest.dto.request.CreateTareaRequest;
 import com.ar.crm2.adapter.in.rest.dto.request.EditTareaRequest;
 import com.ar.crm2.adapter.in.rest.dto.response.TareaResponse;
+import com.ar.crm2.adapter.in.rest.dto.response.PageResponse;
 import com.ar.crm2.adapter.in.rest.mapper.TareaCommandMapper;
 import com.ar.crm2.application.tarea.command.CreateTareaCommand;
 import com.ar.crm2.application.tarea.command.DeleteTareaCommand;
@@ -14,6 +15,7 @@ import com.ar.crm2.application.tarea.port.in.EditTareaUseCase;
 import com.ar.crm2.application.tarea.port.in.GetAllTareasUseCase;
 import com.ar.crm2.application.tarea.port.in.GetTareaByIdUseCase;
 import com.ar.crm2.application.tarea.query.TareaFilterCriteria;
+import com.ar.crm2.application.shared.query.ListPageRequest;
 import com.ar.crm2.model.enums.PrioridadTarea;
 import com.ar.crm2.model.enums.TipoTarea;
 import com.ar.crm2.model.entity.Tarea;
@@ -64,22 +66,31 @@ public class TareaController {
      * Retrieves all Tareas.
      */
     @GetMapping("/get-all")
-    public ResponseEntity<List<TareaResponse>> getAll(
+    public ResponseEntity<?> getAll(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) PrioridadTarea prioridad,
             @RequestParam(required = false) UUID responsableId,
             @RequestParam(required = false) UUID tratoId,
             @RequestParam(required = false) TipoTarea tipo,
-            @RequestParam(required = false) String vencimiento
+            @RequestParam(required = false) String vencimiento,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer pageSize,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false) String sortDirection
     ) {
+        ListPageRequest pageRequest = pageRequest(page, pageSize, sortBy, sortDirection);
         TareaFilterCriteria criteria = new TareaFilterCriteria(
                 search,
                 prioridad,
                 responsableId != null ? UsuarioId.from(responsableId) : null,
                 tratoId != null ? TratoId.from(tratoId) : null,
                 tipo,
-                parseVencimiento(vencimiento)
+                parseVencimiento(vencimiento),
+                pageRequest
         );
+        if (pageRequest.isPaged()) {
+            return ResponseEntity.ok(PageResponse.from(getAllUseCase.getPage(criteria), TareaResponse::fromDomain));
+        }
         List<Tarea> tareas = getAllUseCase.getAll(criteria);
         List<TareaResponse> responses = tareas.stream().map(TareaResponse::fromDomain).toList();
         return ResponseEntity.ok(responses);
@@ -98,6 +109,15 @@ public class TareaController {
             case "proximas" -> TareaFilterCriteria.VencimientoFilter.PROXIMAS;
             default -> null;
         };
+    }
+
+    private ListPageRequest pageRequest(Integer page, Integer pageSize, String sortBy, String sortDirection) {
+        return new ListPageRequest(page, pageSize, sortBy, parseSortDirection(sortDirection));
+    }
+
+    private ListPageRequest.SortDirection parseSortDirection(String value) {
+        if (value == null || value.isBlank()) return null;
+        return "asc".equalsIgnoreCase(value) ? ListPageRequest.SortDirection.ASC : ListPageRequest.SortDirection.DESC;
     }
 
     /**

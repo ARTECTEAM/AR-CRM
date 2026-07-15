@@ -1,6 +1,7 @@
 package com.ar.crm2.application.tarea.port.in;
 
 import com.ar.crm2.application.tarea.query.TareaFilterCriteria;
+import com.ar.crm2.application.shared.query.PagedResult;
 import com.ar.crm2.model.entity.Tarea;
 
 import java.util.List;
@@ -20,4 +21,6 @@ public interface GetAllTareasUseCase {
     }
 
     List<Tarea> getAll(TareaFilterCriteria criteria);
+
+    PagedResult<Tarea> getPage(TareaFilterCriteria criteria);
 }
