@@ -7,6 +7,7 @@ import com.ar.crm2.model.agent.entity.AgentTurn;
 import com.ar.crm2.model.agent.entity.Conversation;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
+import lombok.RequiredArgsConstructor;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -15,21 +16,12 @@ import java.util.HexFormat;
 import java.util.UUID;
 
 /** Coordinates submitted user-turn candidates without persistence details. */
+@RequiredArgsConstructor
 public final class CreateUserTurnService implements CreateUserTurnUseCase {
     private final CreateUserTurnPort createUserTurnPort;
 
-    public CreateUserTurnService(CreateUserTurnPort createUserTurnPort) {
-        if (createUserTurnPort == null) {
-            throw new IllegalArgumentException("createUserTurnPort is required");
-        }
-        this.createUserTurnPort = createUserTurnPort;
-    }
-
     @Override
     public AgentTurn create(CreateUserTurnCommand command) {
-        if (command == null) {
-            throw new IllegalArgumentException("command is required");
-        }
         AgentOwnerId ownerId = AgentOwnerId.from(command.actorSubject());
         Conversation conversation = Conversation.create(ownerId);
         AgentTurn turn = conversation.createTurn(TurnId.create());

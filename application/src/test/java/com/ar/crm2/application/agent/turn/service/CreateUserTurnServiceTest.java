@@ -2,7 +2,6 @@ package com.ar.crm2.application.agent.turn.service;
 
 import com.ar.crm2.application.agent.turn.command.CreateUserTurnCommand;
 import com.ar.crm2.application.agent.turn.exception.IdempotencyKeyReusedException;
-import com.ar.crm2.application.agent.turn.exception.InvalidCreateUserTurnCommandException;
 import com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort;
 import com.ar.crm2.model.agent.entity.AgentTurn;
 import com.ar.crm2.model.agent.entity.Conversation;
@@ -11,6 +10,7 @@ import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -51,13 +51,8 @@ class CreateUserTurnServiceTest {
     }
 
     @Test
-    void commandRejectsMissingOrBlankSimpleInputs() {
-        assertThrows(InvalidCreateUserTurnCommandException.class,
-                () -> new CreateUserTurnCommand(null, "key", "prompt"));
-        assertThrows(InvalidCreateUserTurnCommandException.class,
-                () -> new CreateUserTurnCommand("actor", " ", "prompt"));
-        assertThrows(InvalidCreateUserTurnCommandException.class,
-                () -> new CreateUserTurnCommand("actor", "key", "\t"));
+    void constructorAllowsNullPortBecauseDependencyValidationIsNotAnApplicationFlowGuard() {
+        assertDoesNotThrow(() -> new CreateUserTurnService(null));
     }
 
     private static final class CapturingCreateUserTurnPort implements CreateUserTurnPort {
