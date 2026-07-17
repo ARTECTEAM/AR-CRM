@@ -25,7 +25,7 @@ public class AgentTurn {
     private final ConversationId conversationId;
     private final TurnState state;
 
-    static AgentTurn prepare(TurnId id, ConversationId conversationId) {
+    static AgentTurn create(TurnId id, ConversationId conversationId) {
         DomainAssert.notNull(id, "turnId");
         DomainAssert.notNull(conversationId, "conversationId");
         return new AgentTurn(id, conversationId, TurnState.PREPARED);

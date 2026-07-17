@@ -70,7 +70,7 @@ class AgentConversationTest {
             Conversation conversation = Conversation.create(ownerId);
             TurnId turnId = TurnId.from(UUID.randomUUID());
 
-            AgentTurn turn = conversation.prepareTurn(turnId);
+            AgentTurn turn = conversation.createTurn(turnId);
 
             assertThat(conversation.getOwnerId()).isEqualTo(ownerId);
             assertThat(turn.getId()).isEqualTo(turnId);
@@ -110,7 +110,7 @@ class AgentConversationTest {
         void rejectsPreparingTurnWithoutIdentity() {
             Conversation conversation = Conversation.create(AgentOwnerId.from("user-42"));
 
-            assertThatThrownBy(() -> conversation.prepareTurn(null))
+            assertThatThrownBy(() -> conversation.createTurn(null))
                     .isInstanceOf(InvariantViolationException.class);
         }
 
@@ -124,7 +124,7 @@ class AgentConversationTest {
             TurnId turnId = TurnId.from(UUID.randomUUID());
             AgentTurn firstTurn = AgentTurn.reconstitute(turnId, conversationId, TurnState.PREPARED);
             AgentTurn sameTurn = AgentTurn.reconstitute(turnId, conversationId, TurnState.COMPLETED);
-            AgentTurn otherTurn = Conversation.create(ownerId).prepareTurn(TurnId.from(UUID.randomUUID()));
+            AgentTurn otherTurn = Conversation.create(ownerId).createTurn(TurnId.from(UUID.randomUUID()));
 
             assertThat(Conversation.class.isRecord()).isFalse();
             assertThat(AgentTurn.class.isRecord()).isFalse();
@@ -137,15 +137,15 @@ class AgentConversationTest {
         }
 
         @Test
-        void turnPreparationIsNotPublicOutsideConversationAggregate() throws NoSuchMethodException {
+        void turnCreationIsNotPublicOutsideConversationAggregate() throws NoSuchMethodException {
             assertThat(Modifier.isPublic(AgentTurn.class
-                    .getDeclaredMethod("prepare", TurnId.class, ConversationId.class)
+                    .getDeclaredMethod("create", TurnId.class, ConversationId.class)
                     .getModifiers())).isFalse();
         }
 
         private AgentTurn preparedTurn() {
             return Conversation.create(AgentOwnerId.from("user-42"))
-                    .prepareTurn(TurnId.from(UUID.randomUUID()));
+                    .createTurn(TurnId.from(UUID.randomUUID()));
         }
     }
 }

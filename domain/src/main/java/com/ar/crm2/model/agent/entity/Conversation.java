@@ -34,8 +34,8 @@ public class Conversation {
         return new Conversation(id, ownerId);
     }
 
-    public AgentTurn prepareTurn(TurnId turnId) {
+    public AgentTurn createTurn(TurnId turnId) {
         DomainAssert.notNull(turnId, "turnId");
-        return AgentTurn.prepare(turnId, id);
+        return AgentTurn.create(turnId, id);
     }
 }
