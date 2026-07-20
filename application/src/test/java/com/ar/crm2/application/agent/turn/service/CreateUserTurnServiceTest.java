@@ -7,6 +7,7 @@ import com.ar.crm2.model.agent.entity.AgentTurn;
 import com.ar.crm2.model.agent.entity.Conversation;
 import com.ar.crm2.model.agent.enums.TurnState;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
+import com.ar.crm2.model.agent.vo.AcceptedUserTurn;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,14 +24,15 @@ class CreateUserTurnServiceTest {
         CapturingCreateUserTurnPort port = new CapturingCreateUserTurnPort();
         CreateUserTurnService service = new CreateUserTurnService(port);
 
-        AgentTurn canonicalTurn = service.create(new CreateUserTurnCommand(" actor-a ", " key-1 ", "  Hello Pipely  "));
+        AcceptedUserTurn acceptedTurn = service.create(new CreateUserTurnCommand(" actor-a ", " key-1 ", "  Hello Pipely  "));
 
-        assertSame(port.returnedTurn, canonicalTurn);
+        assertSame(port.returnedReceipt, acceptedTurn);
         assertEquals(AgentOwnerId.from("actor-a"), port.ownerId);
         assertEquals(AgentOwnerId.from("actor-a"), port.conversation.getOwnerId());
         assertEquals(port.conversation.getId(), port.turn.getConversationId());
         assertEquals(TurnState.PREPARED, port.turn.getState());
         assertEquals("key-1", port.idempotencyKey);
+        assertEquals("Hello Pipely", port.originalUserContent);
         assertEquals("a5008e1d8f2bbf5381a880e532c8810f01eb8c99593df4979fa6047d917640bf", port.payloadFingerprint);
         assertNotNull(port.opaqueHandle);
     }
@@ -40,8 +42,8 @@ class CreateUserTurnServiceTest {
         ConvergingCreateUserTurnPort port = new ConvergingCreateUserTurnPort();
         CreateUserTurnService service = new CreateUserTurnService(port);
 
-        AgentTurn first = service.create(new CreateUserTurnCommand("actor-a", "key-1", "prompt"));
-        AgentTurn retried = service.create(new CreateUserTurnCommand("actor-a", "key-1", "prompt"));
+        AcceptedUserTurn first = service.create(new CreateUserTurnCommand("actor-a", "key-1", "prompt"));
+        AcceptedUserTurn retried = service.create(new CreateUserTurnCommand("actor-a", "key-1", "prompt"));
 
         assertSame(first, retried);
         assertNotEquals(port.firstCandidate, port.secondCandidate);
@@ -60,16 +62,18 @@ class CreateUserTurnServiceTest {
         private AgentTurn turn;
         private AgentOwnerId ownerId;
         private String idempotencyKey;
+        private String originalUserContent;
         private String payloadFingerprint;
         private String opaqueHandle;
-        private AgentTurn returnedTurn;
+        private AcceptedUserTurn returnedReceipt;
 
         @Override
-        public AgentTurn createOrGetUserTurn(
+        public AcceptedUserTurn createOrGetUserTurn(
                 Conversation conversation,
                 AgentTurn turn,
                 AgentOwnerId ownerId,
                 String idempotencyKey,
+                String originalUserContent,
                 String payloadFingerprint,
                 String opaqueHandle
         ) {
@@ -77,10 +81,11 @@ class CreateUserTurnServiceTest {
             this.turn = turn;
             this.ownerId = ownerId;
             this.idempotencyKey = idempotencyKey;
+            this.originalUserContent = originalUserContent;
             this.payloadFingerprint = payloadFingerprint;
             this.opaqueHandle = opaqueHandle;
-            returnedTurn = turn;
-            return turn;
+            returnedReceipt = new AcceptedUserTurn(turn, opaqueHandle);
+            return returnedReceipt;
         }
     }
 
@@ -89,36 +94,38 @@ class CreateUserTurnServiceTest {
         private AgentTurn secondCandidate;
         private Conversation firstConversation;
         private Conversation secondConversation;
-        private AgentTurn canonicalTurn;
+        private AcceptedUserTurn canonicalReceipt;
 
         @Override
-        public AgentTurn createOrGetUserTurn(
+        public AcceptedUserTurn createOrGetUserTurn(
                 Conversation conversation,
                 AgentTurn turn,
                 AgentOwnerId ownerId,
                 String idempotencyKey,
+                String originalUserContent,
                 String payloadFingerprint,
                 String opaqueHandle
         ) {
-            if (canonicalTurn == null) {
+            if (canonicalReceipt == null) {
                 firstCandidate = turn;
                 firstConversation = conversation;
-                canonicalTurn = turn;
-                return turn;
+                canonicalReceipt = new AcceptedUserTurn(turn, opaqueHandle);
+                return canonicalReceipt;
             }
             secondCandidate = turn;
             secondConversation = conversation;
-            return canonicalTurn;
+            return canonicalReceipt;
         }
     }
 
     private static final class ConflictingCreateUserTurnPort implements CreateUserTurnPort {
         @Override
-        public AgentTurn createOrGetUserTurn(
+        public AcceptedUserTurn createOrGetUserTurn(
                 Conversation conversation,
                 AgentTurn turn,
                 AgentOwnerId ownerId,
                 String idempotencyKey,
+                String originalUserContent,
                 String payloadFingerprint,
                 String opaqueHandle
         ) {

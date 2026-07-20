@@ -6,6 +6,7 @@ import com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort;
 import com.ar.crm2.model.agent.entity.AgentTurn;
 import com.ar.crm2.model.agent.entity.Conversation;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
+import com.ar.crm2.model.agent.vo.AcceptedUserTurn;
 import com.ar.crm2.model.agent.vo.TurnId;
 import lombok.RequiredArgsConstructor;
 
@@ -21,7 +22,7 @@ public final class CreateUserTurnService implements CreateUserTurnUseCase {
     private final CreateUserTurnPort createUserTurnPort;
 
     @Override
-    public AgentTurn create(CreateUserTurnCommand command) {
+    public AcceptedUserTurn create(CreateUserTurnCommand command) {
         AgentOwnerId ownerId = AgentOwnerId.from(command.actorSubject());
         Conversation conversation = Conversation.create(ownerId);
         AgentTurn turn = conversation.createTurn(TurnId.create());
@@ -30,6 +31,7 @@ public final class CreateUserTurnService implements CreateUserTurnUseCase {
                 turn,
                 ownerId,
                 command.idempotencyKey(),
+                command.prompt(),
                 fingerprint(command.prompt()),
                 UUID.randomUUID().toString()
         );
