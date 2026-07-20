@@ -25,7 +25,9 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DataJpaTest
 @TestPropertySource(properties = {
@@ -33,6 +35,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
     "spring.jpa.hibernate.ddl-auto=create-drop"
 })
 class AgentTurnPersistenceModelTest {
+
+    private static final String REDACTED_DUPLICATE_OPAQUE_HANDLE = "00000000-0000-0000-0000-000000000000";
 
     @Autowired
     private AgentConversationRepository conversationRepository;
@@ -82,6 +86,46 @@ class AgentTurnPersistenceModelTest {
     }
 
     @Test
+    void persistsAndFindsTheCanonicalOpaqueHandleByOwnerTurnAndHandle() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 7, 20, 10, 0);
+        String opaqueHandle = UUID.randomUUID().toString();
+        AgentConversationEntity conversation = conversationRepository.saveAndFlush(conversation("owner-a", createdAt));
+        AgentTurnEntity persistedTurn = turnRepository.saveAndFlush(turn(conversation, TurnState.PREPARED, createdAt));
+        AgentTurnRequestEntity persistedRequest = requestRepository.saveAndFlush(
+            request("owner-a", "request-key", opaqueHandle, persistedTurn, createdAt));
+
+        AgentTurnRequestEntity foundRequest = requestRepository
+            .findByOwnerIdAndTurnIdAndOpaqueHandle("owner-a", persistedTurn.getId(), opaqueHandle)
+            .orElseThrow();
+        AgentTurnRequestEntity canonicalRequest = requestRepository
+            .findByOwnerIdAndIdempotencyKey("owner-a", "request-key")
+            .orElseThrow();
+
+        assertEquals(opaqueHandle, foundRequest.getOpaqueHandle());
+        assertEquals(opaqueHandle, canonicalRequest.getOpaqueHandle());
+        assertEquals(36, foundRequest.getOpaqueHandle().length());
+        assertEquals(persistedRequest.getId(), foundRequest.getId());
+        assertEquals(persistedTurn.getId(), foundRequest.getTurn().getId());
+        assertFalse(foundRequest.toString().contains(opaqueHandle));
+        assertTrue(requestRepository
+            .findByOwnerIdAndTurnIdAndOpaqueHandle("owner-b", persistedTurn.getId(), opaqueHandle)
+            .isEmpty());
+    }
+
+    @Test
+    void rejectsDuplicateOpaqueHandlesAcrossRequestsUsingRedactedFixture() {
+        LocalDateTime createdAt = LocalDateTime.of(2026, 7, 20, 10, 0);
+        AgentConversationEntity ownerAConversation = conversationRepository.saveAndFlush(conversation("owner-a", createdAt));
+        AgentTurnEntity ownerATurn = turnRepository.saveAndFlush(turn(ownerAConversation, TurnState.PREPARED, createdAt));
+        requestRepository.saveAndFlush(request("owner-a", "request-key", REDACTED_DUPLICATE_OPAQUE_HANDLE, ownerATurn, createdAt));
+        AgentConversationEntity ownerBConversation = conversationRepository.saveAndFlush(conversation("owner-b", createdAt));
+        AgentTurnEntity ownerBTurn = turnRepository.saveAndFlush(turn(ownerBConversation, TurnState.PREPARED, createdAt));
+
+        assertThrows(DataIntegrityViolationException.class, () -> requestRepository.saveAndFlush(
+            request("owner-b", "another-request-key", REDACTED_DUPLICATE_OPAQUE_HANDLE, ownerBTurn, createdAt)));
+    }
+
+    @Test
     void storesTurnStateAndReconstitutesPersistedIdentityLinksAndTimestamps() {
         LocalDateTime createdAt = LocalDateTime.of(2026, 7, 20, 10, 0);
         LocalDateTime updatedAt = createdAt.plusMinutes(2);
@@ -124,13 +168,18 @@ class AgentTurnPersistenceModelTest {
         return new AgentTurnEntity(UUID.randomUUID().toString(), conversation, state, createdAt, updatedAt);
     }
 
+    private AgentTurnRequestEntity request(String ownerId, String idempotencyKey, AgentTurnEntity turn, LocalDateTime createdAt) {
+        return request(ownerId, idempotencyKey, UUID.randomUUID().toString(), turn, createdAt);
+    }
+
     private AgentTurnRequestEntity request(
             String ownerId,
             String idempotencyKey,
+            String opaqueHandle,
             AgentTurnEntity turn,
             LocalDateTime createdAt
     ) {
         return new AgentTurnRequestEntity(
-            UUID.randomUUID().toString(), ownerId, idempotencyKey, "fingerprint", turn, createdAt);
+            UUID.randomUUID().toString(), ownerId, idempotencyKey, "fingerprint", opaqueHandle, turn, createdAt);
     }
 }

@@ -3,6 +3,7 @@ package com.ar.crm2.adapter.out.persistence.agent.entity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
@@ -16,9 +17,19 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
     name = "agent_turn_requests",
-    uniqueConstraints = @UniqueConstraint(
-        name = "uk_agent_turn_request_owner_key",
-        columnNames = {"owner_id", "idempotency_key"}
+    uniqueConstraints = {
+        @UniqueConstraint(
+            name = "uk_agent_turn_request_owner_key",
+            columnNames = {"owner_id", "idempotency_key"}
+        ),
+        @UniqueConstraint(
+            name = "uk_agent_turn_request_opaque_handle",
+            columnNames = "opaque_handle"
+        )
+    },
+    indexes = @Index(
+        name = "idx_agent_turn_request_owner_turn_handle",
+        columnList = "owner_id, turn_id, opaque_handle"
     )
 )
 @Getter
@@ -38,6 +49,9 @@ public class AgentTurnRequestEntity {
 
     @Column(name = "fingerprint", nullable = false)
     private String fingerprint;
+
+    @Column(name = "opaque_handle", length = 36, nullable = false)
+    private String opaqueHandle;
 
     @OneToOne(optional = false)
     @JoinColumn(name = "turn_id", nullable = false, unique = true)

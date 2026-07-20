@@ -8,4 +8,10 @@ import java.util.Optional;
 public interface AgentTurnRequestRepository extends JpaRepository<AgentTurnRequestEntity, String> {
 
     Optional<AgentTurnRequestEntity> findByOwnerIdAndIdempotencyKey(String ownerId, String idempotencyKey);
+
+    Optional<AgentTurnRequestEntity> findByOwnerIdAndTurnIdAndOpaqueHandle(
+        String ownerId,
+        String turnId,
+        String opaqueHandle
+    );
 }
