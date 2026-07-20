@@ -4,7 +4,7 @@ import com.ar.crm2.adapter.out.persistence.agent.entity.AgentConversationEntity;
 import com.ar.crm2.adapter.out.persistence.agent.entity.AgentTurnEntity;
 import com.ar.crm2.adapter.out.persistence.agent.entity.AgentTurnRequestEntity;
 import com.ar.crm2.adapter.out.persistence.agent.entity.AgentVisibleHistoryEntity;
-import com.ar.crm2.adapter.out.persistence.agent.mapper.AgentTurnPersistenceMapper;
+import com.ar.crm2.adapter.out.persistence.agent.mapper.AgentTurnMapper;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentConversationRepository;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRequestRepository;
@@ -137,8 +137,8 @@ class AgentTurnPersistenceModelTest {
         conversationRepository.flush();
 
         AgentTurnEntity reloadedTurn = turnRepository.findById(persistedTurn.getId()).orElseThrow();
-        Conversation reconstitutedConversation = AgentTurnPersistenceMapper.toDomain(reloadedTurn.getConversation());
-        AgentTurn reconstitutedTurn = AgentTurnPersistenceMapper.toDomain(reloadedTurn);
+        Conversation reconstitutedConversation = AgentTurnMapper.toDomain(reloadedTurn.getConversation());
+        AgentTurn reconstitutedTurn = AgentTurnMapper.toDomain(reloadedTurn);
 
         assertEquals(persistedTurn.getId(), reconstitutedTurn.getId().value().toString());
         assertEquals(reloadedTurn.getConversation().getId(), reconstitutedTurn.getConversationId().value().toString());

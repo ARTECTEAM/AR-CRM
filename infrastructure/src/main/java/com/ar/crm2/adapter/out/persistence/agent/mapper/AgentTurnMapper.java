@@ -10,9 +10,9 @@ import com.ar.crm2.model.agent.vo.TurnId;
 
 import java.time.LocalDateTime;
 
-public final class AgentTurnPersistenceMapper {
+public final class AgentTurnMapper {
 
-    private AgentTurnPersistenceMapper() {
+    private AgentTurnMapper() {
     }
 
     public static AgentConversationEntity toEntity(Conversation conversation, LocalDateTime createdAt) {
