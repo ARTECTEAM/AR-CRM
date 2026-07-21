@@ -106,6 +106,14 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Spring AI 2.0 (PR8): provider-neutral ChatClient surface.
+             Pulls ChatClient, ChatModel, Message types, and Prompt via the BOM.
+             No provider starter, credentials, or wiring belong in PR8; PR9+ layers those on. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-client-chat</artifactId>
+        </dependency>
+
         <!-- Test dependencies: H2 for slice tests, Spring test MVC/Data JPA for WebMvcTest/DataJpaTest. -->
         <dependency>
             <groupId>com.h2database</groupId>
