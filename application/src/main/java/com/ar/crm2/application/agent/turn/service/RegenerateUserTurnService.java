@@ -10,6 +10,7 @@ import com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPo
 import com.ar.crm2.application.agent.turn.port.out.FindUserTurnContentPort;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
+import com.ar.crm2.model.agent.vo.VisibleMessage;
 import lombok.RequiredArgsConstructor;
 
 import java.util.List;
@@ -17,7 +18,7 @@ import java.util.Optional;
 
 /** Coordinates sequential regeneration without persistence or provider details. */
 @RequiredArgsConstructor
-public final class RegenerateUserTurnService implements RegenerateUserTurnUseCase {
+public class RegenerateUserTurnService implements RegenerateUserTurnUseCase {
     private final CreateRegenerationPort createRegenerationPort;
     private final FindCompletedVisibleHistoryPort findCompletedVisibleHistoryPort;
     private final FindUserTurnContentPort findUserTurnContentPort;
@@ -34,7 +35,7 @@ public final class RegenerateUserTurnService implements RegenerateUserTurnUseCas
         if (canonicalContent.isPresent()) {
             return canonicalContent.get();
         }
-        List<String> visibleHistory = findCompletedVisibleHistoryPort.findCompletedVisibleHistory(
+        List<VisibleMessage> visibleHistory = findCompletedVisibleHistoryPort.findCompletedVisibleHistory(
                 ownerId, turnId, command.opaqueHandle(), command.visibleHistoryLimit());
         String userContent = findUserTurnContentPort.findUserTurnContent(ownerId, turnId, command.opaqueHandle());
         List<String> durableMemories = findEligibleDurableMemoriesPort.findEligibleDurableMemories(ownerId);

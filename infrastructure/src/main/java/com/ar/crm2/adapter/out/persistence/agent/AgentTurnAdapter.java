@@ -16,10 +16,12 @@ import com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContent
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPort;
 import com.ar.crm2.model.agent.entity.AgentTurn;
 import com.ar.crm2.model.agent.entity.Conversation;
+import com.ar.crm2.model.agent.enums.VisibleMessageRole;
 import com.ar.crm2.model.agent.enums.TurnState;
 import com.ar.crm2.model.agent.vo.AcceptedUserTurn;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
+import com.ar.crm2.model.agent.vo.VisibleMessage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.annotation.Transactional;
@@ -82,7 +84,7 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
 
     @Override
     @Transactional(readOnly = true)
-    public List<String> findCompletedVisibleHistory(
+    public List<VisibleMessage> findCompletedVisibleHistory(
             AgentOwnerId ownerId,
             TurnId turnId,
             String opaqueHandle,
@@ -98,9 +100,13 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
                         turnId.value().toString(),
                         PageRequest.of(0, maximumMessages)
                 );
-        List<String> oldestFirst = new ArrayList<>(newestFirst.size());
+        List<VisibleMessage> oldestFirst = new ArrayList<>(newestFirst.size());
         for (int index = newestFirst.size() - 1; index >= 0; index--) {
-            oldestFirst.add(newestFirst.get(index).getContent());
+            AgentVisibleHistoryEntity entity = newestFirst.get(index);
+            oldestFirst.add(new VisibleMessage(
+                    VisibleMessageRole.fromStorage(entity.getRole()),
+                    entity.getContent()
+            ));
         }
         return oldestFirst;
     }
