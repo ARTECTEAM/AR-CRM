@@ -9,8 +9,10 @@ import com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRequestRepository;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentVisibleHistoryRepository;
 import com.ar.crm2.model.agent.enums.TurnState;
+import com.ar.crm2.model.agent.enums.VisibleMessageRole;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
+import com.ar.crm2.model.agent.vo.VisibleMessage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -72,7 +74,7 @@ class AgentTurnCompletionPersistenceAdapterTest {
     }
 
     @Test
-    void returnsOnlyTheMostRecentCompletedOwnerHistoryOldestToNewestAndExcludesTheActiveTurn() {
+    void returnsOrderedRoleBearingHistoryOldestFirstAndExcludesTheActiveTurn() {
         PersistedTurn first = persistedTurn("owner-a", TurnState.COMPLETED, 1);
         visible(first, "USER", "first user", 1);
         visible(first, "ASSISTANT", "first assistant", 2);
@@ -84,10 +86,43 @@ class AgentTurnCompletionPersistenceAdapterTest {
         PersistedTurn otherOwner = persistedTurn("owner-b", TurnState.COMPLETED, 6);
         visible(otherOwner, "ASSISTANT", "other owner", 6);
 
-        List<String> history = adapter.findCompletedVisibleHistory(
+        List<VisibleMessage> history = adapter.findCompletedVisibleHistory(
                 active.ownerId(), active.turnId(), active.handle(), 3);
 
-        assertThat(history).containsExactly("first assistant", "second user", "second assistant");
+        assertThat(history).containsExactly(
+                VisibleMessage.assistant("first assistant"),
+                VisibleMessage.user("second user"),
+                VisibleMessage.assistant("second assistant")
+        );
+    }
+
+    @Test
+    void preservesUserAndAssistantSpeakerProvenanceWhenMappingFromStorage() {
+        PersistedTurn first = persistedTurn("owner-a", TurnState.COMPLETED, 1);
+        visible(first, "USER", "first user", 1);
+        visible(first, "ASSISTANT", "first assistant", 2);
+        PersistedTurn active = persistedTurn("owner-a", TurnState.PREPARED, 3);
+        visible(active, "USER", "active user", 3);
+
+        List<VisibleMessage> history = adapter.findCompletedVisibleHistory(
+                active.ownerId(), active.turnId(), active.handle(), 5);
+
+        assertThat(history).hasSize(2);
+        assertThat(history.get(0).role()).isEqualTo(VisibleMessageRole.USER);
+        assertThat(history.get(0).content()).isEqualTo("first user");
+        assertThat(history.get(1).role()).isEqualTo(VisibleMessageRole.ASSISTANT);
+        assertThat(history.get(1).content()).isEqualTo("first assistant");
+    }
+
+    @Test
+    void returnsEmptyRoleBearingHistoryWhenTheActiveTurnHasNoCompletedPredecessors() {
+        PersistedTurn active = persistedTurn("owner-a", TurnState.PREPARED, 1);
+        visible(active, "USER", "active user", 1);
+
+        List<VisibleMessage> history = adapter.findCompletedVisibleHistory(
+                active.ownerId(), active.turnId(), active.handle(), 5);
+
+        assertThat(history).isEmpty();
     }
 
     @Test

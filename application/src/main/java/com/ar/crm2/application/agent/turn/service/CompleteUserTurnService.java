@@ -9,6 +9,7 @@ import com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPo
 import com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPort;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
+import com.ar.crm2.model.agent.vo.VisibleMessage;
 import lombok.RequiredArgsConstructor;
 
 import java.util.List;
@@ -16,7 +17,7 @@ import java.util.Optional;
 
 /** Coordinates completion retry convergence without persistence or provider details. */
 @RequiredArgsConstructor
-public final class CompleteUserTurnService implements CompleteUserTurnUseCase {
+public class CompleteUserTurnService implements CompleteUserTurnUseCase {
     private final FindCompletedAssistantContentPort findCompletedAssistantContentPort;
     private final FindCompletedVisibleHistoryPort findCompletedVisibleHistoryPort;
     private final FindEligibleDurableMemoriesPort findEligibleDurableMemoriesPort;
@@ -32,7 +33,7 @@ public final class CompleteUserTurnService implements CompleteUserTurnUseCase {
         if (completedContent.isPresent()) {
             return completedContent.get();
         }
-        List<String> visibleHistory = findCompletedVisibleHistoryPort.findCompletedVisibleHistory(
+        List<VisibleMessage> visibleHistory = findCompletedVisibleHistoryPort.findCompletedVisibleHistory(
                 ownerId, turnId, command.opaqueHandle(), command.visibleHistoryLimit());
         List<String> durableMemories = findEligibleDurableMemoriesPort.findEligibleDurableMemories(ownerId);
         String assistantContent = chatCompletionPort.complete(

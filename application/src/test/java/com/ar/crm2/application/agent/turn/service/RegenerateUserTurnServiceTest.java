@@ -9,8 +9,10 @@ import com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPo
 import com.ar.crm2.application.agent.turn.port.out.FindUserTurnContentPort;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
+import com.ar.crm2.model.agent.vo.VisibleMessage;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,7 +34,7 @@ class RegenerateUserTurnServiceTest {
         CapturingRegenerationPort regenerationPort = new CapturingRegenerationPort(Optional.of("canonical current output"));
         CapturingRegeneratedCompletionPort completionPort = new CapturingRegeneratedCompletionPort();
         CapturingChatCompletionPort chatCompletionPort = new CapturingChatCompletionPort("provider output");
-        CapturingHistoryPort historyPort = new CapturingHistoryPort(List.of("history"));
+        CapturingHistoryPort historyPort = new CapturingHistoryPort(List.of(VisibleMessage.user("history")));
         CapturingUserContentPort userContentPort = new CapturingUserContentPort("original user content");
         CapturingMemoryPort memoryPort = new CapturingMemoryPort(List.of("memory"));
         RegenerateUserTurnService service = new RegenerateUserTurnService(
@@ -62,10 +64,13 @@ class RegenerateUserTurnServiceTest {
     @Test
     void startsSequentialRegenerationsWithOriginalUserContentExactlyOnceAndConvergesEachOutput() {
         UUID turnId = UUID.randomUUID();
+        List<VisibleMessage> orderedHistory = List.of(
+                VisibleMessage.user("earlier completed exchange")
+        );
         CapturingRegenerationPort regenerationPort = new CapturingRegenerationPort(Optional.empty());
         CapturingRegeneratedCompletionPort completionPort = new CapturingRegeneratedCompletionPort();
         CapturingChatCompletionPort chatCompletionPort = new CapturingChatCompletionPort("first regenerated output", "second regenerated output");
-        CapturingHistoryPort historyPort = new CapturingHistoryPort(List.of("earlier completed exchange"));
+        CapturingHistoryPort historyPort = new CapturingHistoryPort(orderedHistory);
         CapturingUserContentPort userContentPort = new CapturingUserContentPort("original user content");
         CapturingMemoryPort memoryPort = new CapturingMemoryPort(List.of("durable instruction"));
         RegenerateUserTurnService service = new RegenerateUserTurnService(
@@ -102,11 +107,13 @@ class RegenerateUserTurnServiceTest {
         assertEquals(List.of(AgentOwnerId.from("owner-a"), AgentOwnerId.from("owner-a")), completionPort.ownerIds);
         assertEquals(List.of(TurnId.from(turnId), TurnId.from(turnId)), completionPort.turnIds);
         assertEquals(List.of("handle-a", "handle-a"), completionPort.opaqueHandles);
-        assertEquals(List.of("earlier completed exchange"), chatCompletionPort.visibleHistory.get(0));
+        assertEquals(orderedHistory, chatCompletionPort.visibleHistory.get(0));
         assertEquals(List.of("durable instruction"), chatCompletionPort.durableMemories.get(0));
         assertEquals(List.of("original user content", "original user content"), chatCompletionPort.prompts);
         assertEquals(0, chatCompletionPort.visibleHistory.stream()
-                .flatMap(List::stream).filter("original user content"::equals).count());
+                .flatMap(List::stream)
+                .filter(message -> "original user content".equals(message.content()))
+                .count());
         assertEquals(List.of(AgentOwnerId.from("owner-a"), AgentOwnerId.from("owner-a")), chatCompletionPort.ownerIds);
         assertEquals(List.of(TurnId.from(turnId), TurnId.from(turnId)), chatCompletionPort.turnIds);
         assertEquals(List.of("key-a", "key-b"), completionPort.idempotencyKeys);
@@ -117,7 +124,7 @@ class RegenerateUserTurnServiceTest {
         CapturingRegeneratedCompletionPort completionPort = new CapturingRegeneratedCompletionPort();
         RegenerateUserTurnService service = new RegenerateUserTurnService(
                 new CapturingRegenerationPort(Optional.empty()),
-                (ownerId, turnId, opaqueHandle, maximumMessages) -> List.of("history"),
+                (ownerId, turnId, opaqueHandle, maximumMessages) -> List.of(VisibleMessage.user("history")),
                 (ownerId, turnId, opaqueHandle) -> "original user content",
                 ownerId -> List.of("memory"),
                 completionPort,
@@ -136,10 +143,10 @@ class RegenerateUserTurnServiceTest {
     private static final class CapturingRegenerationPort implements CreateRegenerationPort {
         private final Optional<String> canonicalContent;
         private int calls;
-        private final List<AgentOwnerId> ownerIds = new java.util.ArrayList<>();
-        private final List<TurnId> turnIds = new java.util.ArrayList<>();
-        private final List<String> opaqueHandles = new java.util.ArrayList<>();
-        private final List<String> idempotencyKeys = new java.util.ArrayList<>();
+        private final List<AgentOwnerId> ownerIds = new ArrayList<>();
+        private final List<TurnId> turnIds = new ArrayList<>();
+        private final List<String> opaqueHandles = new ArrayList<>();
+        private final List<String> idempotencyKeys = new ArrayList<>();
 
         private CapturingRegenerationPort(Optional<String> canonicalContent) {
             this.canonicalContent = canonicalContent;
@@ -163,10 +170,10 @@ class RegenerateUserTurnServiceTest {
 
     private static final class CapturingRegeneratedCompletionPort implements CompleteRegeneratedTurnPort {
         private int calls;
-        private final List<AgentOwnerId> ownerIds = new java.util.ArrayList<>();
-        private final List<TurnId> turnIds = new java.util.ArrayList<>();
-        private final List<String> opaqueHandles = new java.util.ArrayList<>();
-        private final List<String> idempotencyKeys = new java.util.ArrayList<>();
+        private final List<AgentOwnerId> ownerIds = new ArrayList<>();
+        private final List<TurnId> turnIds = new ArrayList<>();
+        private final List<String> opaqueHandles = new ArrayList<>();
+        private final List<String> idempotencyKeys = new ArrayList<>();
 
         @Override
         public String completeRegeneratedTurn(
@@ -188,11 +195,11 @@ class RegenerateUserTurnServiceTest {
     private static final class CapturingChatCompletionPort implements ChatCompletionPort {
         private final List<String> outputs;
         private int calls;
-        private final List<AgentOwnerId> ownerIds = new java.util.ArrayList<>();
-        private final List<TurnId> turnIds = new java.util.ArrayList<>();
-        private final List<List<String>> visibleHistory = new java.util.ArrayList<>();
-        private final List<List<String>> durableMemories = new java.util.ArrayList<>();
-        private final List<String> prompts = new java.util.ArrayList<>();
+        private final List<AgentOwnerId> ownerIds = new ArrayList<>();
+        private final List<TurnId> turnIds = new ArrayList<>();
+        private final List<List<VisibleMessage>> visibleHistory = new ArrayList<>();
+        private final List<List<String>> durableMemories = new ArrayList<>();
+        private final List<String> prompts = new ArrayList<>();
 
         private CapturingChatCompletionPort(String... outputs) {
             this.outputs = List.of(outputs);
@@ -202,7 +209,7 @@ class RegenerateUserTurnServiceTest {
         public String complete(
                 AgentOwnerId ownerId,
                 TurnId turnId,
-                List<String> visibleHistory,
+                List<VisibleMessage> visibleHistory,
                 List<String> durableMemories,
                 String normalizedPrompt
         ) {
@@ -216,19 +223,19 @@ class RegenerateUserTurnServiceTest {
     }
 
     private static final class CapturingHistoryPort implements FindCompletedVisibleHistoryPort {
-        private final List<String> history;
+        private final List<VisibleMessage> history;
         private int calls;
-        private final List<AgentOwnerId> ownerIds = new java.util.ArrayList<>();
-        private final List<TurnId> turnIds = new java.util.ArrayList<>();
-        private final List<String> opaqueHandles = new java.util.ArrayList<>();
-        private final List<Integer> maximumMessages = new java.util.ArrayList<>();
+        private final List<AgentOwnerId> ownerIds = new ArrayList<>();
+        private final List<TurnId> turnIds = new ArrayList<>();
+        private final List<String> opaqueHandles = new ArrayList<>();
+        private final List<Integer> maximumMessages = new ArrayList<>();
 
-        private CapturingHistoryPort(List<String> history) {
+        private CapturingHistoryPort(List<VisibleMessage> history) {
             this.history = history;
         }
 
         @Override
-        public List<String> findCompletedVisibleHistory(
+        public List<VisibleMessage> findCompletedVisibleHistory(
                 AgentOwnerId ownerId,
                 TurnId turnId,
                 String opaqueHandle,
@@ -246,9 +253,9 @@ class RegenerateUserTurnServiceTest {
     private static final class CapturingUserContentPort implements FindUserTurnContentPort {
         private final String userContent;
         private int calls;
-        private final List<AgentOwnerId> ownerIds = new java.util.ArrayList<>();
-        private final List<TurnId> turnIds = new java.util.ArrayList<>();
-        private final List<String> opaqueHandles = new java.util.ArrayList<>();
+        private final List<AgentOwnerId> ownerIds = new ArrayList<>();
+        private final List<TurnId> turnIds = new ArrayList<>();
+        private final List<String> opaqueHandles = new ArrayList<>();
 
         private CapturingUserContentPort(String userContent) {
             this.userContent = userContent;
@@ -267,7 +274,7 @@ class RegenerateUserTurnServiceTest {
     private static final class CapturingMemoryPort implements FindEligibleDurableMemoriesPort {
         private final List<String> memories;
         private int calls;
-        private final List<AgentOwnerId> ownerIds = new java.util.ArrayList<>();
+        private final List<AgentOwnerId> ownerIds = new ArrayList<>();
 
         private CapturingMemoryPort(List<String> memories) {
             this.memories = memories;
