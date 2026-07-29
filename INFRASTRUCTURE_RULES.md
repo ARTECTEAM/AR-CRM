@@ -212,6 +212,30 @@ La validación del request no sustituye las reglas internas de las capas inferio
 
 ---
 
+## Búsqueda actor-scoped: pushdown atómico, sin endpoint REST
+
+Cuando una capacidad de búsqueda (típicamente `find_contacts` para un agente o asistente) es solicitada por una herramienta o por un orquestador — no por un cliente HTTP — la capa de infraestructura NO debe exponer un endpoint REST específico para esa búsqueda. La consulta es **tool-only** o **invocable sólo por orquestación interna**, y el actor que la dispara proviene del `ActorContext` autenticado, nunca del cuerpo del request ni del esquema visible de la herramienta.
+
+Reglas:
+
+* No se crean controllers, DTOs request, mappers REST de entrada específicos ni clases `*MvcTest` / `*IT` para una búsqueda tool-only. La superficie de entrada es el puerto de entrada de `application` (`GetAllContactosUseCase`), y la consulta de persistencia se materializa mediante el puerto de salida (`SearchContactosPort`) y su adaptador.
+* El actor se obtiene desde el contexto confiable fuera del esquema visible: para una herramienta de IA, el actor es capturado por la factoría de callbacks y pasado como argumento del `Command` al construirlo; nunca llega por un argumento visible al modelo.
+* El adaptador de salida aplica el predicado de alcance `WHERE (creado_por = :actor OR responsable_id = :actor)` como parte de la misma consulta que aplica los filtros opcionales y el orden. El alcance NUNCA se evalúa en `application` y NUNCA se construye en Java a partir de comparaciones entre `actor` y otros identificadores.
+* La consulta se ejecuta en una sola operación pushdown contra la base de datos: alcance + filtros opcionales + `ORDER BY creado_en DESC, id ASC` + `LIMIT` (cuando el caso de uso lo solicite) en una sola sentencia.
+* El límite del resultado, cuando aplica, se aplica en la base de datos (vía `Pageable` o equivalente) antes de la materialización; no se utiliza `repository.findAll()` ni `Stream.filter(...)` en Java para implementar el alcance, los filtros opcionales o el `LIMIT`.
+
+## No debe
+
+* Crear `ContactoController.getAll(...)`, `ContactoController.getAll()` (sobrecarga Java sin anotación Spring) ni cualquier método anotado con `@GetMapping` cuyo único propósito sea exponer `find_contacts` por HTTP. La búsqueda contact-only vive en el adaptador de salida; la ruta HTTP, cuando exista para otros fines, no la incluye.
+* Definir un `GetAllContactosRequest` (o cualquier DTO request equivalente) ni un método `ContactoCommandMapper.toGetAllCommand(...)` cuya única razón de existir sea alimentar un endpoint REST de búsqueda tool-only.
+* Mantener clases `ContactoControllerMvcTest` o `ContactoCommandMapperTest` dedicadas exclusivamente a ese endpoint o mapeo eliminado. Si una clase cubre únicamente get-all/get-by-all, se elimina con él.
+* Recibir el `actorUsuarioId` por un campo libre del request, por un argumento visible del modelo de IA, ni por un campo controlado por el cliente. El actor lo aporta el `ActorContext` o un callback de orquestación confiable.
+* Aplicar el alcance en `application` con `if (actor.equals(responsableId)) ...` o equivalentes; el alcance se aplica en la base de datos, en la misma consulta pushdown.
+* Cargar todo el conjunto con `repository.findAll()` y filtrar en `Stream.filter(...)`; la consulta debe ser atómica en SQL/JPQL con `LIMIT` cuando se solicite.
+* Reemplazar el alcance del actor por un filtro opcional equivalente (por ejemplo, `responsableId == actor` en el `Service`); el alcance siempre se aplica primero y se intersecta con los filtros opcionales.
+
+---
+
 ## Identidad autenticada
 
 Los identificadores del actor autenticado no deben recibirse libremente desde el request.

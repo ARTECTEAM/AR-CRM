@@ -5,19 +5,23 @@ import com.ar.crm2.adapter.out.persistence.mapper.ContactoMapper;
 import com.ar.crm2.adapter.out.persistence.repository.ContactoRepository;
 import com.ar.crm2.application.contacto.port.out.DeleteContactoByIdPort;
 import com.ar.crm2.application.contacto.port.out.ExistsTratosByContactoIdPort;
-import com.ar.crm2.application.contacto.port.out.FindAllContactosPort;
 import com.ar.crm2.application.contacto.port.out.FindContactoByIdPort;
 import com.ar.crm2.application.contacto.port.out.SaveContactoPort;
-import com.ar.crm2.application.contacto.query.ContactoFilterCriteria;
+import com.ar.crm2.application.contacto.port.out.SearchContactosPort;
 import com.ar.crm2.model.entity.Contacto;
+import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.vo.ContactoId;
+import com.ar.crm2.model.vo.EmpresaId;
+import com.ar.crm2.model.vo.UsuarioId;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.util.List;
 import java.util.Optional;
 
 @RequiredArgsConstructor
-public class ContactoRepositoryAdapter implements SaveContactoPort, FindAllContactosPort, FindContactoByIdPort, DeleteContactoByIdPort, ExistsTratosByContactoIdPort {
+public class ContactoRepositoryAdapter implements SaveContactoPort, SearchContactosPort, FindContactoByIdPort, DeleteContactoByIdPort, ExistsTratosByContactoIdPort {
 
     private final ContactoRepository repository;
 
@@ -29,42 +33,45 @@ public class ContactoRepositoryAdapter implements SaveContactoPort, FindAllConta
     }
 
     @Override
-    public List<Contacto> findAll() {
-        return findAll(ContactoFilterCriteria.empty());
+    public List<Contacto> search(
+            UsuarioId actorUsuarioId,
+            String search,
+            EstadoRelacion estadoRelacion,
+            EmpresaId empresaId,
+            UsuarioId responsableId,
+            String comoNosConocio,
+            Integer maxResults
+    ) {
+        // The deterministic order (creadoEn DESC, id ASC) is fixed in the
+        // repository @Query; the Pageable here only contributes the
+        // database-level LIMIT when a cap is requested. Pageable.unpaged()
+        // applies neither ORDER BY (the JPQL already has it) nor LIMIT.
+        Pageable pageable = maxResults == null
+                ? Pageable.unpaged()
+                : PageRequest.ofSize(maxResults);
+
+        List<ContactoEntity> entities = repository.searchScoped(
+                actorUsuarioId.value().toString(),
+                escapeLikePattern(search),
+                estadoRelacion,
+                empresaId != null ? empresaId.value().toString() : null,
+                responsableId != null ? responsableId.value().toString() : null,
+                comoNosConocio,
+                pageable
+        );
+
+        return entities.stream()
+                .map(ContactoMapper::toDomain)
+                .toList();
     }
 
-    @Override
-    public List<Contacto> findAll(ContactoFilterCriteria criteria) {
-        return repository.findAll().stream()
-            .map(ContactoMapper::toDomain)
-            .filter(contacto -> matches(contacto, criteria))
-            .toList();
-    }
-
-    private boolean matches(Contacto contacto, ContactoFilterCriteria criteria) {
-        if (criteria == null) criteria = ContactoFilterCriteria.empty();
-        String term = normalize(criteria.search());
-        String origen = normalize(criteria.comoNosConocio());
-
-        if (term != null && !containsAny(term, contacto.getNombre(), contacto.getCorreo(), contacto.getCargo(), contacto.getTelefono())) return false;
-        if (criteria.estadoRelacion() != null && contacto.getEstadoRelacion() != criteria.estadoRelacion()) return false;
-        if (criteria.empresaId() != null && !criteria.empresaId().equals(contacto.getEmpresaId())) return false;
-        if (criteria.responsableId() != null && !criteria.responsableId().equals(contacto.getResponsableId())) return false;
-        if (origen != null && !origen.equals(normalize(contacto.getComoNosConocio()))) return false;
-        return true;
-    }
-
-    private boolean containsAny(String term, String... values) {
-        for (String value : values) {
-            String normalized = normalize(value);
-            if (normalized != null && normalized.contains(term)) return true;
+    private static String escapeLikePattern(String value) {
+        if (value == null) {
+            return null;
         }
-        return false;
-    }
-
-    private String normalize(String value) {
-        if (value == null || value.isBlank()) return null;
-        return value.trim().toLowerCase(java.util.Locale.ROOT);
+        return value.replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
     }
 
     @Override

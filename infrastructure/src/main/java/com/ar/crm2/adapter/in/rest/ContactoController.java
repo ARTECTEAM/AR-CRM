@@ -14,14 +14,9 @@ import com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
-import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase;
-import com.ar.crm2.application.contacto.query.ContactoFilterCriteria;
 import com.ar.crm2.application.security.ActorContext;
-import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.entity.Contacto;
-import com.ar.crm2.model.vo.EmpresaId;
-import com.ar.crm2.model.vo.UsuarioId;
 import com.ar.crm2.security.ActorContextRequestAttributeFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -30,14 +25,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -50,7 +44,6 @@ import java.util.UUID;
 public class ContactoController {
 
     private final CreateContactoUseCase createUseCase;
-    private final GetAllContactosUseCase getAllUseCase;
     private final GetContactoByIdUseCase getByIdUseCase;
     private final EditContactoUseCase editUseCase;
     private final DeleteContactoUseCase deleteUseCase;
@@ -72,34 +65,7 @@ public class ContactoController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ContactoResponse.fromDomain(contacto));
     }
 
-    /**
-     * Retrieves all Contactos.
-     */
-    @GetMapping("/get-all")
-    public ResponseEntity<List<ContactoResponse>> getAll(
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) EstadoRelacion estadoRelacion,
-            @RequestParam(required = false) UUID empresaId,
-            @RequestParam(required = false) UUID responsableId,
-            @RequestParam(required = false) String comoNosConocio
-    ) {
-        ContactoFilterCriteria criteria = new ContactoFilterCriteria(
-                search,
-                estadoRelacion,
-                empresaId != null ? EmpresaId.from(empresaId) : null,
-                responsableId != null ? UsuarioId.from(responsableId) : null,
-                comoNosConocio
-        );
-        List<Contacto> contactos = getAllUseCase.getAll(criteria);
-        List<ContactoResponse> responses = contactos.stream().map(ContactoResponse::fromDomain).toList();
-        return ResponseEntity.ok(responses);
-    }
 
-    public ResponseEntity<List<ContactoResponse>> getAll() {
-        List<Contacto> contactos = getAllUseCase.getAll();
-        List<ContactoResponse> responses = contactos.stream().map(ContactoResponse::fromDomain).toList();
-        return ResponseEntity.ok(responses);
-    }
 
     /**
      * Retrieves a Contacto by its id.
