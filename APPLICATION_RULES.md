@@ -553,6 +553,72 @@ Reglas:
 
 ---
 
+# Helpers de Application — `application.shared`
+
+`application.shared` aloja helpers estructurales, sin estado y sin framework que se reutilizan en distintos contextos de `application` (por ejemplo, `ApplicationAssert`). No es un cajón genérico ni un sustituto de `Command`, `port` o `service`.
+
+## Debe
+
+* Contener únicamente utilidades puras, sin estado, sin Spring, JPA, HTTP u otro framework.
+* Realizar exclusivamente comprobaciones estructurales: presencia, normalización de texto opcional, enteros positivos.
+* Poder ser instanciadas y probadas sin levantar Spring.
+* Ubicarse en `application.shared` con subpaquetes solo cuando agrupen un mismo conjunto de utilidades estructurales.
+
+## No debe
+
+* Definir reglas de negocio ni invariantes de dominio.
+* Recibir o devolver entidades JPA, DTOs REST, `Command`s, puertos, servicios, `ActorContext`, JWT o tipos HTTP.
+* Reemplazar responsabilidades de `Command` (validación estructural) ni de `Service` (conversión a `domain` y coordinación). El `Service` puede invocar helpers estructurales solo como herramienta, no para reemplazarlos.
+* Almacenar estado mutable, dependencias inyectadas o referencias a infraestructura.
+* Convertir tipos de framework en tipos de `domain` o viceversa.
+
+---
+
+# Capacidad de búsqueda dinámica
+
+Cuando un caso de uso de lectura necesite exponer filtros opcionales combinables, se declara exactamente un puerto de salida con un solo método que reciba cada filtro opcional en tipos de `domain` o del JDK y un máximo opcional. Esto evita una familia combinatoria de métodos `FindBy...`.
+
+Reglas:
+
+* El puerto se nombra con el sufijo `Port` y describe la capacidad (`Search<Aggregate>Port`).
+* Ningún filtro combinable es obligatorio; `null` significa "sin restricción sobre esa dimensión". Esta regla no aplica a parámetros obligatorios de alcance o seguridad, como `actorUsuarioId`.
+* El método no introduce tipos JPA, HTTP, DTOs ni proyecciones.
+* El `Service` realiza la conversión de `Command` a tipos de `domain` y, si el `Command` valida estructuralmente, esa validación queda en el `Command`. El `Service` no realiza validación estructural.
+* El `Service` no codifica pushdown, orden ni límite; el límite, el orden y la aplicación de los filtros se resuelven en la fuente de datos y se documentan en `INFRASTRUCTURE_RULES.md` cuando se implemente la unidad correspondiente.
+* Cuando el `Command` recibe un valor crudo de `String` opcional que representa un nombre de enum de `domain`, la membresía estructural por nombre exacto es validación del `Command`. El `Command` rechaza valores no nulos que no coinciden exactamente con un `name()` del enum durante su construcción; el `Service` solo convierte el `String` ya validado al tipo de `domain` mediante `valueOf`, sin `try/catch` propio y sin un validador `parseX` paralelo.
+
+## No debe
+
+* Crear un puerto por combinación de filtros (`FindByTextPort`, `FindByEstadoPort`, etc.).
+* Devolver un `Query`, `Result` o DTO de lectura desde `application`.
+* Exponer `Specification`, `Page`, `Pageable` o `Sort` en el contrato del puerto.
+* Asignar responsabilidades de pushdown, orden o límite a `application`; esas viven en `infrastructure`.
+* Duplicar en el `Service` la validación de membresía estructural que ya realiza el `Command` (incluido un `try/catch` sobre `Enum.valueOf` o un método `parseX` paralelo).
+
+---
+
+# Alcance obligatorio vs filtros opcionales en búsquedas actor-scoped
+
+Cuando un caso de uso de búsqueda ejecuta sobre datos sensibles al actor (visibilidad, propiedad, asignación), el `Command` exige un identificador de actor obligatorio y lo trata como **alcance de seguridad**, no como filtro adicional. El `Service` lo convierte al tipo de `domain` correspondiente y lo entrega al puerto como un parámetro separado, anterior a los filtros opcionales. Ningún filtro opcional puede sustituir ni extender el alcance del actor.
+
+Reglas:
+
+* El `Command` declara el actor como campo obligatorio de tipo `UUID` (o `String` cuando la fuente externa ya validó el identificador) y rechaza un valor nulo durante su construcción con un `Reason` específico (`MISSING_ACTOR`, etc.). El `actorUsuarioId` no se normaliza, recorta ni transforma.
+* El `Service` convierte el `actorUsuarioId` del `Command` al tipo de `domain` (`UsuarioId`, `EmpresaId`, etc.) y lo pasa al puerto como **primer parámetro**, separado de cualquier otro filtro.
+* El puerto declara el actor como parámetro obligatorio (no opcional) en tipos de `domain`, nunca como `String` o `UUID` crudo, y lo aplica como predicado de alcance obligatorio (`(creado_por = actor OR responsable_id = actor)` u otro equivalente) intersectado con cada filtro opcional en la misma consulta.
+* Un filtro opcional que conceptualmente podría coincidir con el actor (por ejemplo, `responsableId`) **nunca** reemplaza el alcance: el adaptador siempre aplica la disyunción de alcance primero y luego intersecta el filtro opcional.
+* El `Command` preserva el `actorUsuarioId` sin alteraciones porque la identidad proviene de un `ActorContext` confiable fuera del `Command`. El `Command` no decide de dónde viene el actor; sólo exige su presencia.
+
+## No debe
+
+* Tratar el actor como un filtro opcional más del `Command` o del puerto.
+* Recibir el `actorUsuarioId` desde un campo controlado por el cliente, desde el cuerpo de un request o desde los argumentos visibles de una herramienta de IA; sólo proviene del contexto autenticado o de metadatos confiables capturados fuera del esquema visible.
+* Definir el alcance con dos predicados disjuntos a nivel de `application` (por ejemplo, un `if (actor.equals(responsableId))` en el `Service`); el alcance se aplica como una sola expresión en el adaptador, en la misma consulta pushdown.
+* Permitir que un filtro opcional anule o extienda el alcance del actor; el alcance siempre gana.
+* Aplicar `try/catch` sobre `Enum.valueOf` ni construir un validador `parseX` paralelo en el `Service`; la conversión de strings validados la realiza el `Service` y los alcances los aplica el adaptador.
+
+---
+
 # Testing
 
 Las pruebas de `application` deben:

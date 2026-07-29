@@ -100,7 +100,6 @@ import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase;
 import com.ar.crm2.application.contacto.port.out.DeleteContactoByIdPort;
-import com.ar.crm2.application.contacto.port.out.FindAllContactosPort;
 import com.ar.crm2.application.contacto.port.out.FindContactoByIdPort;
 import com.ar.crm2.application.contacto.port.out.SaveContactoPort;
 import com.ar.crm2.application.contacto.service.CambiarEstadoContactoService;

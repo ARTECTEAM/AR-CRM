@@ -1,6 +1,6 @@
 package com.ar.crm2.application.agent.turn.command;
 
-import com.ar.crm2.application.agent.command.ApplicationAssert;
+import com.ar.crm2.application.shared.ApplicationAssert;
 
 import java.util.UUID;
 
