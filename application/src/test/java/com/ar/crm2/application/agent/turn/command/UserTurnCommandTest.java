@@ -29,11 +29,13 @@ class UserTurnCommandTest {
     @Test
     void completeNormalizesTextAndPreservesTrustedTurnIdentity() {
         UUID turnId = UUID.randomUUID();
+        UUID actorUsuarioId = UUID.fromString("00000000-0000-0000-0000-000000000001");
         CompleteUserTurnCommand command = new CompleteUserTurnCommand(
-                " actor-a ", turnId, " handle ", " prompt ", 12
+                " actor-a ", actorUsuarioId, turnId, " handle ", " prompt ", 12
         );
 
         assertEquals("actor-a", command.actorSubject());
+        assertEquals(actorUsuarioId, command.actorUsuarioId());
         assertEquals(turnId, command.turnId());
         assertEquals("handle", command.opaqueHandle());
         assertEquals("prompt", command.prompt());
@@ -41,9 +43,31 @@ class UserTurnCommandTest {
     }
 
     @Test
+    void completePreservesActorUsuarioIdRegardlessOfOwnerSubjectValue() {
+        UUID turnId = UUID.randomUUID();
+        UUID actorUsuarioId = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        CompleteUserTurnCommand command = new CompleteUserTurnCommand(
+                "owner-subject-not-crm-id", actorUsuarioId, turnId, "handle", "prompt", 5
+        );
+
+        assertEquals(actorUsuarioId, command.actorUsuarioId());
+        assertEquals("owner-subject-not-crm-id", command.actorSubject());
+    }
+
+    @Test
+    void completeRejectsMissingActorUsuarioIdWithExactMessage() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> new CompleteUserTurnCommand(
+                        "actor-a", null, UUID.randomUUID(), "handle", "prompt", 12));
+
+        assertEquals("actorUsuarioId is required", exception.getMessage());
+    }
+
+    @Test
     void completeRejectsMissingTurnIdentityWithExactMessage() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> new CompleteUserTurnCommand("actor-a", null, "handle", "prompt", 12));
+                () -> new CompleteUserTurnCommand(
+                        "actor-a", UUID.randomUUID(), null, "handle", "prompt", 12));
 
         assertEquals("turnId is required", exception.getMessage());
     }
@@ -51,7 +75,8 @@ class UserTurnCommandTest {
     @Test
     void completeRejectsNonPositiveVisibleHistoryLimitWithExactMessage() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> new CompleteUserTurnCommand("actor-a", UUID.randomUUID(), "handle", "prompt", 0));
+                () -> new CompleteUserTurnCommand(
+                        "actor-a", UUID.randomUUID(), UUID.randomUUID(), "handle", "prompt", 0));
 
         assertEquals("visibleHistoryLimit must be positive", exception.getMessage());
     }
@@ -59,11 +84,13 @@ class UserTurnCommandTest {
     @Test
     void regenerateNormalizesTextAndPreservesTrustedTurnIdentity() {
         UUID turnId = UUID.randomUUID();
+        UUID actorUsuarioId = UUID.fromString("22222222-3333-4444-5555-666666666666");
         RegenerateUserTurnCommand command = new RegenerateUserTurnCommand(
-                " actor-a ", turnId, " handle ", " key-1 ", 12
+                " actor-a ", actorUsuarioId, turnId, " handle ", " key-1 ", 12
         );
 
         assertEquals("actor-a", command.actorSubject());
+        assertEquals(actorUsuarioId, command.actorUsuarioId());
         assertEquals(turnId, command.turnId());
         assertEquals("handle", command.opaqueHandle());
         assertEquals("key-1", command.idempotencyKey());
@@ -71,9 +98,19 @@ class UserTurnCommandTest {
     }
 
     @Test
+    void regenerateRejectsMissingActorUsuarioIdWithExactMessage() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> new RegenerateUserTurnCommand(
+                        "actor-a", null, UUID.randomUUID(), "handle", "key-1", 12));
+
+        assertEquals("actorUsuarioId is required", exception.getMessage());
+    }
+
+    @Test
     void regenerateRejectsMissingRequiredTextWithExactMessage() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> new RegenerateUserTurnCommand("actor-a", UUID.randomUUID(), " ", "key-1", 12));
+                () -> new RegenerateUserTurnCommand(
+                        "actor-a", UUID.randomUUID(), UUID.randomUUID(), " ", "key-1", 12));
 
         assertEquals("opaqueHandle is required", exception.getMessage());
     }
@@ -81,7 +118,8 @@ class UserTurnCommandTest {
     @Test
     void regenerateRejectsNonPositiveVisibleHistoryLimitWithExactMessage() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-                () -> new RegenerateUserTurnCommand("actor-a", UUID.randomUUID(), "handle", "key-1", -1));
+                () -> new RegenerateUserTurnCommand(
+                        "actor-a", UUID.randomUUID(), UUID.randomUUID(), "handle", "key-1", -1));
 
         assertEquals("visibleHistoryLimit must be positive", exception.getMessage());
     }

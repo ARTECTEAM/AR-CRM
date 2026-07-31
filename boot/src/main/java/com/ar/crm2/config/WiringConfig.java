@@ -1334,4 +1334,69 @@ public class WiringConfig {
                 grupoAdapter, grupoAdapter, notifyAdapter, evolutionAdapter, mediaStorage, canalAdapter, evolutionAdapter);
     }
 
+
+    // ── Pipely Agent: A3 Tool Components ─────────────────────────────────
+
+    /**
+     * Stateless shared Spring AI 2.0 CRM tools bean.
+     *
+     * <p>Stores only shared dependencies (the existing Application use
+     * cases and the Jackson {@code ObjectMapper}). It carries NO request
+     * actor: the trusted CRM {@code actorUsuarioId} reaches each tool
+     * through the framework's per-request {@code ToolContext} parameter
+     * on the {@link ChatClient#prompt()} call. Boot registers this same
+     * shared object once via {@code ChatClient.Builder#defaultTools(tools)}
+     * in {@link AgentConfig}; every request through the configured
+     * {@code ChatClient} advertises exactly the three allowlisted tools
+     * ({@code find_contacts}, {@code create_contact},
+     * {@code update_deal_stage}) and Spring AI 2.0's
+     * {@code JsonSchemaGenerator} excludes any {@code ToolContext} from
+     * the generated JSON schema.
+     *
+     * <p>No REST endpoint is added for these tools: tool-only features
+     * MUST NOT create controllers without a separate HTTP use case.
+     */
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools springAiCrmTools(
+            com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase getAllContactosUseCase,
+            com.ar.crm2.application.contacto.port.in.CreateContactoUseCase createContactoUseCase,
+            com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase cambiarEstadoTratoUseCase,
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper
+    ) {
+        return new com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools(
+                getAllContactosUseCase,
+                createContactoUseCase,
+                cambiarEstadoTratoUseCase,
+                objectMapper);
+    }
+
+    /**
+     * Provider-neutral Spring AI completion adapter.
+     *
+     * <p>The adapter consumes only the configured {@link ChatClient}
+     * (produced by {@link AgentConfig} with the three shared CRM tools
+     * registered via {@code defaultTools(tools)}) and forwards the
+     * trusted CRM {@code actorUsuarioId} per request through the
+     * framework {@code .toolContext(Map.of("actorUsuarioId", ...))} call.
+     * The adapter does NOT call request {@code .tools(...)} because
+     * Spring AI 2.0 runtime tools replace builder defaults — omitting
+     * that call preserves the configured allowlist.
+     *
+     * <p>The adapter fills the {@code {durable_memories}} placeholder at
+     * request time via
+     * {@code ChatClient#prompt().system(Consumer<PromptSystemSpec>)}.
+     *
+     * <p>No REST endpoint is added for these tools: tool-only features
+     * MUST NOT create controllers without a separate HTTP use case.
+     *
+     * <p>Exposed as the Application {@code ChatCompletionPort} so the
+     * completion service picks it up by interface.
+     */
+    @Bean
+    public com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort chatCompletionPort(
+            org.springframework.ai.chat.client.ChatClient chatClient
+    ) {
+        return new com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter(chatClient);
+    }
+
 }

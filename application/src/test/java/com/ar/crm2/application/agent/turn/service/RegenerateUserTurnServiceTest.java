@@ -23,6 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class RegenerateUserTurnServiceTest {
 
+    private static final UUID ACTOR_USUARIO_ID =
+            UUID.fromString("bbbbbbbb-1111-2222-3333-444444444444");
+
     @Test
     void allowsDirectConstructionWithoutDependencyValidation() {
         assertDoesNotThrow(() -> new RegenerateUserTurnService(null, null, null, null, null, null));
@@ -46,7 +49,8 @@ class RegenerateUserTurnServiceTest {
                 chatCompletionPort
         );
 
-        String content = service.regenerate(new RegenerateUserTurnCommand(" owner-a ", turnId, " handle-a ", " key-a ", 10));
+        String content = service.regenerate(new RegenerateUserTurnCommand(
+                " owner-a ", ACTOR_USUARIO_ID, turnId, " handle-a ", " key-a ", 10));
 
         assertEquals("canonical current output", content);
         assertEquals(1, regenerationPort.calls);
@@ -82,8 +86,10 @@ class RegenerateUserTurnServiceTest {
                 chatCompletionPort
         );
 
-        String first = service.regenerate(new RegenerateUserTurnCommand("owner-a", turnId, "handle-a", "key-a", 5));
-        String second = service.regenerate(new RegenerateUserTurnCommand("owner-a", turnId, "handle-a", "key-b", 5));
+        String first = service.regenerate(new RegenerateUserTurnCommand(
+                "owner-a", ACTOR_USUARIO_ID, turnId, "handle-a", "key-a", 5));
+        String second = service.regenerate(new RegenerateUserTurnCommand(
+                "owner-a", ACTOR_USUARIO_ID, turnId, "handle-a", "key-b", 5));
 
         assertEquals("canonical first regenerated output", first);
         assertEquals("canonical second regenerated output", second);
@@ -115,6 +121,7 @@ class RegenerateUserTurnServiceTest {
                 .filter(message -> "original user content".equals(message.content()))
                 .count());
         assertEquals(List.of(AgentOwnerId.from("owner-a"), AgentOwnerId.from("owner-a")), chatCompletionPort.ownerIds);
+        assertEquals(List.of(ACTOR_USUARIO_ID, ACTOR_USUARIO_ID), chatCompletionPort.actorUsuarioIds);
         assertEquals(List.of(TurnId.from(turnId), TurnId.from(turnId)), chatCompletionPort.turnIds);
         assertEquals(List.of("key-a", "key-b"), completionPort.idempotencyKeys);
     }
@@ -128,13 +135,14 @@ class RegenerateUserTurnServiceTest {
                 (ownerId, turnId, opaqueHandle) -> "original user content",
                 ownerId -> List.of("memory"),
                 completionPort,
-                (ownerId, turnId, visibleHistory, durableMemories, prompt) -> {
+                (ownerId, actorUsuarioId, turnId, visibleHistory, durableMemories, prompt) -> {
                     throw new IllegalStateException("provider failed");
                 }
         );
 
         IllegalStateException failure = assertThrows(IllegalStateException.class, () -> service.regenerate(
-                new RegenerateUserTurnCommand("owner-a", UUID.randomUUID(), "handle-a", "key-a", 5)));
+                new RegenerateUserTurnCommand(
+                        "owner-a", ACTOR_USUARIO_ID, UUID.randomUUID(), "handle-a", "key-a", 5)));
 
         assertEquals("provider failed", failure.getMessage());
         assertEquals(0, completionPort.calls);
@@ -196,6 +204,7 @@ class RegenerateUserTurnServiceTest {
         private final List<String> outputs;
         private int calls;
         private final List<AgentOwnerId> ownerIds = new ArrayList<>();
+        private final List<UUID> actorUsuarioIds = new ArrayList<>();
         private final List<TurnId> turnIds = new ArrayList<>();
         private final List<List<VisibleMessage>> visibleHistory = new ArrayList<>();
         private final List<List<String>> durableMemories = new ArrayList<>();
@@ -208,12 +217,14 @@ class RegenerateUserTurnServiceTest {
         @Override
         public String complete(
                 AgentOwnerId ownerId,
+                UUID actorUsuarioId,
                 TurnId turnId,
                 List<VisibleMessage> visibleHistory,
                 List<String> durableMemories,
                 String normalizedPrompt
         ) {
             ownerIds.add(ownerId);
+            actorUsuarioIds.add(actorUsuarioId);
             turnIds.add(turnId);
             this.visibleHistory.add(visibleHistory);
             this.durableMemories.add(durableMemories);
