@@ -1,189 +1,197 @@
-# Verification Report — A3 Post-Warning Cleanup
+# Verification Report — Conversational Agent Tasks 4.1–5.2
 
 **Change**: `pipely-agent-conversation-memory`
-**Task fingerprint**: `sdd-verify|pipely-agent-conversation-memory|a3-post-warning-cleanup-refresh-report`
-**Scope**: Completed A3 Review Cleanup tasks 1.1–3.2 plus the two-file post-verify warning refactor
-**Out of scope**: Pending Final Conversational PR tasks 4.1–5.2
-**Version**: N/A
-**Date**: 2026-07-30
+**Scope**: Tasks 4.1–5.2; current delta specs remain authoritative
 **Mode**: Strict TDD
 **Artifact store**: OpenSpec
-**Branch**: `feat/pipely-agent-conversation-memory-pr9c1-a3-tool-binding`
-**HEAD**: `19ce9036049ef1028c5041275a63a183b956d95e`
+**Date**: 2026-08-04
+**Branch / HEAD**: `feat/pipely-agent-conversation-memory-pr9c2-final-conversation` / `0c93873808ebeda3bb732432f299fe73e3fe52e0`
 
 ## Executive Result
 
-**Verdict: PASS WITH WARNINGS.** All seven scoped A3 tasks remain complete, both required focused suites pass with **61/61 unique tests**, and the post-verify refactor removed all four ornamental fresh-mock verifications and corrected both stale Javadocs without changing executable mapper behavior. Remaining warnings concern cleanup-only line attribution, explicitly deferred authorization/idempotency behavior, and the independently reproduced Boot JaCoCo mismatch—not a failing scoped acceptance criterion.
+**Verdict: FAIL.** All four scoped tasks are present, the focused conversation, application, infrastructure-agent, and Boot composition suites pass, and the six-module Java 21 package/type gate succeeds. The final composition exposes the real turn and durable-memory adapters and the real Spring AI completion adapter, while `AgentConfig` registers the shared three-tool allowlist. Verification is nevertheless blocked by the mandatory `mvnw.cmd verify` exit 1 and by current-spec scenarios with no passing behavioral proof: denied CRM permission/ownership, idempotent CRM write replay, and ambiguous durable-memory update behavior. Source inspection also shows the tool-action ledger is wired but not connected to `SpringAiCrmTools`, and `update_deal_stage` validates but does not pass the trusted actor to the existing mutation use case.
 
 ## Completeness
 
 | Metric | Value |
 |---|---:|
-| Scoped A3 tasks total (1.1–3.2) | 7 |
-| Scoped A3 tasks complete | 7 |
-| Scoped A3 tasks incomplete | 0 |
-| Post-verify warning refactors complete | 3/3 evidence rows |
-| Out-of-scope pending tasks (4.1–5.2) | 4 |
-
-Tasks 4.1–5.2 remain unchecked intentionally and do not affect this scoped verdict.
+| Scoped tasks | 4 |
+| Complete | 4 |
+| Incomplete | 0 |
+| Explicit v2 deferrals excluded | Yes, except where a current delta spec expressly requires the behavior |
 
 ## Build and Test Execution
 
-### Required acceptance commands
+| Command | Exit | Fresh runtime evidence |
+|---|---:|---|
+| `.\mvnw.cmd -pl boot test "-Dtest=AgentConversationWiringTest" ...` | 0 | 9/9 passed. |
+| `.\mvnw.cmd -pl boot test "-Dtest=AgentConfigTest,AgentConfigOpenAiWiringTest,AgentConversationWiringTest" ...` | 0 | 25/25 passed: 11 AgentConfig, 5 OpenAI wiring, 9 final composition. |
+| `.\mvnw.cmd -pl infrastructure verify "-Dtest=AgentControllerMvcTest" "-Dit.test=AgentConversationIT" ...` | 0 | 17/17 passed: 11 MVC and 6 H2/security/callback integration cases; JaCoCo report generated. |
+| `.\mvnw.cmd -pl application test "-Dtest=CompleteUserTurnServiceTest,DurableMemoryServiceTest" ...` | 0 | 14/14 passed. |
+| `.\mvnw.cmd -pl infrastructure test "-Dtest=SpringAiCrmToolsTest,SpringAiChatCompletionAdapterTest,AgentTurnCompletionPersistenceAdapterTest,DurableMemoryPersistenceAdapterTest,AgentToolActionPersistenceAdapterTest" ...` | 0 | 52/52 passed. |
+| `.\mvnw.cmd -DskipTests package` | 0 | All six reactor modules compiled and packaged with Java 21. |
+| `.\mvnw.cmd verify` | 1 | Infrastructure: 381 tests, 0 failures, 31 errors; Boot skipped. |
+| `.\mvnw.cmd -pl boot verify "-Dtest=AgentConfigTest,AgentConfigOpenAiWiringTest,AgentConversationWiringTest" ...` | 0 | 25/25 passed; Boot JaCoCo report generated. |
 
-| Command | Exit | Maven runtime | Result |
-|---|---:|---:|---|
-| `.\mvnw.cmd -pl infrastructure -am "-Dtest=CrmToolMapperTest,SpringAiCrmToolsTest,SpringAiChatCompletionAdapterTest" "-Dsurefire.failIfNoSpecifiedTests=false" test` | 0 | 7.403 s | **45/45 passed**, 0 failures, 0 errors, 0 skipped: mapper 14, tools 18, adapter 13. |
-| `.\mvnw.cmd -pl boot -am "-Dtest=AgentConfigTest,AgentConfigOpenAiWiringTest" "-Dsurefire.failIfNoSpecifiedTests=false" test` | 0 | 8.120 s | **16/16 passed**, 0 failures, 0 errors, 0 skipped: config 11, wiring 5. |
+**Build/type check**: ✅ Passed.
+**Focused scoped verification**: ✅ Passed.
+**Configured broad verification**: ❌ Failed. The 31 errors are 21 `SecurityConfigTest` context errors caused by a missing `WaApiKeyFilter` test bean and 10 `UsuarioControllerMvcTest` context errors caused by a missing `FindBotByTokenUseCase` test bean. These failures are outside the agent implementation path and reproduce the known baseline class of failures, but the verify policy makes any non-zero required command CRITICAL. The broad reactor stopped in Infrastructure, so Boot and its unrelated `FichaWiringTest` baseline were not evaluated by this command.
 
-**Unique scoped runtime total**: **61/61 passed**, 0 failures, 0 errors, 0 skipped, across **15.523 s** of Maven-reported acceptance runtime.
+## Production Composition Evidence
 
-Both commands traversed reactor `compile` and `testCompile` successfully. This is the narrow compile proof for the scoped implementation.
-
-### Narrow coverage and static checks
-
-| Command | Exit | Maven runtime | Result |
-|---|---:|---:|---|
-| Focused Infrastructure command with `-DskipITs=true verify` | 0 | 9.537 s | 45/45 passed again; jar and JaCoCo report generated. |
-| Focused Boot command with `-DskipITs=true verify` | 0 | 9.661 s | 16/16 passed again; jar and JaCoCo report generated; `WiringConfig` execution-data mismatch reproduced. |
-| `git diff --check` | 0 | N/A | No whitespace errors; Git emitted line-ending conversion warnings only. |
-
-The session executed **122 passing test invocations**: 61 in the required acceptance runs and the same 61 in focused coverage reruns. Total Maven-reported runtime across all four commands was **34.721 s**. Repository-wide `mvn verify` was intentionally omitted because the focused reactor suites prove the scoped criteria without exercising unrelated baseline contexts and integration tests.
-
-## Post-Warning Cleanup Verification
-
-| Check | Evidence | Result |
+| Concern | Runtime/static proof | Result |
 |---|---|---|
-| Four ineffective fresh-mock `never()` calls removed | Repository-wide Java search found no `verify(mock(GetAllContactosUseCase.class), never())` occurrence and no other `verify(mock(...), never())` replacement. | ✅ RESOLVED |
-| Meaningful companion assertions remain | Create delegation captures `CreateContactoCommand`; framework-boundary tests assert concrete exception types; missing-key/wrong-type tests assert preserved cause type/message. | ✅ VALID |
-| Five real dependency-target `never()` verifications remain | One `createUseCase.create(...)` non-mutation check and four `cambiarEstadoUseCase.ganar/perder(...)` route/non-mutation checks target mocks injected into the production tools object. | ✅ VALID |
-| `SpringAiCrmToolsTest` Javadoc corrected | It describes `requireActor` exceptions, natural `MethodToolCallback` wrapping in `ToolExecutionException`, original-cause preservation, and explicitly states there is no local sanitized redaction. | ✅ ACCURATE |
-| `CrmToolMapper` Javadoc corrected | It describes raw tool parameters plus the trusted server-side actor mapping into existing Application commands and typed deal-stage arguments. | ✅ ACCURATE |
-| Mapper executable behavior preserved | Apply-progress attributes the two-file change to Javadoc/test cleanup only; current mapper source retains the same validation/mapping paths, and all 14 mapper tests plus all 45 focused Infrastructure tests pass. The untracked-file state prevents an independent Git hunk comparison. | ✅ NO BEHAVIORAL REGRESSION |
+| Turn persistence | `AgentConversationWiringTest` creates the production `AgentTurnAdapter`, verifies all four outbound port types, and proves exactly one bean for each port. | ✅ |
+| Durable memory | The same context creates the production `DurableMemoryPersistenceAdapter`, verifies both memory-port namespaces and five lifecycle ports, and reflectively proves `CompleteUserTurnService` received that exact adapter. H2 persistence tests pass 6/6. | ✅ |
+| Completion | `WiringConfig.chatCompletionPort` returns `SpringAiChatCompletionAdapter`; the wiring test proves the configured `ChatCompletionPort` instance is injected into `CompleteUserTurnService`; adapter behavior passes 13/13. The harness mocks only `ChatClient`, not the adapter/service. | ✅ layered proof |
+| OpenAI/Spring AI client | `AgentConfigOpenAiWiringTest` exposes exactly one qualified `ChatModel` and one `ChatClient`; 5/5 pass without network. | ✅ |
+| CRM tools | `AgentConfigTest` and `SpringAiCrmToolsTest` prove one shared stateless tools object and exactly `find_contacts`, `create_contact`, and `update_deal_stage`; request identity travels through `ToolContext`. | ✅ layered proof |
+| Full Boot path | The endpoint H2 test uses production turn persistence and real `find_contacts` callback discovery, but substitutes a constant memory port and a completion harness. The Boot wiring test uses real services/adapters with mocked repositories and `ChatClient`. No single test executes the entire final Boot context end-to-end. | ⚠️ Partial integration depth |
+
+The 5.x production diff adds **11** beans: three persistence adapters, one UTC clock, two turn use cases, and five durable-memory use cases. Runtime uniqueness is asserted for 12 outbound port types (4 turn, 5 durable-memory, 3 tool-ledger). The five durable-memory input use cases are autowired by contract but only asserted non-null; exact singleton counts are not asserted for those input interfaces or for `ChatCompletionPort`.
 
 ## Spec Compliance Matrix
 
-| Requirement / scenario | Passing runtime evidence | Static evidence | Result |
+| Capability | Scenario | Passing runtime evidence | Result |
 |---|---|---|---|
-| Fixed allowlist; aliases/extras do not execute | `sharedToolsObjectExposesExactlyThreeAllowlistedCallbacksThroughSpringAiDiscovery` | Exactly three `@Tool` methods with the required names | ✅ COMPLIANT |
-| Raw primitive/UUID schemas; identity excluded | Schema metadata and identity-exclusion callback tests | `@ToolParam` is on dispatched primitive/UUID parameters; `ToolContext` is separate | ✅ COMPLIANT |
-| Trusted actor fails closed | Missing/empty, missing-key, and wrong-type context tests | `requireActor` rejects absent/null/wrong-type actor context | ✅ COMPLIANT |
-| Shared tools preserve actor isolation | `sharedToolsObjectIsolatesDifferentActorsAcrossPerCallToolContexts` | Shared bean stores dependencies only; actor is per-call context | ✅ COMPLIANT |
-| `find_contacts` uses trusted actor and cap 20 | Tool callback actor/cap test; mapper all/null-filter tests | Mapper builds `GetAllContactosCommand` with actor and max 20 | ✅ COMPLIANT |
-| `create_contact` maps required data and trusted actor | Delegation test; mapper positive/negative tests | Mapper validates company/name/state and creates `CreateContactoCommand` | ✅ COMPLIANT |
-| Missing relationship state rejects before mutation | Natural-boundary validation test | Original mapper `IllegalArgumentException` is preserved; injected create use case is never called | ✅ COMPLIANT |
-| `update_deal_stage` permits GANADO/PERDIDO only | GANADO, PERDIDO, unsupported-status, and missing-motivo tests | Mapper creates typed arguments and validates status/motivo | ✅ COMPLIANT |
-| Unsupported status mutates nothing | Unsupported-status callback test | Injected `ganar` and `perder` targets are both verified uncalled | ✅ COMPLIANT |
-| Natural Spring AI exception propagation | Validation and use-case failure callback tests | No local `try/catch` exists in the three tool methods | ✅ COMPLIANT |
-| Bounded structured outputs | Empty/non-empty find, create, and deal projection tests | Output records expose bounded business fields only | ✅ COMPLIANT |
-| Shared defaults and per-request actor context | Adapter and Boot suites | `AgentConfig.defaultTools(tools)`; adapter calls `.toolContext(...)` and not request `.tools(...)` | ✅ COMPLIANT |
-| Lombok constructor cleanup | Constructor reflection tests | Both infrastructure classes use `@RequiredArgsConstructor`; no manual constructor | ✅ COMPLIANT |
+| security | Valid protected path authorizes; missing credentials return 401 before work | `AgentConversationIT#anonymous_isRejected...`; authenticated H2/MVC cases | ✅ COMPLIANT |
+| security | Owner override cannot access another owner's conversation, memory, data, or tool results | Two-owner H2 isolation; JWT/body command capture; tool schemas exclude identity; per-call actor isolation | ✅ COMPLIANT (layered) |
+| security | Actor lacking CRM permission/ownership cannot disclose or mutate target | No covering passing test. `update_deal_stage` discards the validated actor after `requireActor`; `CambiarEstadoTratoUseCase` accepts only deal id/status data. | ❌ UNTESTED |
+| agent-durable-memory | Eligible memory is recalled independently of visible-history window | `CompleteUserTurnServiceTest`; `DurableMemoryPersistenceAdapterTest`; Boot injection identity test | ✅ COMPLIANT (layered) |
+| agent-durable-memory | Sensitive content without eligible request is not persisted | `DurableMemoryServiceTest#rejectsUnsafeMemoryWithoutPersistingIt` | ✅ COMPLIANT |
+| agent-durable-memory | Ambiguous update supersedes nothing; repeated reconstruction preserves order | Stable owner-scoped order passes in H2, but no test exercises an ambiguous update or proves it supersedes nothing. | ❌ UNTESTED |
+| agent-crm-tools | Unallowlisted or aliased tool is not executed | Runtime Spring AI discovery exposes exactly three names | ✅ COMPLIANT |
+| agent-crm-tools | `find_contacts` returns matching contacts visible to actor | Tool command captures trusted actor/cap; contact application/repository tests passed during broad execution | ✅ COMPLIANT (layered) |
+| agent-crm-tools | `create_contact` returns canonical contact for required data and trusted actor | `SpringAiCrmToolsTest#createContactDelegates...` | ✅ COMPLIANT |
+| agent-crm-tools | Visible deal becomes `GANADO`; unsupported status mutates nothing | Routing and unsupported-status no-mutation tests pass, but visibility/permission is not exercised. | ⚠️ PARTIAL |
+| agent-crm-tools | Retried write identity converges without another effect | Ledger persistence replay tests pass in isolation, but no production tool consumes the ledger/action identity. `CreateContactoService` always creates/saves a new UUID; `CambiarEstadoTratoService` writes another event note on replay. | ❌ UNTESTED |
+| agent-conversation | Valid request returns final content after owner-scoped context preparation | MVC happy path; H2 final persistence/callback; application orchestration; Boot composition | ✅ COMPLIANT (layered) |
+| agent-conversation | Same normalized retry creates no duplicate visible messages/response | Three-request H2 convergence and completion-call-count proof | ✅ COMPLIANT |
+| agent-conversation | Completion, regeneration, and tools have no public operation | MVC 404/405 cases and controller inspection | ✅ COMPLIANT |
 
-**Scoped compliance summary**: **13/13 A3 scenarios compliant**.
+**Compliance summary**: 10 compliant, 1 partial, 3 untested. Under the verification policy, every untested current-spec scenario is CRITICAL.
 
-### Explicitly Deferred Broader Scenarios
+## Correctness
 
-The full specs also require write retry convergence and current CRM permission/ownership enforcement. The corrected design explicitly defers a new trusted-action ledger, advanced write convergence, and deeper `CambiarEstadoTratoUseCase` authorization. In particular, `update_deal_stage` requires trusted actor context, but the existing deal-stage use case accepts only deal identity and does not consume the actor. These broader scenarios are not claimed compliant by this scoped report.
-
-Endpoint authentication and REST-path scenarios belong to pending tasks 4.1–5.2 and remain out of scope.
-
-## Correctness (Static Evidence)
-
-| Requirement | Status | Evidence |
+| Requirement | Status | Notes |
 |---|---|---|
-| Deleted input records absent | ✅ Implemented | No `dto/input/*.java` sources; no production references to the three deleted input records. |
-| Binder/registry architecture absent | ✅ Implemented | No production binder; registry source remains deleted; adapter has no binder dependency. |
-| Mapper owns raw validation/mapping | ✅ Implemented | Strings are normalized; required actor/company/name/state/id/status/motivo checks precede command/tuple construction. |
-| Tool methods have no local catches | ✅ Implemented | No catch exists in `SpringAiCrmTools`; mapper catches only enum conversion to provide validation detail. |
-| Output boundary is bounded | ✅ Implemented | Output records contain contact summaries, canonical create result, or deal id/status only. |
-| Constructor expectations | ✅ Implemented | Lombok generates the four-dependency tools constructor and single-`ChatClient` adapter constructor. |
-| Composition and defaults | ✅ Implemented | `WiringConfig` creates one shared tools bean and adapter; `AgentConfig` registers defaults once. |
+| One authenticated ingress | ✅ Implemented | Only `POST /api/agent/messages`; request contains message and idempotency key only. |
+| Trusted identity | ✅ Implemented | JWT-derived `ActorContext`; no development fallback in the modified filter; actor UUID travels through completion to `ToolContext`. |
+| Visible-history convergence | ✅ Implemented | Real H2 tests prove one USER and one ASSISTANT message and canonical replay. |
+| Durable-memory read path | ✅ Implemented | Production adapter is wired into completion and passes layered H2/application tests. |
+| Shared default tools | ✅ Implemented | Three discovered callbacks; request code does not replace defaults with `.tools(...)`. |
+| Tool permission propagation | ❌ Incomplete | `find_contacts` and `create_contact` carry actor data, but `update_deal_stage` cannot pass actor to the mutation use case. |
+| CRM write idempotency | ❌ Incomplete | The action ledger is a disconnected bean; tool methods neither claim nor complete an action. |
+| Response minimization | ✅ Implemented | Public response exposes only `content`. |
 
 ## Design Coherence
 
 | Decision | Followed? | Notes |
 |---|---|---|
-| Real method parameters define schema/dispatch | ✅ Yes | Primitive/UUID `@ToolParam` parameters are used directly. |
-| Shared stateless tools are builder defaults | ✅ Yes | One tools bean; `defaultTools(tools)`; no binder. |
-| Identity arrives through `ToolContext` | ✅ Yes | Adapter attaches the trusted UUID per request; schemas exclude it. |
-| Request `.tools(...)` must not replace defaults | ✅ Yes | No production request `.tools(...)` invocation exists. |
-| Mapper owns raw-value validation/mapping | ✅ Yes | Raw values and trusted actor are mapped to existing commands/typed arguments. |
-| Natural tool exception boundary | ✅ Yes | Original validation/use-case causes are preserved by Spring AI wrapping. |
-| Boot-only composition direction | ✅ Yes | Boot composes Infrastructure and Application dependencies. |
+| `boot → infrastructure → application → domain` | ✅ Yes | Boot composes concrete adapters and Application contracts; no inner-layer framework dependency was introduced. |
+| One authenticated REST ingress | ✅ Yes | Exact path and absent internal routes pass at runtime. |
+| Shared stateless `SpringAiCrmTools` registered as defaults | ✅ Yes | Boot/AgentConfig tests and callback discovery pass. |
+| Per-request trusted tool context | ✅ Yes | Adapter uses `.toolContext(...)` without request `.tools(...)`. |
+| Reuse real turn and durable-memory services/adapters | ✅ Yes | Exact adapter identity is proved in the Boot context. |
+| Final H2 test proves history, durable memory, three tools, and final persistence | ⚠️ Deviates | It proves history/final persistence, uses a constant memory port, and executes only `find_contacts`; companion tests cover the real memory adapter and all three tool definitions separately. |
+| Deferred deeper deal authorization/write convergence | ❌ Conflicts with specs | Design marks these deferred, but current `security` and `agent-crm-tools` delta specs require permission/ownership and idempotent write replay. Specs take precedence. |
 
 ## TDD Compliance
 
-Strict TDD is active per cached init observation #1715. Apply-progress observation #2873 includes the A3 closeout TDD evidence and the latest appended post-verify warning-cleanup REFACTOR table. Superseded historical input-record/sanitized-catch text was not used. The latest cleanup is correctly recorded as REFACTOR-only against the verified 61/61 safety net; no behavioral RED is demanded or invented.
+Engram `sdd/pipely-agent-conversation-memory/apply-progress` was retrieved in full. It records cumulative 4.x evidence and a formal 5.x TDD table. Task 5.1 RED was an ApplicationContext failure caused by the genuinely missing `AgentTurnAdapter` bean; the base-to-working-tree diff corroborates that the bean did not exist before 5.2. Current GREEN is independently reproduced at 9/9. Task 5.2 safety suites are independently reproduced. Current 4.x test files exist and pass 17/17; prior corrective RED/GREEN history is documented in the cumulative apply artifact and the pre-5.x report.
 
 | Check | Result | Details |
 |---|---|---|
-| TDD evidence reported | ✅ | A3 closeout and latest warning-cleanup evidence tables are present. |
-| Scoped behavior has test files | ✅ | All 5 focused test files exist; workload measurement and Javadoc-only work require no new behavioral test. |
-| RED evidence handled correctly | ✅ | Historical A3 stale assertions provide the inherited RED; latest non-behavioral cleanup records RED as N/A. |
-| GREEN independently confirmed | ✅ | 61/61 unique scoped tests pass now; 61/61 pass again in coverage reruns. |
-| Triangulation adequate | ✅ | Positive/negative, empty/non-empty, actor A/B, schema, mapper, exception, and wiring cases vary expectations. |
-| Safety net preserved | ✅ | Post-refactor focused result remains 61/61. |
+| TDD evidence reported | ✅ | Engram apply-progress available; 5.x formal table plus cumulative 4.x narrative/history. |
+| All scoped tasks have tests/evidence | ✅ | 4/4 tasks; RED tasks 4.1 and 5.1 have test files and recorded failures. |
+| 5.1 RED behavioral | ✅ | Recorded exit 1 due missing `AgentTurnAdapter`, not compilation failure; baseline diff corroborates missing bean. |
+| GREEN current | ✅ | 9/9 wiring, 25/25 Boot, 17/17 MVC/H2, 14/14 application, 52/52 infrastructure agent. |
+| Triangulation | ✅ | 9 wiring cases plus companion MVC, H2, application, adapter, and tool tests. |
+| Safety net | ✅ scoped / ❌ broad | All focused safety suites pass; configured broad gate exits 1 on unrelated test-context omissions. |
+| Refactor | ✅ | Final 5.x production change remains composition-only; no unrelated source repair was introduced. |
 
-**TDD compliance**: **6/6 checks passed**.
+**TDD compliance**: 6 scoped checks satisfied; broad safety gate remains blocking.
 
 ## Test Layer Distribution
 
 | Layer | Tests | Files | Tools |
 |---|---:|---:|---|
-| Unit/configuration contract | 25 | 2 | JUnit Jupiter, AssertJ, Mockito |
-| Framework/component integration | 36 | 3 | Real Spring AI callbacks/ChatClient and narrow Spring context |
-| HTTP/E2E | 0 | 0 | Out of scope; pending Final Conversational PR |
-| **Total** | **61** | **5** | |
+| MVC/component (tasks 4.x) | 11 | 1 | `@WebMvcTest`, MockMvc |
+| Integration (tasks 4.x) | 6 | 1 | `@SpringBootTest`, real security chain, H2, MockMvc |
+| Boot composition (task 5.1) | 9 | 1 | `@SpringJUnitConfig`, real configuration/services/adapters, mocked external seams |
+| Companion unit/integration safety suites | 91 | 10 | JUnit, Mockito, Spring AI deterministic model, H2 |
+| External provider E2E | 0 | 0 | Not configured; no network required |
 
 ## Changed-File Coverage
 
-| File | Line coverage | Branch coverage | Rating |
-|---|---:|---:|---|
-| `SpringAiCrmTools.java` | 96.3% (26/27) | 80.0% (8/10) | ✅ Excellent line coverage |
-| `CrmToolMapper.java` | 95.1% (58/61) | 85.0% (34/40) | ✅ Excellent |
-| `SpringAiChatCompletionAdapter.java` | 100% (22/22) | 100% (4/4) | ✅ Excellent |
-| Bounded output record classes | 100% (4/4) | N/A | ✅ Excellent |
-| `AgentConfig.java` | 100% (5/5) | N/A | ✅ Excellent |
-| `WiringConfig.java` | Invalid | Invalid | ⚠️ JaCoCo class/execution mismatch reproduced; use static bean inspection and Boot runtime wiring tests instead. |
+Fresh focused JaCoCo reports:
 
-No configured threshold blocks this change. Valid focused production-class measurements are all at or above 95% line coverage.
+| File | Line coverage | Branch coverage | Uncovered lines | Rating |
+|---|---:|---:|---|---|
+| `boot/.../WiringConfig.java` | 98.7% (152/154) | N/A | L305 (pre-existing), L1470 (`agentToolActionClock`) | ✅ Excellent |
+| `infrastructure/.../AgentController.java` | 100% (9/9) | N/A | — | ✅ Excellent |
+| `infrastructure/.../AgentMessageRequest.java` | 100% (1/1) | N/A | — | ✅ Excellent |
+| `infrastructure/.../AgentMessageResponse.java` | 100% (2/2) | N/A | — | ✅ Excellent |
+| `infrastructure/.../AgentRestMapper.java` | 100% (10/10) | 75.0% (3/4) | One branch | ✅ Excellent lines |
+| `infrastructure/.../ActorContextRequestAttributeFilter.java` | 100% (10/10) | 83.3% (5/6) | One branch | ✅ Excellent |
+| `infrastructure/.../GlobalExceptionHandler.java` | 60.0% (36/60) | 71.4% (5/7) | 24 whole-file lines | ⚠️ Low |
+
+The configured threshold is 0, so coverage is informational. The new production clock factory line is not executed because the focused wiring harness overrides that bean with a fixed clock.
 
 ## Assertion Quality
 
-The four previously reported ornamental `verify(mock(GetAllContactosUseCase.class), never())` calls are absent, and no equivalent fresh-mock assertion replaced them. The five remaining `never()` checks target mocks actually injected into `SpringAiCrmTools` and verify route exclusion or pre-mutation rejection. The five focused test files contain no tautology, ghost-loop, assertion-without-production-call, or mock/assertion-ratio violation that invalidates scoped evidence.
+No tautologies, ghost loops, assertions without production calls, or mock-to-assertion imbalance were found in the three task-created test files.
 
-**Assertion quality**: ✅ 0 CRITICAL, 0 WARNING in the post-cleanup scoped evidence.
+| File | Assertion | Issue | Severity |
+|---|---|---|---|
+| `AgentConversationWiringTest.java` | Five `isNotNull()` checks | Type-only checks do not prove concrete service type or singleton count for durable-memory input use cases. | WARNING |
+| `AgentConversationWiringTest.java` | Private-field reflection | Couples the test to service field names; behavior/constructor-level proof would be less implementation-sensitive. | WARNING |
+| `AgentConversationIT.java` | `lastHistorySize() <= 20` | The test does not seed more than 20 prior messages; truncation is proved only by companion layers. | WARNING |
+| `AgentConversationIT.java` | `lastMemories().isNotEmpty()` | Uses a constant test memory port rather than the production persistence adapter. | WARNING |
 
-## Quality Metrics
-
-**Compiler/type check**: ✅ Reactor compile and testCompile passed in all required and coverage suites.
-**Linter**: ➖ No dedicated linter detected.
-**Static whitespace check**: ✅ `git diff --check` passed; line-ending warnings only.
-**Runtime advisory**: Mockito emitted its upstream dynamic-agent/self-attachment warning for a future JDK default; it did not affect current Java 21 execution.
+**Assertion quality**: 0 CRITICAL, 4 WARNING.
 
 ## Review Workload Audit
 
-Apply-progress attributes the post-verify cleanup to approximately **9 net lines** in `SpringAiCrmToolsTest.java` and **9 Javadoc lines** in `CrmToolMapper.java`, with zero intended executable production changes. The test file and tool package remain untracked as part of the broader dirty A3 worktree, so Git cannot independently reconstruct an isolated cleanup-only numstat. The approximately 18-line attribution is below both the 400-line forecast and 800-line review budget, but remains an attribution warning rather than independent Git evidence.
+Current working-tree measurement uses Git numstat semantics for tracked and untracked files and excludes this generated verification report.
+
+| Boundary | Additions | Deletions | A+D | Assessment |
+|---|---:|---:|---:|---|
+| Historical 4.x child slice | — | — | 800 reported by prior apply/verification evidence | At the 800-line cap; reviewable with no margin. |
+| Current measurable 5.x files | 599 | 2 | 601 | Under 800 by 199 lines; reviewable as an autonomous child. |
+| Cumulative dirty worktree (4.x + 5.x + task checkboxes) | 1,370 | 31 | 1,401 | Not reviewable as one 800-line child diff. |
+
+The present 5.x measurement is `WiringConfig` +159, `AgentConversationWiringTest` +438, and the two 5.x checkbox flips +2/-2. This does not match the launch note's 573 A+D or Engram's 578 A+D because the current untracked wiring test is 438 Git lines, not the previously recorded 415. The intended feature-branch-chain boundary remains reviewable **only if** 4.x and 5.x are separated so the later child targets the immediate predecessor and exposes the 601-line incremental diff. With both uncommitted slices coexisting, the current 1,401-line cumulative diff does not itself preserve a clean child-review boundary.
+
+## Quality Metrics
+
+**Linter**: ➖ Not available.
+**Type checker**: ✅ `javac --release 21` passed through the six-module package build.
+**Coverage threshold**: ✅ Configured threshold 0; informational warnings above.
 
 ## Issues Found
 
 ### CRITICAL
 
-None for the scoped A3 tasks and post-warning refactor.
+1. **Mandatory broad gate is non-zero.** `.\mvnw.cmd verify` exits 1 with 31 Infrastructure test-context errors. Causality is isolated to missing baseline test beans (`WaApiKeyFilter` and `FindBotByTokenUseCase`), not a focused agent regression, but policy still blocks PASS.
+2. **CRM permission/ownership denial is untested and the deal tool cannot propagate actor authorization.** No passing test covers an unauthorized actor; `update_deal_stage` validates the actor context but calls an actor-free mutation contract.
+3. **CRM write replay is not connected to production tools.** The ledger adapter passes its own H2 tests and is wired, but no `SpringAiCrmTools` method consumes its ports/action identity. Current create-contact and deal-note paths can repeat effects, so the current idempotent-write scenario has no covering production-path test.
+4. **Ambiguous durable-memory update behavior is untested.** Stable reconstruction order passes, but no runtime test proves that an ambiguous update supersedes nothing.
 
 ### WARNING
 
-1. Cleanup-only workload is apply-progress attribution (approximately 18 net lines), not independently isolatable with Git because the affected A3 test/tool files are untracked in the broader dirty worktree.
-2. Full security/idempotency behavior remains explicitly deferred: notably, the current deal-stage Application use case does not accept the trusted actor, so deeper per-deal authorization and write retry convergence are not proven by this slice.
-3. The focused Boot coverage run independently reproduced JaCoCo's `WiringConfig` class/execution-data mismatch; runtime wiring tests and static source inspection pass, but valid per-line coverage for that class is unavailable.
+1. The final H2 ingress test substitutes constant memory and completion seams; production Boot composition is proved only through companion layered tests, not one complete context.
+2. The current 5.x measurable workload is 601 A+D, not the recorded 573/578; the discrepancy should be reconciled before review metadata is published.
+3. Both slices coexist as a 1,401 A+D dirty diff. The feature-branch-chain is reviewable only after preserving a clean 4.x → 5.x incremental boundary.
+4. Assertion-quality limitations and whole-file `GlobalExceptionHandler` coverage are documented above.
+5. `agentToolActionClock()` is a new production bean line not executed by the wiring test because the harness overrides it.
 
 ### SUGGESTION
 
-1. Preserve the explicit deferred-hardening list until deal authorization and write convergence receive their own specs and tests.
-2. Track Mockito's announced future-JDK agent-loading change in build maintenance; it is not a Java 21 failure today.
+1. Add a future Boot/H2 no-network test that uses the real durable-memory adapter and asserts the concrete/singleton `ChatCompletionPort` and durable-memory input-service types. This is not a substitute for fixing the CRITICAL current-spec gaps.
 
 ## Final Verdict
 
-**PASS WITH WARNINGS**
+**FAIL**
 
-The completed A3 Review Cleanup tasks 1.1–3.2 and the two-file post-verify warning refactor match the corrected design and pass all 61 unique focused tests. The two stale Javadoc/assertion-quality warnings are resolved; pending Final Conversational PR tasks 4.1–5.2 remain intentionally excluded.
+Tasks 4.1–5.2 and their focused runtime suites are complete, but Strict-TDD verification cannot pass with a non-zero configured broad gate or current-spec scenarios lacking passing behavioral coverage.

@@ -1,60 +1,62 @@
-# Design: Pipely Agent Conversation Memory — Restored Delivery
+# Design: Pipely Agent Conversation Memory — V1 Correctness Correction
 
 ## Technical Approach
 
-Deliver two feature-branch-chain children. A3 replaces the handwritten callback registry with shared Spring AI 2.0 annotated tools and per-request trusted actor context. Schemas come from actual method parameters, not internal records created after dispatch. The final PR adds one authenticated interaction over the existing turn and memory foundation.
+Preserve `POST /api/agent/messages`, visible history, durable-memory recall, Spring AI completion, and shared DefaultTools. Correct only writes: the completion adapter adds trusted owner and turn beside the actor UUID in request `ToolContext`; tools map model arguments but delegate both writes to a new Application orchestrator. Ambiguous durable-memory update/supersession remains outside v1.
 
 ## Architecture Decisions
 
 | Decision | Choice and rationale |
 |---|---|
-| Tool contract | `@Tool` names methods; `@ToolParam` stays on actual primitive/UUID parameters, which define Spring AI's top-level schema and dispatch. Delete `FindContactsInput`, `CreateContactInput`, and `UpdateDealStageInput`; they are not request DTOs or schema sources. |
-| Registration | Boot composes one stateless `SpringAiCrmTools`; `AgentConfig` registers it once with `defaultTools(tools)`. Delete the registry and `SpringAiCrmToolsBinder`. |
-| Identity | `SpringAiChatCompletionAdapter` sends the JWT-derived CRM UUID through `.toolContext(Map.of("actorUsuarioId", actorUsuarioId))`. Tools require it from `ToolContext`; missing, invalid, or wrong-type context fails closed. Identity is never a model argument or fallback. |
-| Default preservation | Do not call request `.tools(...)`, because Spring AI 2.0 would replace the three builder defaults. Only trusted tool context varies per request. |
-| Validation and mapping | Each tool passes its dispatched parameters plus trusted actor directly to `CrmToolMapper`. Mapper entry points normalize strings; require company, name, relationship state, deal id, and status; validate known `EstadoRelacion`; allow only `GANADO`/`PERDIDO`; require normalized nonblank `motivo` for `PERDIDO`; and force find cap 20. They create existing Application commands or typed deal-stage arguments. Existing command/domain checks remain defense in depth. Mapper output methods retain the three bounded DTO records. No repository or new Application contract is introduced. |
-| Tool failure boundary | The three `@Tool` methods contain no local `try/catch`. Trusted-actor checks and mapper validation still fail before use-case execution; validation, mapping, serialization, and use-case exceptions otherwise propagate naturally into Spring AI's tool execution mechanism and its `ToolExecutionException` handling. A custom exception policy is not part of A3. |
-| REST | `POST /api/agent/messages` accepts `{message,idempotencyKey}`, derives owner/actor, uses bounded history, and returns `{content}`. Internal handles, completion, regeneration, and tools remain private. |
-| Composition | `WiringConfig` composes tools and completion adapter from existing use cases, `ObjectMapper`, and `ChatClient`, preserving `boot → infrastructure → application → domain`. Existing turn and durable-memory services/adapters are reused. |
+| Trusted action scope | Use server-derived `(AgentOwnerId, TurnId, AgentToolName)` as the v1 slot; actor UUID and normalized arguments form its canonical payload. All trusted values come from `ChatCompletionPort` → `ToolContext`, stay outside schemas, and fail closed. Annotated Spring AI 2.0 tools cannot read the provider call id, so v1 allows one distinct invocation of each write tool per turn; another payload is rejected. |
+| Deal authorization | No safe capability exists: `CambiarEstadoTratoUseCase` is actor-free and `TratoController` supplies no actor. The new Application service loads `Trato` and requires `responsableId == actorUsuarioId` before save/note. Strict ownership is safer than invented role semantics; REST stays unchanged. |
+| Ledger integration | Reuse `AgentToolAction`, its three ports, and adapter; add one atomic-execution port and a unique `(owner_id, turn_id, tool_name)` slot. Application compares canonical payloads, replays `COMPLETED`, rejects mismatch, or executes `PENDING`. |
+| Atomicity | Claim commits briefly. Execution locks the row and atomically authorizes, writes CRM state/note, and completes the ledger. Failure rolls back effects/completion, leaving `PENDING`; concurrent retries wait and replay. |
+| Canonical replay | The service returns the stored resource. Tools rebuild the bounded output from the matched normalized command and resource id, without another CRM call. |
 
-**Security invariant:** only the authenticated request actor may drive tool execution. It is server-attached per request, never stored on the shared bean, model-controlled, or exposed through schemas, prompts, outputs, or default observability.
+## Data Flow
 
-## Two-Slice File Plan
+```text
+JWT ActorContext → CompleteUserTurnService → ChatCompletionPort
+  → ToolContext(owner, actor UUID, turn) → SpringAiCrmTools
+  → AgentCrmWriteUseCase → claim canonical action
+  → lock action → authorize → CRM save/note → complete ledger → commit
+                         ↘ completed replay: prior bounded outcome, no effect
+```
 
-### A3 — Annotation-driven tools
+## File Changes
 
-- Delete `SpringAiCrmToolRegistry.java`, `SpringAiCrmToolsBinder.java`, and `tool/dto/input/{FindContactsInput,CreateContactInput,UpdateDealStageInput}.java` under `infrastructure/src/main/java/com/ar/crm2/adapter/out/ai/`.
-- Modify `tool/{SpringAiCrmTools,CrmToolMapper}.java`: annotate real method parameters, resolve actor context, validate/map raw values directly to existing commands, and retain bounded `tool/dto/output/{FindContactsOutput,CreateContactOutput,UpdateDealStageOutput}.java` projections. Remove all local `try/catch` wrappers from the three tool methods; invalid actor or input still stops before use-case execution, while other failures propagate to Spring AI unchanged.
-- Modify `SpringAiChatCompletionAdapter.java` to set `.toolContext(...)` without `.tools(...)`, preserving history, durable memories, request-level completion behavior, and final content.
-- Modify `boot/src/main/java/com/ar/crm2/config/WiringConfig.java`; preserve `AgentConfig.java` `defaultTools(tools)`, provider configuration, and actor propagation.
-- Update focused tool, mapper, adapter, and Boot tests. Approved cleanup: Lombok `@RequiredArgsConstructor` on both infrastructure classes and a normal `Contacto` import.
+| File | Action | Description |
+|---|---|---|
+| `application/src/main/java/com/ar/crm2/application/agent/tool/command/AgentCrmWriteCommand.java` | Create | Sealed trusted create/stage commands. |
+| `application/src/main/java/com/ar/crm2/application/agent/tool/port/in/AgentCrmWriteUseCase.java` | Create | Write orchestration boundary. |
+| `application/src/main/java/com/ar/crm2/application/agent/tool/port/out/ExecuteAgentToolActionAtomicallyPort.java` | Create | Lock-held effect contract. |
+| `application/src/main/java/com/ar/crm2/application/agent/tool/service/AgentCrmWriteService.java` | Create | Canonicalization, replay, mismatch, and deal ownership policy. |
+| `infrastructure/src/main/java/com/ar/crm2/adapter/out/ai/SpringAiChatCompletionAdapter.java` | Modify | Attach trusted owner and turn beside actor. |
+| `infrastructure/src/main/java/com/ar/crm2/adapter/out/ai/tool/{SpringAiCrmTools,CrmToolMapper}.java` | Modify | Require trusted scope, delegate writes to Application, and render canonical replay. |
+| `infrastructure/src/main/java/com/ar/crm2/adapter/out/persistence/agent/tool/{AgentToolActionEntity,AgentToolActionRepository,AgentToolActionPersistenceAdapter}.java` | Modify | Unique action slot plus lock-held atomic execution. |
+| `boot/src/main/java/com/ar/crm2/config/WiringConfig.java` | Modify | Compose the new Application service/port; keep one shared tools bean. |
+| `application/src/test/java/com/ar/crm2/application/agent/tool/service/AgentCrmWriteServiceTest.java` | Create | Application RED/GREEN policy tests. |
+| Existing `SpringAiCrmToolsTest`, `SpringAiChatCompletionAdapterTest`, `AgentToolActionPersistenceAdapterTest`, `AgentConfigTest`, and `AgentConversationWiringTest` | Modify | Adapter, transaction, and composition proofs. |
 
-`CompleteUserTurnService → ChatCompletionPort(actor) → ChatClient default tools + request ToolContext(actor) → shared SpringAiCrmTools → mapper → existing use case → safe result → final content`
+## Interfaces / Contracts
 
-### Final PR — Conversational REST ingress
-
-Create `AgentController.java`, request/response DTOs, and `AgentRestMapper.java` under `infrastructure/.../adapter/in/rest/`, with focused tests. Modify `WiringConfig.java` and add `AgentConversationWiringTest.java`.
-
-`JWT → ActorContext → AgentController → CreateUserTurnService → AgentTurnAdapter → CompleteUserTurnService → visible history + DurableMemoryPersistenceAdapter → ChatCompletionPort + default tools/tool context → persist ASSISTANT → content`
+`AgentCrmWriteUseCase.execute(AgentCrmWriteCommand)` receives trusted scope plus normalized data. `ExecuteAgentToolActionAtomicallyPort.execute(claim, effect)` returns the immutable completed action; `effect` runs only while canonical `PENDING` is locked. Neither contract is model-visible or controller-owned.
 
 ## Testing Strategy
 
-- A3 callback tests verify three names, actual parameter schemas, identity exclusion, actor isolation, bounded outputs, and natural failure propagation through Spring AI's `ToolExecutionException` boundary. Tests assert invalid actor context and mapper validation prevent use-case calls; they do not assert local redaction or replacement exceptions. Mapper tests cover every moved validation, normalization, trusted-actor command mapping, cap 20, stage arguments, and output projection. Adapter/Boot tests prove tool context propagation and shared defaults.
-- Final MVC tests cover authentication, validation, actor derivation, idempotent retry, and absent internal routes. A no-network H2 test proves history, durable memory, three tools, and single final persistence.
+| Layer | RED/GREEN proof |
+|---|---|
+| Application unit | Owner succeeds; unauthorized actor causes no deal save/note; completed replay skips effects; mismatched actor/payload fails first. |
+| Infrastructure H2 | Context stays outside schemas; both writes replay identical JSON; concurrent/sequential retries create one contact or one stage event/note; injected failures roll back effects and completion. |
+| Boot/component | Service and atomic port are unique and wired into unchanged shared DefaultTools. No network E2E. |
 
-## Review Forecast / Rollout
+## Migration / Rollout and Review Workload Forecast
 
-| Slice | Forecast | Review boundary |
-|---|---:|---|
-| A3 | 700–800 lines target | Replace rejected registry/tests and redundant inputs. |
-| Final REST | 450–700 lines | Ingress, focused tests, minimal wiring. |
+The pre-release ledger must be empty before adding the unique slot constraint; no CRM business-data migration is required. Roll back by disabling ingress/tool registration.
 
-No migration required. Each child targets its immediate predecessor and keeps tests with behavior. A3 above 800 lines remains a declared review risk.
+One child is not realistic: forecast **950–1,250 A+D**. Use the approved feature-branch chain: **C1 authorization + trusted owner/turn propagation (350–500)**, then **C2 atomic ledger integration for both writes (600–750)**. Each child carries its RED/GREEN tests; C2 must be split again before apply if it forecasts above 800.
 
-## Deferred Future Hardening
+## Open Questions
 
-Not fixed or blocking: custom sanitization, model-facing error conversion, or a global `ToolExecutionExceptionProcessor` policy; `TrustedAgentAction`/new per-tool ledger; deeper `CambiarEstadoTratoUseCase` authorization; advanced write idempotency/concurrency convergence; qualifier competition test; historical Strict-TDD reconstruction; unrelated 31 Infrastructure and 6 Boot baseline context failures unless final ingress directly affects those contexts.
-
-## Risks / Open Questions
-
-Existing write semantics remain until the deferred hardening. Until an exception policy is designed, failure presentation follows Spring AI's configured processor and may expose exception messages to the model or rethrow them; A3 makes no local redaction guarantee. Current A3 must be compressed substantially to meet budget. Open questions: none.
+None. General role-based deal permission and ambiguous durable-memory supersession are v2 work, not implementation tasks for this correction.
