@@ -38,12 +38,16 @@ import java.util.stream.Collectors;
  *     <li>Bullet-formats durable memories (filters null elements, applies
  *         {@link String#strip()}, ignores blank entries, prefixes each
  *         remaining entry with {@code - }, joins with newline).</li>
- *     <li>Forwards the trusted CRM {@code actorUsuarioId} per request via
- *         the framework {@code .toolContext(Map.of("actorUsuarioId", ...))}
- *         call. The configured {@link ChatClient} already carries the three
- *         allowlisted CRM tools through {@code defaultTools(tools)}; the
- *         adapter does NOT call request {@code .tools(...)} because Spring
- *         AI 2.0 runtime tools replace builder defaults. Identity stays
+ *     <li>Forwards the trusted CRM identity tuple — {@code agentOwnerId}
+ *         (the owner), {@code actorUsuarioId} (the actor UUID), and
+ *         {@code turnId} (the conversation turn) — per request through
+ *         the framework {@code .toolContext(Map.of(...))} call so each
+ *         allowlisted tool can assert ownership and authorization
+ *         against server-derived values. The configured
+ *         {@link ChatClient} already carries the three allowlisted CRM
+ *         tools through {@code defaultTools(tools)}; the adapter does
+ *         NOT call request {@code .tools(...)} because Spring AI 2.0
+ *         runtime tools replace builder defaults. Identity stays
  *         outside the model-visible schema.</li>
  *     <li>Returns only the final textual content from the model, and
  *         propagates provider failure through a controlled
@@ -58,6 +62,8 @@ import java.util.stream.Collectors;
 public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
 
     static final String ACTOR_CONTEXT_KEY = "actorUsuarioId";
+    static final String AGENT_OWNER_CONTEXT_KEY = "agentOwnerId";
+    static final String TURN_CONTEXT_KEY = "turnId";
 
     private final ChatClient chatClient;
 
@@ -81,7 +87,11 @@ public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
                     ))
                     .messages(historyMessages)
                     .user(normalizedPrompt)
-                    .toolContext(Map.of(ACTOR_CONTEXT_KEY, actorUsuarioId))
+                    .toolContext(Map.of(
+                            AGENT_OWNER_CONTEXT_KEY, ownerId.value(),
+                            ACTOR_CONTEXT_KEY, actorUsuarioId,
+                            TURN_CONTEXT_KEY, turnId.value()
+                    ))
                     .call()
                     .content();
         } catch (RuntimeException ex) {

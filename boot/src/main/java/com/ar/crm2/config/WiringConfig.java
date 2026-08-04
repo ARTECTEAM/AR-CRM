@@ -1340,13 +1340,16 @@ public class WiringConfig {
     /**
      * Stateless shared Spring AI 2.0 CRM tools bean.
      *
-     * <p>Stores only shared dependencies (the existing Application use
-     * cases and the Jackson {@code ObjectMapper}). It carries NO request
-     * actor: the trusted CRM {@code actorUsuarioId} reaches each tool
-     * through the framework's per-request {@code ToolContext} parameter
-     * on the {@link ChatClient#prompt()} call. Boot registers this same
-     * shared object once via {@code ChatClient.Builder#defaultTools(tools)}
-     * in {@link AgentConfig}; every request through the configured
+     * <p>Stores only shared dependencies (the existing Application read
+     * use case, the {@link com.ar.crm2.application.contacto.port.in.CreateContactoUseCase},
+     * the C1 {@link com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase}
+     * orchestrator that enforces deal ownership, and the Jackson
+     * {@code ObjectMapper}). It carries NO request actor, owner, or
+     * turn: every trusted CRM identity piece reaches each tool through
+     * the framework's per-request {@code ToolContext} parameter on the
+     * {@link ChatClient#prompt()} call. Boot registers this same shared
+     * object once via {@code ChatClient.Builder#defaultTools(tools)} in
+     * {@link AgentConfig}; every request through the configured
      * {@code ChatClient} advertises exactly the three allowlisted tools
      * ({@code find_contacts}, {@code create_contact},
      * {@code update_deal_stage}) and Spring AI 2.0's
@@ -1360,14 +1363,35 @@ public class WiringConfig {
     public com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools springAiCrmTools(
             com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase getAllContactosUseCase,
             com.ar.crm2.application.contacto.port.in.CreateContactoUseCase createContactoUseCase,
-            com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase cambiarEstadoTratoUseCase,
+            com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase agentCrmWriteUseCase,
             com.fasterxml.jackson.databind.ObjectMapper objectMapper
     ) {
         return new com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools(
                 getAllContactosUseCase,
                 createContactoUseCase,
-                cambiarEstadoTratoUseCase,
+                agentCrmWriteUseCase,
                 objectMapper);
+    }
+
+    /**
+     * C1 Application {@link com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase}
+     * orchestrator bean. Wires the deal-authorization policy from
+     * {@link com.ar.crm2.application.agent.tool.service.AgentCrmWriteService}
+     * against the existing {@link com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase}
+     * use case and the existing
+     * {@link com.ar.crm2.application.trato.port.out.FindTratoByIdPort}
+     * persistence port (implemented by
+     * {@link TratoRepositoryAdapter}). The service is the only
+     * composition that touches deal ownership; the tools bean delegates
+     * {@code update_deal_stage} through this orchestrator.
+     */
+    @Bean
+    public com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase agentCrmWriteUseCase(
+            TratoRepositoryAdapter findTratoByIdPort,
+            com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase cambiarEstadoTratoUseCase
+    ) {
+        return new com.ar.crm2.application.agent.tool.service.AgentCrmWriteService(
+                findTratoByIdPort, cambiarEstadoTratoUseCase);
     }
 
     /**

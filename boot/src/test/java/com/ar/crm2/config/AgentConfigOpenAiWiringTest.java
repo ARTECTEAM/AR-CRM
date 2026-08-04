@@ -3,7 +3,7 @@ package com.ar.crm2.config;
 import com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
-import com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase;
+import com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase;
 import com.ar.crm2.config.testing.CapturingChatModel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -55,7 +55,7 @@ class AgentConfigOpenAiWiringTest {
             return new SpringAiCrmTools(
                     mock(GetAllContactosUseCase.class),
                     mock(CreateContactoUseCase.class),
-                    mock(CambiarEstadoTratoUseCase.class),
+                    mock(AgentCrmWriteUseCase.class),
                     new ObjectMapper());
         }
     }

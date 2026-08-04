@@ -19,8 +19,7 @@ import com.ar.crm2.application.agent.turn.service.CreateUserTurnService;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.contacto.port.out.SearchContactosPort;
-import com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase;
-
+import com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
 import com.ar.crm2.model.agent.vo.VisibleMessage;
@@ -219,15 +218,15 @@ class AgentConversationIT {
         }
         @Bean GetAllContactosUseCase getAllContactosUseCase() { return cmd -> List.of(); }
         @Bean CreateContactoUseCase createContactoUseCase() { return cmd -> null; }
-        @Bean CambiarEstadoTratoUseCase cambiarEstadoTratoUseCase() {
-            return new CambiarEstadoTratoUseCase() {
-                @Override public com.ar.crm2.model.entity.Trato ganar(UUID id) { return null; }
-                @Override public com.ar.crm2.model.entity.Trato perder(UUID id, String motivo) { return null; }
-            };
+        @Bean AgentCrmWriteUseCase agentCrmWriteUseCase() {
+            // C1 stub: the IT exercises the conversational endpoint, not the
+            // write orchestrator. The bounded output mapper tolerates a null
+            // Trato, so a no-op use case is sufficient.
+            return command -> null;
         }
         @Bean SpringAiCrmTools crmTools(GetAllContactosUseCase get, CreateContactoUseCase create,
-                CambiarEstadoTratoUseCase cambiar, ObjectMapper om) {
-            return new SpringAiCrmTools(get, create, cambiar, om);
+                AgentCrmWriteUseCase agentCrmWriteUseCase, ObjectMapper om) {
+            return new SpringAiCrmTools(get, create, agentCrmWriteUseCase, om);
         }
         @Bean ObjectMapper objectMapper() { return new ObjectMapper(); }
         @Bean WaProperties waProperties() { return new WaProperties("test-key", null); }

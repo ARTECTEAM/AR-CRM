@@ -98,6 +98,7 @@ class AgentConversationWiringTest {
     @Autowired private ReplaceDurableMemoryUseCase replaceDurableMemoryUseCase;
     @Autowired private DeleteDurableMemoryUseCase deleteDurableMemoryUseCase;
     @Autowired private PurgeDurableMemoriesUseCase purgeDurableMemoriesUseCase;
+    @Autowired private com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase agentCrmWriteUseCase;
     @Autowired private ApplicationContext applicationContext;
 
     /**
@@ -271,6 +272,23 @@ class AgentConversationWiringTest {
         assertSingleBean(SaveAgentToolActionPort.class, agentToolActionAdapter);
         assertSingleBean(MarkAgentToolActionCompletedPort.class, agentToolActionAdapter);
         assertSingleBean(FindAgentToolActionByIdPort.class, agentToolActionAdapter);
+    }
+
+    /**
+     * C1 corrective wiring proof: the composition root must expose
+     * exactly one {@link
+     * com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase}
+     * bean implemented by the deal-authorizing
+     * {@link com.ar.crm2.application.agent.tool.service.AgentCrmWriteService}.
+     */
+    @Test
+    void agentCrmWriteUseCase_isWiredAsAgentCrmWriteServiceAndExposedOnce() {
+        assertThat(agentCrmWriteUseCase)
+                .as("AgentCrmWriteUseCase must be wired as an AgentCrmWriteService instance")
+                .isInstanceOf(com.ar.crm2.application.agent.tool.service.AgentCrmWriteService.class);
+        assertSingleBean(
+                com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase.class,
+                agentCrmWriteUseCase);
     }
 
     private void assertSingleBean(Class<?> type, Object expected) {

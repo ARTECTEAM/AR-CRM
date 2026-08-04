@@ -41,11 +41,11 @@ The existing 4.x/5.x dirty slices (~1,401 A+D) MUST NOT enter C1/C2 or be staged
 
 ## C1 — Trusted Context and Deal Authorization (RED → GREEN → REFACTOR)
 
-- [ ] 6.1 **RED:** Create `application/src/test/java/com/ar/crm2/application/agent/tool/service/AgentCrmWriteServiceTest.java`; extend `infrastructure/src/test/java/com/ar/crm2/adapter/out/ai/{SpringAiChatCompletionAdapterTest,tool/SpringAiCrmToolsTest}.java` for trusted owner/actor/turn, pre-effect ownership denial, and no model-visible identity.
-- [ ] 6.2 **GREEN:** Create `application/src/main/java/com/ar/crm2/application/agent/tool/{command/AgentCrmWriteCommand,port/in/AgentCrmWriteUseCase,service/AgentCrmWriteService}.java`; load `Trato` and require `responsableId == actorUsuarioId` before stage save/event/note.
-- [ ] 6.3 **GREEN:** Update `infrastructure/src/main/java/com/ar/crm2/adapter/out/ai/{SpringAiChatCompletionAdapter,tool/CrmToolMapper,tool/SpringAiCrmTools}.java` to carry trusted context through `ToolContext` and delegate stage writes through Application.
-- [ ] 6.4 **GREEN:** Update `boot/src/main/java/com/ar/crm2/config/WiringConfig.java` and focused Boot tests; retain one endpoint, exact three-tool allowlist, and unchanged find/create behavior.
-- [ ] 6.5 **REFACTOR:** Run focused suites for `application/src/main/java/com/ar/crm2/application/agent/tool/`, `infrastructure/src/main/java/com/ar/crm2/adapter/out/ai/`, and `boot/src/main/java/com/ar/crm2/config/WiringConfig.java`; prove denial has no effect and C1 stays ≤800 A+D.
+- [x] 6.1 **RED:** Create `application/src/test/java/com/ar/crm2/application/agent/tool/service/AgentCrmWriteServiceTest.java`; extend `infrastructure/src/test/java/com/ar/crm2/adapter/out/ai/{SpringAiChatCompletionAdapterTest,tool/SpringAiCrmToolsTest}.java` for trusted owner/actor/turn, pre-effect ownership denial, and no model-visible identity.
+- [x] 6.2 **GREEN:** Create `application/src/main/java/com/ar/crm2/application/agent/tool/{command/AgentCrmWriteCommand,port/in/AgentCrmWriteUseCase,service/AgentCrmWriteService}.java`; load `Trato` and require `responsableId == actorUsuarioId` before stage save/event/note.
+- [x] 6.3 **GREEN:** Update `infrastructure/src/main/java/com/ar/crm2/adapter/out/ai/{SpringAiChatCompletionAdapter,tool/CrmToolMapper,tool/SpringAiCrmTools}.java` to carry trusted context through `ToolContext` and delegate stage writes through Application.
+- [x] 6.4 **GREEN:** Update `boot/src/main/java/com/ar/crm2/config/WiringConfig.java` and focused Boot tests; retain one endpoint, exact three-tool allowlist, and unchanged find/create behavior.
+- [x] 6.5 **REFACTOR:** Run focused suites for `application/src/main/java/com/ar/crm2/application/agent/tool/`, `infrastructure/src/main/java/com/ar/crm2/adapter/out/ai/`, and `boot/src/main/java/com/ar/crm2/config/WiringConfig.java`; prove denial has no effect and C1 stays ≤800 A+D.
 
 ## C2 — Atomic Write Idempotency (RED → GREEN → REFACTOR)
 

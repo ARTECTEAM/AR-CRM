@@ -372,6 +372,41 @@ class SpringAiChatCompletionAdapterTest {
     }
 
     @Test
+    void ownerTurnAndActorAreNeverEmbeddedInAnyModelVisiblePromptPart() {
+        // Spring AI 2.0 stores `.toolContext(Map)` on the request spec /
+        // ChatClientRequest.context, not on the Prompt options the
+        // ChatModel observes. We therefore assert the no-leak contract
+        // from the ChatModel side: every instruction must NOT carry the
+        // server-derived owner, turn, or actor identity or their key
+        // names. Trusted propagation is asserted separately at the
+        // @Tool side in SpringAiCrmToolsTest.
+        final String ownerSentinel = "actor-pr9c4-c1-owner-not-leaked";
+        final String turnSentinel = "00000000-0000-0000-0000-000000c1c1ee";
+        AgentOwnerId c1Owner = AgentOwnerId.from(ownerSentinel);
+        TurnId c1Turn = TurnId.from(UUID.fromString(turnSentinel));
+        CapturingChatModel model = new CapturingChatModel("ok");
+        ChatClient client = newMemoryAwareClient(model);
+        SpringAiChatCompletionAdapter adapter = new SpringAiChatCompletionAdapter(client);
+
+        adapter.complete(c1Owner, ACTOR_USUARIO_ID, c1Turn,
+                List.of(VisibleMessage.user("hi"), VisibleMessage.assistant("ack")),
+                List.of(), "prompt");
+
+        List<Message> instructions = model.capturedPrompt().getInstructions();
+        for (Message instruction : instructions) {
+            String text = instruction.getText();
+            assertThat(text)
+                    .as("model-visible instruction (%s) must never contain owner/turn/actor identity", instruction)
+                    .doesNotContain(ownerSentinel)
+                    .doesNotContain(turnSentinel)
+                    .doesNotContain(ACTOR_USUARIO_ID.toString())
+                    .doesNotContain("agentOwnerId")
+                    .doesNotContain("turnId")
+                    .doesNotContain("actorUsuarioId");
+        }
+    }
+
+    @Test
     void adapterConstructsWithoutToolsArgumentAndDoesNotRequestToolsPerInvocation() {
         // The corrected adapter must NOT take a SpringAiCrmToolsBinder or
         // any tools at construction — defaults are registered once on the

@@ -1,10 +1,13 @@
 package com.ar.crm2.adapter.out.ai.tool;
 
+import com.ar.crm2.application.agent.tool.command.AgentCrmWriteCommand;
+import com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase;
 import com.ar.crm2.application.contacto.command.CreateContactoCommand;
 import com.ar.crm2.application.contacto.command.GetAllContactosCommand;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
-import com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase;
+import com.ar.crm2.model.agent.vo.AgentOwnerId;
+import com.ar.crm2.model.agent.vo.TurnId;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.entity.Trato;
 import com.ar.crm2.model.enums.EstadoRelacion;
@@ -16,6 +19,7 @@ import com.ar.crm2.model.vo.UsuarioId;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
@@ -37,48 +41,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Strict TDD contract for the A3 corrected Spring AI 2.0
- * {@link SpringAiCrmTools} class.
- *
- * <p>The corrected architecture replaces the prior per-invocation binder
- * with a single stateless {@link SpringAiCrmTools} bean that is
- * registered once via {@code ChatClient.Builder#defaultTools(Object...)}
- * and shared by every request. The trusted CRM {@code actorUsuarioId}
- * travels only through the framework's per-request
- * {@link ToolContext}; the model never sees it.
- *
- * <p>Verified contracts:
- * <ul>
- *     <li>Exactly three discovered tools — {@code find_contacts},
- *         {@code create_contact}, {@code update_deal_stage} — with the
- *         allowlist names. No aliases, no extras, no singletons.</li>
- *     <li>Real {@code @Tool} annotations populate names, descriptions,
- *         and JSON schemas; the model-facing schema never references the
- *         trusted actor or any identity field.</li>
- *     <li>Each tool resolves the actor only from the per-call
- *         {@link ToolContext} map under {@code actorUsuarioId}; missing,
- *         null, or wrong-type entries fail closed naturally — the
- *         trusted-actor resolver throws {@code IllegalStateException}
- *         (missing/null) or {@code IllegalArgumentException} (wrong
- *         type), and Spring AI's {@code MethodToolCallback.callMethod}
- *         wraps the throwable as a {@code ToolExecutionException} with
- *         the original cause preserved. There is no local sanitized
- *         redaction.</li>
- *     <li>Two distinct {@link ToolContext} values supplied to the same
- *         shared tools object reach the use cases as distinct actor
- *         UUIDs — identity isolation is enforced server-side, never via
- *         schema or model argument.</li>
- *     <li>{@code find_contacts} enforces the hard cap of 20.</li>
- *     <li>{@code create_contact} requires {@code estadoRelacion}.</li>
- *     <li>{@code update_deal_stage} routes GANADO/PERDIDO to the existing
- *         use case; unsupported statuses reject without mutation.</li>
- *     <li>Tool outputs are bounded records and never leak SQL,
- *         credentials, stack traces, or causes.</li>
- *     <li>The shared tools instance is reusable across invocations: the
- *         same {@code SpringAiCrmTools} object yields the same three
- *         callbacks (same identity), so {@code defaultTools(tools)}
- *         produces a stable defaults allowlist.</li>
- * </ul>
+ * Spring AI 2.0 contract tests for the shared, stateless CRM tool bean.
+ * They prove the three-tool allowlist, model-visible schema boundary, trusted
+ * per-call identity, bounded outputs, and Application delegation.
  */
 class SpringAiCrmToolsTest {
 
@@ -97,12 +62,17 @@ class SpringAiCrmToolsTest {
         return new ToolContext(Map.of(ACTOR_CONTEXT_KEY, actor));
     }
 
+    private static ToolContext trustedWriteContext(String owner, UUID actor, UUID turn) {
+        return new ToolContext(Map.of(
+                "agentOwnerId", owner, ACTOR_CONTEXT_KEY, actor, "turnId", turn));
+    }
+
     private static SpringAiCrmTools newTools(
             GetAllContactosUseCase contactosUseCase,
             CreateContactoUseCase createUseCase,
-            CambiarEstadoTratoUseCase cambiarEstadoUseCase) {
+            AgentCrmWriteUseCase agentCrmWriteUseCase) {
         return new SpringAiCrmTools(
-                contactosUseCase, createUseCase, cambiarEstadoUseCase, new ObjectMapper());
+                contactosUseCase, createUseCase, agentCrmWriteUseCase, new ObjectMapper());
     }
 
     @Test
@@ -110,7 +80,7 @@ class SpringAiCrmToolsTest {
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback[] callbacks = ToolCallbacks.from(tools);
 
@@ -126,7 +96,7 @@ class SpringAiCrmToolsTest {
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback[] first = ToolCallbacks.from(tools);
         ToolCallback[] second = ToolCallbacks.from(tools);
@@ -147,7 +117,7 @@ class SpringAiCrmToolsTest {
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback[] callbacks = ToolCallbacks.from(tools);
 
@@ -197,7 +167,7 @@ class SpringAiCrmToolsTest {
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback[] callbacks = ToolCallbacks.from(tools);
 
@@ -225,7 +195,7 @@ class SpringAiCrmToolsTest {
         SpringAiCrmTools tools = newTools(
                 contactosUseCase,
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback findContacts = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -253,7 +223,7 @@ class SpringAiCrmToolsTest {
         SpringAiCrmTools tools = newTools(
                 useCase,
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback findContacts = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -281,7 +251,7 @@ class SpringAiCrmToolsTest {
         SpringAiCrmTools tools = newTools(
                 useCase,
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback findContacts = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -318,7 +288,7 @@ class SpringAiCrmToolsTest {
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 createUseCase,
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback createContact = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -350,18 +320,12 @@ class SpringAiCrmToolsTest {
 
     @Test
     void createContactRejectsMissingRelationshipStateBeforeMutation() {
-        // After the A3 review cleanup the @Tool method has no local try/catch:
-        // mapper validation failures propagate naturally through Spring AI's
-        // MethodToolCallback.callMethod, which wraps non-ToolExecutionException
-        // throwables as ToolExecutionException with the ORIGINAL cause preserved.
-        // CrmToolMapper.toCreateContactoCommand throws IllegalArgumentException
-        // (requireNonBlank for estadoRelacion), so that is the cause we expect —
-        // NOT a sanitized IllegalStateException boundary.
+        // Spring AI preserves mapper validation through ToolExecutionException.
         CreateContactoUseCase createUseCase = mock(CreateContactoUseCase.class);
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 createUseCase,
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback createContact = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -386,27 +350,43 @@ class SpringAiCrmToolsTest {
     }
 
     @Test
-    void updateDealStageDelegatesToGanarWhenStatusIsGanado() throws Exception {
+    void updateDealStageDelegatesToGanarThroughAgentCrmWriteUseCaseOrchestrator() throws Exception {
+        String ownerValue = "actor-pr9c4-c1-updatedeal-owner";
         UUID trustedActor = UUID.fromString("abcdefab-1111-2222-3333-444444444444");
-        CambiarEstadoTratoUseCase cambiarEstadoUseCase = mock(CambiarEstadoTratoUseCase.class);
+        UUID turnValue = UUID.fromString("00000000-0000-0000-0000-000000c1a001");
+        AgentCrmWriteUseCase orchestrator = mock(AgentCrmWriteUseCase.class);
         Trato initial = Trato.create(
                 ContactoId.create(), UsuarioId.from(trustedActor),
                 "Deal", null, null, null, null);
-        when(cambiarEstadoUseCase.ganar(any(UUID.class))).thenReturn(initial.ganar());
+        when(orchestrator.execute(any(AgentCrmWriteCommand.class))).thenReturn(initial.ganar());
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                cambiarEstadoUseCase);
+                orchestrator);
 
         ToolCallback updateDealStage = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
                 "update_deal_stage");
 
         String input = "{\"id\":\"99999999-9999-9999-9999-999999999999\",\"status\":\"GANADO\"}";
-        String output = updateDealStage.call(input, actorContext(trustedActor));
+        String output = updateDealStage.call(
+                input, trustedWriteContext(ownerValue, trustedActor, turnValue));
 
-        verify(cambiarEstadoUseCase).ganar(UUID.fromString("99999999-9999-9999-9999-999999999999"));
-        verify(cambiarEstadoUseCase, never()).perder(any(), any());
+        ArgumentCaptor<AgentCrmWriteCommand> captor =
+                ArgumentCaptor.forClass(AgentCrmWriteCommand.class);
+        verify(orchestrator).execute(captor.capture());
+        AgentCrmWriteCommand forwarded = captor.getValue();
+        assertThat(forwarded)
+                .isInstanceOf(AgentCrmWriteCommand.UpdateDealStage.class);
+        AgentCrmWriteCommand.UpdateDealStage dealCmd =
+                (AgentCrmWriteCommand.UpdateDealStage) forwarded;
+        assertThat(dealCmd.tratoId())
+                .isEqualTo(UUID.fromString("99999999-9999-9999-9999-999999999999"));
+        assertThat(dealCmd.status()).isEqualTo("GANADO");
+        assertThat(dealCmd.motivo()).isNull();
+        assertThat(dealCmd.actorUsuarioId()).isEqualTo(trustedActor);
+        assertThat(dealCmd.ownerId().value()).isEqualTo(ownerValue);
+        assertThat(dealCmd.turnId().value()).isEqualTo(turnValue);
 
         JsonNode outputJson = MAPPER.readTree(output);
         assertThat(outputJson.get("status").asText()).isEqualTo(EstadoTrato.GANADO.name());
@@ -417,45 +397,50 @@ class SpringAiCrmToolsTest {
     }
 
     @Test
-    void updateDealStageDelegatesToPerderWhenStatusIsPerdidoWithMotivo() throws Exception {
+    void updateDealStageDelegatesToPerderThroughAgentCrmWriteUseCaseOrchestrator() throws Exception {
+        String ownerValue = "actor-pr9c4-c1-perdido-owner";
         UUID trustedActor = UUID.fromString("abcdefab-1111-2222-3333-444444444444");
-        CambiarEstadoTratoUseCase cambiarEstadoUseCase = mock(CambiarEstadoTratoUseCase.class);
+        UUID turnValue = UUID.fromString("00000000-0000-0000-0000-000000c1a002");
         UUID tratoId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        AgentCrmWriteUseCase orchestrator = mock(AgentCrmWriteUseCase.class);
         Trato initial = Trato.create(
                 ContactoId.create(), UsuarioId.from(UUID.randomUUID()),
                 "Deal", null, null, null, null);
-        when(cambiarEstadoUseCase.perder(any(UUID.class), any(String.class)))
+        when(orchestrator.execute(any(AgentCrmWriteCommand.class)))
                 .thenReturn(initial.perder("Budget"));
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                cambiarEstadoUseCase);
+                orchestrator);
 
         ToolCallback updateDealStage = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
                 "update_deal_stage");
 
         String input = "{\"id\":\"" + tratoId + "\",\"status\":\"PERDIDO\",\"motivo\":\"Budget\"}";
-        updateDealStage.call(input, actorContext(trustedActor));
+        updateDealStage.call(input, trustedWriteContext(ownerValue, trustedActor, turnValue));
 
-        verify(cambiarEstadoUseCase).perder(tratoId, "Budget");
-        verify(cambiarEstadoUseCase, never()).ganar(any());
+        ArgumentCaptor<AgentCrmWriteCommand> captor =
+                ArgumentCaptor.forClass(AgentCrmWriteCommand.class);
+        verify(orchestrator).execute(captor.capture());
+        AgentCrmWriteCommand forwarded = captor.getValue();
+        assertThat(forwarded)
+                .isInstanceOf(AgentCrmWriteCommand.UpdateDealStage.class);
+        AgentCrmWriteCommand.UpdateDealStage dealCmd =
+                (AgentCrmWriteCommand.UpdateDealStage) forwarded;
+        assertThat(dealCmd.status()).isEqualTo("PERDIDO");
+        assertThat(dealCmd.motivo()).isEqualTo("Budget");
+        assertThat(dealCmd.tratoId()).isEqualTo(tratoId);
     }
 
     @Test
-    void updateDealStageRejectsUnsupportedStatusWithoutMutation() {
-        // After the A3 review cleanup the @Tool method has no local try/catch:
-        // mapper validation failures propagate naturally through Spring AI's
-        // MethodToolCallback.callMethod, which wraps non-ToolExecutionException
-        // throwables as ToolExecutionException with the ORIGINAL cause preserved.
-        // CrmToolMapper.toUpdateDealStageArguments throws IllegalArgumentException
-        // (unsupported status check), so that is the cause we expect — NOT a
-        // sanitized IllegalStateException boundary.
-        CambiarEstadoTratoUseCase cambiarEstadoUseCase = mock(CambiarEstadoTratoUseCase.class);
+    void updateDealStageRejectsUnsupportedStatusBeforeOrchestratorInvocation() {
+        // Mapper validation is preserved by Spring AI's natural wrapper.
+        AgentCrmWriteUseCase orchestrator = mock(AgentCrmWriteUseCase.class);
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                cambiarEstadoUseCase);
+                orchestrator);
 
         ToolCallback updateDealStage = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -463,7 +448,12 @@ class SpringAiCrmToolsTest {
 
         String input = "{\"id\":\"99999999-9999-9999-9999-999999999999\",\"status\":\"OPEN\"}";
         Throwable failure = org.assertj.core.api.Assertions.catchThrowable(
-                () -> updateDealStage.call(input, actorContext(UUID.randomUUID())));
+                () -> updateDealStage.call(
+                        input,
+                        trustedWriteContext(
+                                "actor-pr9c4-c1-bad-status",
+                                UUID.randomUUID(),
+                                UUID.fromString("00000000-0000-0000-0000-000000c1a003"))));
         assertThat(failure)
                 .as("unsupported status must surface through Spring AI's natural ToolExecutionException wrapper")
                 .isInstanceOf(org.springframework.ai.tool.execution.ToolExecutionException.class);
@@ -473,24 +463,19 @@ class SpringAiCrmToolsTest {
         assertThat(failure.getCause().getMessage())
                 .as("the original mapper validation message must reach Spring AI unchanged")
                 .isEqualTo("update_deal_stage status must be GANADO or PERDIDO, was: OPEN");
-        verify(cambiarEstadoUseCase, never()).ganar(any());
-        verify(cambiarEstadoUseCase, never()).perder(any(), any());
+        verify(orchestrator, never()).execute(any());
     }
 
     @Test
     void useCaseFailurePropagatesThroughSpringAiToolExecutionExceptionBoundaryWithoutLocalSanitization() {
-        // With the local try/catch wrapper removed, the original use-case
-        // exception reaches Spring AI's MethodToolCallback.callMethod which
-        // wraps non-ToolExecutionException throwables as
-        // ToolExecutionException with the original cause preserved. No
-        // local redaction replaces the cause's type or message.
+        // No local catch means Spring AI preserves the original cause.
         GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
         when(useCase.getAll(any())).thenThrow(
                 new IllegalStateException("downstream-failure-sentinel-must-not-be-redacted"));
         SpringAiCrmTools tools = newTools(
                 useCase,
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback findContacts = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -510,12 +495,7 @@ class SpringAiCrmToolsTest {
 
     @Test
     void sharedToolsObjectIsolatesDifferentActorsAcrossPerCallToolContexts() throws Exception {
-        // Identity isolation contract: the SAME shared tools instance
-        // is used by every request — there is no per-invocation binder or
-        // per-invocation actor capture. The trusted actor for each call
-        // is supplied ONLY through the framework's per-call ToolContext
-        // and MUST reach the existing use case as the actorUsuarioId
-        // argument without leaking.
+        // The shared instance receives actor identity only per call.
         UUID actorA = UUID.fromString("deadbeef-0000-0000-0000-000000000001");
         UUID actorB = UUID.fromString("deadbeef-0000-0000-0000-000000000002");
         GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
@@ -523,7 +503,7 @@ class SpringAiCrmToolsTest {
         SpringAiCrmTools tools = newTools(
                 useCase,
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
 
         ToolCallback findContacts = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -542,16 +522,11 @@ class SpringAiCrmToolsTest {
 
     @Test
     void missingOrEmptyActorContextFailsClosedAtFrameworkBoundary() {
-        // The framework's MethodToolCallback validates that any
-        // ToolContext-typed parameter is supplied and non-empty BEFORE
-        // dispatching to the @Tool method. Missing or empty context
-        // therefore fails closed at the framework boundary with
-        // IllegalArgumentException — the model cannot bypass identity by
-        // sending no context or by sending an empty map.
+        // MethodToolCallback rejects absent/empty context before dispatch.
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
         ToolCallback findContacts = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
                 "find_contacts");
@@ -577,14 +552,11 @@ class SpringAiCrmToolsTest {
 
     @Test
     void presentContextWithoutActorKeyFailsClosedThroughNaturalBoundary() {
-        // The actor resolver rejects context maps that do not carry a
-        // usable actorUsuarioId with a meaningful IllegalStateException;
-        // Spring AI wraps it as ToolExecutionException without any
-        // local sanitization.
+        // A present context without a usable actor is wrapped naturally.
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
         ToolCallback findContacts = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
                 "find_contacts");
@@ -600,14 +572,11 @@ class SpringAiCrmToolsTest {
 
     @Test
     void wrongTypeActorValueFailsClosedThroughNaturalBoundary() {
-        // The actor resolver rejects non-UUID actorUsuarioId with a
-        // meaningful IllegalArgumentException; Spring AI wraps the
-        // natural exception as ToolExecutionException — no local
-        // sanitization replaces the cause.
+        // Non-UUID actor values fail closed and preserve the cause.
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class));
+                mock(AgentCrmWriteUseCase.class));
         ToolCallback findContacts = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
                 "find_contacts");
@@ -623,24 +592,121 @@ class SpringAiCrmToolsTest {
 
     @Test
     void sharedToolsConstructorIsLombokGeneratedAndTakesExactlyFourSharedDependencies() throws Exception {
-        // The cleanup replaces the manual constructor (with explicit null
-        // guards) by Lombok @RequiredArgsConstructor. The single generated
-        // constructor must take exactly the four shared dependencies in
-        // order so wiring errors surface as plain reflection failures.
+        // Constructor shape protects composition-root wiring.
         Constructor<?>[] constructors = SpringAiCrmTools.class.getDeclaredConstructors();
         assertThat(constructors).hasSize(1);
         Constructor<?> constructor = constructors[0];
         assertThat(constructor.getParameterTypes()).containsExactly(
                 GetAllContactosUseCase.class,
                 CreateContactoUseCase.class,
-                CambiarEstadoTratoUseCase.class,
+                AgentCrmWriteUseCase.class,
                 ObjectMapper.class);
         constructor.setAccessible(true);
         Object instance = constructor.newInstance(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                mock(CambiarEstadoTratoUseCase.class),
+                mock(AgentCrmWriteUseCase.class),
                 new ObjectMapper());
         assertThat(instance).isInstanceOf(SpringAiCrmTools.class);
+    }
+
+    // C1: trusted context reaches the Application orchestrator before writes.
+
+    @Test
+    void updateDealStageForwardsTrustedOwnerActorAndTurnToAgentCrmWriteUseCase() throws Exception {
+        String ownerValue = "actor-pr9c4-c1-orchestrator-owner";
+        UUID actorValue = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        UUID turnValue = UUID.fromString("00000000-0000-0000-0000-000000c1ff01");
+        UUID tratoId = UUID.fromString("77777777-7777-7777-7777-777777777777");
+        AgentCrmWriteUseCase orchestrator = mock(AgentCrmWriteUseCase.class);
+        Trato existing = Trato.create(
+                ContactoId.create(), UsuarioId.from(actorValue),
+                "Deal", null, null, null, null);
+        when(orchestrator.execute(any(AgentCrmWriteCommand.class))).thenReturn(existing.ganar());
+        SpringAiCrmTools tools = newTools(
+                mock(GetAllContactosUseCase.class),
+                mock(CreateContactoUseCase.class),
+                orchestrator);
+
+        ToolCallback updateDealStage = findCallback(
+                java.util.Arrays.asList(ToolCallbacks.from(tools)),
+                "update_deal_stage");
+
+        ToolContext contextWithTrust = new ToolContext(new java.util.HashMap<>(Map.of(
+                "agentOwnerId", ownerValue,
+                "actorUsuarioId", actorValue,
+                "turnId", turnValue)));
+        String input = "{\"id\":\"" + tratoId + "\",\"status\":\"GANADO\"}";
+        updateDealStage.call(input, contextWithTrust);
+
+        ArgumentCaptor<AgentCrmWriteCommand> captor =
+                ArgumentCaptor.forClass(AgentCrmWriteCommand.class);
+        verify(orchestrator).execute(captor.capture());
+        AgentCrmWriteCommand forwarded = captor.getValue();
+        assertThat(forwarded)
+                .as("update_deal_stage MUST forward a sealed AgentCrmWriteCommand, "
+                        + "not call the actor-free AgentCrmWriteUseCase directly")
+                .isInstanceOf(AgentCrmWriteCommand.UpdateDealStage.class);
+        AgentCrmWriteCommand.UpdateDealStage dealCmd =
+                (AgentCrmWriteCommand.UpdateDealStage) forwarded;
+        assertThat(dealCmd.ownerId())
+                .as("trusted owner MUST travel into the orchestrator command")
+                .isEqualTo(AgentOwnerId.from(ownerValue));
+        assertThat(dealCmd.actorUsuarioId())
+                .as("trusted actor UUID MUST travel into the orchestrator command")
+                .isEqualTo(actorValue);
+        assertThat(dealCmd.turnId())
+                .as("trusted turn MUST travel into the orchestrator command")
+                .isEqualTo(TurnId.from(turnValue));
+        assertThat(dealCmd.tratoId()).isEqualTo(tratoId);
+        assertThat(dealCmd.status()).isEqualTo("GANADO");
+        assertThat(dealCmd.motivo()).isNull();
+    }
+
+    @Test
+    void updateDealStagePropagatesOrchestratorDenialAsToolExecutionException() {
+        UUID actor = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        UUID tratoId = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        AgentCrmWriteUseCase orchestrator = mock(AgentCrmWriteUseCase.class);
+        when(orchestrator.execute(any(AgentCrmWriteCommand.class))).thenThrow(
+                new com.ar.crm2.application.agent.tool.exception.DealNotOwnedByActorException(
+                        tratoId, actor));
+        ToolCallback update = findCallback(List.of(ToolCallbacks.from(newTools(
+                mock(GetAllContactosUseCase.class), mock(CreateContactoUseCase.class), orchestrator))),
+                "update_deal_stage");
+
+        Throwable failure = org.assertj.core.api.Assertions.catchThrowable(
+                () -> update.call("{\"id\":\"" + tratoId + "\",\"status\":\"GANADO\"}",
+                        trustedWriteContext("owner", actor,
+                                UUID.fromString("00000000-0000-0000-0000-000000c1ff02"))));
+        assertThat(failure).isInstanceOf(
+                org.springframework.ai.tool.execution.ToolExecutionException.class);
+        assertThat(failure.getCause()).isInstanceOf(
+                com.ar.crm2.application.agent.tool.exception.DealNotOwnedByActorException.class);
+    }
+    @Test
+    void malformedTrustedWriteContextFailsClosedBeforeApplicationUseCaseInvocation() {
+        UUID actor = UUID.fromString("11111111-2222-3333-4444-555555555555");
+        UUID turn = UUID.fromString("00000000-0000-0000-0000-000000c1ff03");
+        AgentCrmWriteUseCase orchestrator = mock(AgentCrmWriteUseCase.class);
+        SpringAiCrmTools tools = newTools(
+                mock(GetAllContactosUseCase.class), mock(CreateContactoUseCase.class), orchestrator);
+        ToolCallback update = findCallback(List.of(ToolCallbacks.from(tools)), "update_deal_stage");
+        List<Map<String, Object>> invalidContexts = List.of(
+                Map.of(ACTOR_CONTEXT_KEY, actor, "turnId", turn),
+                Map.of("agentOwnerId", " ", ACTOR_CONTEXT_KEY, actor, "turnId", turn),
+                Map.of("agentOwnerId", 42, ACTOR_CONTEXT_KEY, actor, "turnId", turn),
+                Map.of("agentOwnerId", "owner", ACTOR_CONTEXT_KEY, actor),
+                Map.of("agentOwnerId", "owner", ACTOR_CONTEXT_KEY, actor, "turnId", "bad"));
+
+        for (Map<String, Object> invalidContext : invalidContexts) {
+            Throwable failure = org.assertj.core.api.Assertions.catchThrowable(
+                    () -> update.call(
+                            "{\"id\":\"99999999-9999-9999-9999-999999999999\",\"status\":\"GANADO\"}",
+                            new ToolContext(invalidContext)));
+            assertThat(failure).isInstanceOf(
+                    org.springframework.ai.tool.execution.ToolExecutionException.class);
+        }
+        verify(orchestrator, never()).execute(any());
     }
 }
