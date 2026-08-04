@@ -1399,4 +1399,163 @@ public class WiringConfig {
         return new com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter(chatClient);
     }
 
+
+    // ── Pipely Agent: Final Composition (5.x) ───────────────────────
+    //
+    // Single source of truth for the agent-conversation beans the REST
+    // ingress consumes. Every adapter below implements the Application
+    // ports the controller depends on; the use cases are wired under
+    // their Application port interfaces so the controller resolves the
+    // correct service through the composition root.
+
+    /**
+     * Single agent-conversation persistence adapter. Implements every
+     * turn outbound port that the Application turn services depend on
+     * ({@code CreateUserTurnPort}, {@code FindCompletedAssistantContentPort},
+     * {@code FindCompletedVisibleHistoryPort}, {@code CompletePreparedTurnPort}).
+     * The adapter is not annotated with {@code @Component}; this
+     * {@code @Bean} is the only definition in the application context,
+     * matching the single-adapter-per-port convention.
+     */
+    @Bean
+    public com.ar.crm2.adapter.out.persistence.agent.AgentTurnAdapter agentTurnAdapter(
+            com.ar.crm2.adapter.out.persistence.agent.repository.AgentConversationRepository conversationRepository,
+            com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository turnRepository,
+            com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRequestRepository requestRepository,
+            com.ar.crm2.adapter.out.persistence.agent.repository.AgentVisibleHistoryRepository historyRepository
+    ) {
+        return new com.ar.crm2.adapter.out.persistence.agent.AgentTurnAdapter(
+                conversationRepository, turnRepository, requestRepository, historyRepository);
+    }
+
+    /**
+     * Single durable-memory persistence adapter. Implements every
+     * durable-memory outbound port, including the turn-level
+     * {@code FindEligibleDurableMemoriesPort} used by chat completion
+     * to forward eligible memory bullets. Wired as a single bean under
+     * every port type, preserving the one-adapter-per-port convention.
+     */
+    @Bean
+    public com.ar.crm2.adapter.out.persistence.agent.memory.DurableMemoryPersistenceAdapter durableMemoryPersistenceAdapter(
+            com.ar.crm2.adapter.out.persistence.agent.memory.DurableMemoryRepository repository
+    ) {
+        return new com.ar.crm2.adapter.out.persistence.agent.memory.DurableMemoryPersistenceAdapter(repository);
+    }
+
+    /**
+     * Single agent tool-ledger persistence adapter. Implements every
+     * tool-action outbound port and is constructed with the platform
+     * transaction manager and a fixed UTC {@link java.time.Clock} for
+     * deterministic completion timestamps.
+     */
+    @Bean
+    public com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionPersistenceAdapter agentToolActionPersistenceAdapter(
+            com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionRepository repository,
+            org.springframework.transaction.PlatformTransactionManager transactionManager,
+            java.time.Clock agentToolActionClock
+    ) {
+        return new com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionPersistenceAdapter(
+                repository, transactionManager, agentToolActionClock);
+    }
+
+    /**
+     * Deterministic UTC {@link java.time.Clock} for tool-action
+     * completion timestamps. A fixed-offset clock keeps tool-ledger
+     * tests reproducible and avoids a {@code null} PlatformTransactionManager
+     * injection failure in production wiring paths that exercise the
+     * ledger without configuring a clock bean.
+     */
+    @Bean
+    public java.time.Clock agentToolActionClock() {
+        return java.time.Clock.systemUTC();
+    }
+
+    /**
+     * Application turn service wired under the use case interface the
+     * REST controller resolves by type. The single
+     * {@code CreateUserTurnPort} bean is the {@code AgentTurnAdapter}
+     * defined above.
+     */
+    @Bean
+    public com.ar.crm2.application.agent.turn.port.in.CreateUserTurnUseCase createUserTurnUseCase(
+            com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort createUserTurnPort
+    ) {
+        return new com.ar.crm2.application.agent.turn.service.CreateUserTurnService(createUserTurnPort);
+    }
+
+    /**
+     * Application completion service wired under the use case interface
+     * the REST controller resolves by type. Threads the four
+     * turn-outbound ports, the turn-level
+     * {@code FindEligibleDurableMemoriesPort}, and the Spring AI
+     * {@code ChatCompletionPort} composed earlier in this class.
+     */
+    @Bean
+    public com.ar.crm2.application.agent.turn.port.in.CompleteUserTurnUseCase completeUserTurnUseCase(
+            com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContentPort findCompletedAssistantContentPort,
+            com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPort findCompletedVisibleHistoryPort,
+            com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPort findEligibleDurableMemoriesPort,
+            com.ar.crm2.application.agent.turn.port.out.CompletePreparedTurnPort completePreparedTurnPort,
+            com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort chatCompletionPortImpl
+    ) {
+        return new com.ar.crm2.application.agent.turn.service.CompleteUserTurnService(
+                findCompletedAssistantContentPort,
+                findCompletedVisibleHistoryPort,
+                findEligibleDurableMemoriesPort,
+                completePreparedTurnPort,
+                chatCompletionPortImpl);
+    }
+
+    /**
+     * Durable-memory recall service wired under its use case interface.
+     * The single {@code FindEligibleDurableMemoriesPort} bean is the
+     * {@code DurableMemoryPersistenceAdapter} defined above.
+     */
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.RecallDurableMemoriesUseCase recallDurableMemoriesUseCase(
+            com.ar.crm2.application.agent.memory.port.out.FindEligibleDurableMemoriesPort findEligiblePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.RecallDurableMemoriesService(findEligiblePort);
+    }
+
+    /**
+     * Durable-memory remember service wired under its use case interface.
+     */
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.RememberDurableMemoryUseCase rememberDurableMemoryUseCase(
+            com.ar.crm2.application.agent.memory.port.out.SaveDurableMemoryPort savePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.RememberDurableMemoryService(savePort);
+    }
+
+    /**
+     * Durable-memory replace service wired under its use case interface.
+     */
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.ReplaceDurableMemoryUseCase replaceDurableMemoryUseCase(
+            com.ar.crm2.application.agent.memory.port.out.ReplaceDurableMemoryPort replacePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.ReplaceDurableMemoryService(replacePort);
+    }
+
+    /**
+     * Durable-memory delete service wired under its use case interface.
+     */
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.DeleteDurableMemoryUseCase deleteDurableMemoryUseCase(
+            com.ar.crm2.application.agent.memory.port.out.DeleteDurableMemoryPort deletePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.DeleteDurableMemoryService(deletePort);
+    }
+
+    /**
+     * Durable-memory purge service wired under its use case interface.
+     */
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.PurgeDurableMemoriesUseCase purgeDurableMemoriesUseCase(
+            com.ar.crm2.application.agent.memory.port.out.PurgeDurableMemoriesPort purgePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.PurgeDurableMemoriesService(purgePort);
+    }
+
 }
