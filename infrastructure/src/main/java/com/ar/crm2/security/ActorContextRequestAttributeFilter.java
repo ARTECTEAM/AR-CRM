@@ -1,6 +1,5 @@
 package com.ar.crm2.security;
 
-import com.ar.crm2.application.security.ActorContext;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,22 +11,21 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 
 /**
  * Populates the authenticated {@link ActorContext} into the current request as a
  * request attribute ({@code actorContext}), making it available to downstream
  * controllers without leaking Spring Security types into the application layer.
  *
- * <p>This filter runs after the JWT validation filter in the Spring Security
- * filter chain, so {@link SecurityContextHolder} already contains the validated
- * authentication when this filter executes.
+ * <p>Runs after the JWT validation filter in the Spring Security chain so
+ * {@link SecurityContextHolder} already holds the validated authentication.
  *
- * <p>Pattern: SecurityContextHolder → ActorContext → HttpServletRequest attribute
- *
- * <p>Request attribute name: {@code actorContext}
+ * <p>Fail-closed: the attribute is only set when the principal is a validated
+ * {@link Jwt}. No development fallback — non-authenticated requests must reach
+ * the controller with no actor and trigger
+ * {@link com.ar.crm2.application.security.exception.AuthenticatedUsuarioRequiredException}
+ * via the controller mapper. The {@code noauth} profile uses a separate
+ * {@link SecurityNoAuthConfig} chain that intentionally bypasses this filter.
  */
 @Component
 public class ActorContextRequestAttributeFilter extends OncePerRequestFilter {
@@ -47,25 +45,13 @@ public class ActorContextRequestAttributeFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication != null && authentication.isAuthenticated()
+        if (authentication != null
+                && authentication.isAuthenticated()
                 && authentication.getPrincipal() instanceof Jwt) {
-            ActorContext actorContext = actorContextMapper.map(authentication);
-            request.setAttribute(ACTOR_CONTEXT_ATTRIBUTE, actorContext);
-        } else {
-            // noauth profile: inyectar ActorContext de desarrollo para que los
-            // controllers no reciban null (solo aplica cuando no hay JWT válido)
-            ActorContext devContext = new ActorContext(
-                "dev-user-id",
-                "dev",
-                "dev@local.test",
-                Optional.of(UUID.fromString("00000000-0000-0000-0000-000000000001")),
-                Optional.empty(),
-                Set.of("admin")
-            );
-            request.setAttribute(ACTOR_CONTEXT_ATTRIBUTE, devContext);
+            request.setAttribute(ACTOR_CONTEXT_ATTRIBUTE, actorContextMapper.map(authentication));
         }
-
+        // Intentionally no fallback: missing/invalid principal leaves the attribute
+        // unset. Controllers MUST reject the request via requireAuthenticatedActor.
         filterChain.doFilter(request, response);
     }
 }

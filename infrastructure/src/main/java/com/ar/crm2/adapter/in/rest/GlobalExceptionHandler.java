@@ -1,6 +1,7 @@
 package com.ar.crm2.adapter.in.rest;
 
 import com.ar.crm2.application.agenda.exception.AgendaNotFoundException;
+import com.ar.crm2.application.agent.turn.exception.IdempotencyKeyReusedException;
 import com.ar.crm2.application.columna.exception.ColumnaHasAssociatedFichasException;
 import com.ar.crm2.application.columna.exception.ColumnaNotFoundException;
 import com.ar.crm2.application.contacto.exception.ContactoHasAssociatedTratosException;
@@ -263,6 +264,24 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleAuthenticatedUsuarioRequiredException(AuthenticatedUsuarioRequiredException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
             .body(Map.of("error", ex.getMessage()));
+    }
+
+    /**
+     * Handles {@link IdempotencyKeyReusedException} as 409 Conflict.
+     * <p>
+     * Triggered when an owner reuses the same idempotency key with a
+     * different normalized payload (different payload fingerprint). The
+     * caller must start a new turn (new key) or send the exact same
+     * message body. Maps to 409 Conflict — consistent with the
+     * repository convention for "resource state collides with the
+     * requested change" (cf. {@code EtiquetaRequiresConfirmationException}
+     * and {@code EmpresaHasAssociatedTratosException}).
+     */
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    public ResponseEntity<Map<String, String>> handleIdempotencyKeyReusedException(IdempotencyKeyReusedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(Map.of("error", "idempotencyKey was reused with a different message; "
+                    + "send the same message body to retry or use a new idempotencyKey for a new turn"));
     }
 
     /**
