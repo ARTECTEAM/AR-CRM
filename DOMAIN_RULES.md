@@ -12,7 +12,7 @@ La capa `domain` representa el corazón del negocio. No es una carpeta de datos;
 
 - Entidades con identidad y comportamiento.
 - Value Objects inmutables que validan su propio estado.
-- Métodos con nombres de negocio: `activar`, `desactivar`, `cambiarCorreo`, `asignarResponsable`, `marcarComoGanado`.
+- Métodos con nombres de negocio: `activar`, `desactivar`, `cambiarCorreo`, `asignarResponsable`.
 - Constructores o factories que impiden crear objetos inválidos.
 - Invariantes protegidas en todo momento, no sólo al guardar en base de datos.
 - Excepciones de dominio para representar violaciones de reglas.
@@ -119,7 +119,7 @@ Ejemplos de comportamiento de dominio:
 - `cancelar`: una orden no puede cancelarse si ya está pagada o cancelada.
 - `agregarArticulo`: no se puede agregar un artículo vacío ni agregar artículos cuando la orden ya no está pendiente.
 - `cambiarResponsable`: una entidad puede reasignarse sólo si la regla de negocio lo permite.
-- `marcarComoGanado` / `marcarComoPerdido`: un trato sólo puede cambiar a ciertos estados desde estados válidos.
+- Un trato sólo puede cambiar a estados válidos desde estados válidos.
 
 Reglas:
 

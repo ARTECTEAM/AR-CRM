@@ -29,7 +29,6 @@ public final class TratoMapper {
             .fechaCierreEsperada(domain.getFechaCierreEsperada())
             .tipoContrato(domain.getTipoContrato())
             .estado(domain.getEstado())
-            .motivoPerdida(domain.getMotivoPerdida())
             .creadoEn(domain.getCreadoEn())
             .actualizadoEn(domain.getActualizadoEn())
             .build();
@@ -41,7 +40,6 @@ public final class TratoMapper {
      */
     public static Trato toDomain(TratoEntity entity) {
         if (entity == null) return null;
-
         return Trato.reconstitute(
             TratoId.from(java.util.UUID.fromString(entity.getId())),
             ContactoId.from(java.util.UUID.fromString(entity.getContactoId())),
@@ -52,7 +50,6 @@ public final class TratoMapper {
             entity.getFechaCierreEsperada(),
             entity.getTipoContrato(),
             entity.getEstado(),
-            entity.getMotivoPerdida(),
             entity.getCreadoEn(),
             entity.getActualizadoEn()
         );

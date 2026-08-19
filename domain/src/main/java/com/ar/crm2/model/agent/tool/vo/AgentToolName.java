@@ -13,7 +13,6 @@ public enum AgentToolName {
     FIND_CONTACTS("find_contacts"),
     CREATE_CONTACT("create_contact"),
     EDIT_CONTACT("edit_contact"),
-    FIND_COMPANIES("find_companies"),
     CREATE_COMPANY("create_company"),
     EDIT_COMPANY("edit_company"),
     EDIT_TRATO("edit_trato");

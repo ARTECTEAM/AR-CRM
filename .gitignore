@@ -36,10 +36,10 @@ build/
 .env
 SpringAI.env
 
-### WhatsApp runtime media (se genera en disco, no versionar) ###
+### Legacy runtime media (generated locally; do not commit) ###
 boot/uploads/
 
-### Script local de arranque (contiene credenciales de Evolution) ###
+### Local startup script (contains provider credentials; do not commit) ###
 start-backend.sh
 
 ### Gentle AI / SDD skill registry (regenerated locally) ###

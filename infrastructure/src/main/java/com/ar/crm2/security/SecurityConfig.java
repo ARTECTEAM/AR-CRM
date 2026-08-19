@@ -42,20 +42,12 @@ public class SecurityConfig {
     private static final RequestMatcher CORS_PREFLIGHT = PathPatternRequestMatcher.pathPattern(HttpMethod.OPTIONS, "/**");
     private static final RequestMatcher SUPERUSUARIO_CREATE = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/superusuarios/create");
     private static final RequestMatcher API_ENDPOINTS = PathPatternRequestMatcher.pathPattern("/api/**");
-    private static final RequestMatcher WA_WEBHOOK = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/wa/webhook/**");
-    private static final RequestMatcher WA_WEBHOOK_ROOT = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/wa/webhook");
-    private static final RequestMatcher MEDIA = PathPatternRequestMatcher.pathPattern(HttpMethod.GET, "/api/media/**");
-    private static final RequestMatcher CRON_AUTO_RESOLVER = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/cron/auto-resolver");
-    // Rutas estilo Chatwoot que llama el bot de n8n; validadas por BotApiTokenFilter (api_access_token), no por JWT.
-    private static final RequestMatcher BOT_CONVERSATIONS = PathPatternRequestMatcher.pathPattern("/api/v1/accounts/**");
 
     @Bean
     @Order(0)
     public SecurityFilterChain apiSecurityFilterChain(
             HttpSecurity http,
-            ActorContextRequestAttributeFilter actorContextRequestAttributeFilter,
-            WaApiKeyFilter waApiKeyFilter,
-            BotApiTokenFilter botApiTokenFilter
+            ActorContextRequestAttributeFilter actorContextRequestAttributeFilter
     ) throws Exception {
         http
             // Route authorization
@@ -68,15 +60,6 @@ public class SecurityConfig {
                 .requestMatchers(FORGOT_PASSWORD).permitAll()
                 // Preflight CORS
                 .requestMatchers(CORS_PREFLIGHT).permitAll()
-                // WhatsApp webhook: validated by WaApiKeyFilter, not Keycloak JWT
-                .requestMatchers(WA_WEBHOOK_ROOT).permitAll()
-                .requestMatchers(WA_WEBHOOK).permitAll()
-                // Media servida de solo lectura (archivos ya generados por el CRM)
-                .requestMatchers(MEDIA).permitAll()
-                // Cron de auto-resolver (n8n Schedule Trigger): validado por WaApiKeyFilter (x-api-key)
-                .requestMatchers(CRON_AUTO_RESOLVER).permitAll()
-                // Bot de n8n (Agent Bot estilo Chatwoot): validado por BotApiTokenFilter (api_access_token)
-                .requestMatchers(BOT_CONVERSATIONS).permitAll()
                 // SuperUsuario bootstrap: requires authenticated + SUPER_USUARIO technical role.
                 // This is a technical guard only — CRM2 business authorization is separate.
                 .requestMatchers(SUPERUSUARIO_CREATE)
@@ -102,8 +85,6 @@ public class SecurityConfig {
                     jwt.jwtAuthenticationConverter(keycloakJwtAuthenticationConverter())
                 )
             )
-            .addFilterBefore(waApiKeyFilter, BearerTokenAuthenticationFilter.class)
-            .addFilterBefore(botApiTokenFilter, BearerTokenAuthenticationFilter.class)
             .addFilterAfter(actorContextRequestAttributeFilter, BearerTokenAuthenticationFilter.class);
 
         return http.build();

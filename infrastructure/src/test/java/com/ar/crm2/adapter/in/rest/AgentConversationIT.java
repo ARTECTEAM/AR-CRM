@@ -32,13 +32,10 @@ import com.ar.crm2.model.vo.EmpresaId;
 import com.ar.crm2.model.vo.UsuarioId;
 import com.ar.crm2.security.ActorContextFilterConfiguration;
 import com.ar.crm2.security.ActorContextRequestAttributeFilter;
-import com.ar.crm2.security.BotApiTokenFilter;
 import com.ar.crm2.security.CorsConfig;
 import com.ar.crm2.security.KeycloakJwtActorContextMapper;
 import com.ar.crm2.security.KeycloakJwtAuthoritiesConverter;
 import com.ar.crm2.security.SecurityConfig;
-import com.ar.crm2.security.WaApiKeyFilter;
-import com.ar.crm2.security.WaProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -223,7 +220,6 @@ class AgentConversationIT {
         @Bean GetAllContactosUseCase getAllContactosUseCase() { return cmd -> List.of(); }
         @Bean CreateContactoUseCase createContactoUseCase() { return cmd -> null; }
         @Bean EditContactoUseCase editContactoUseCase() { return cmd -> null; }
-        @Bean GetAllEmpresasUseCase getAllEmpresasUseCase() { return criteria -> List.of(); }
         @Bean CreateEmpresaUseCase createEmpresaUseCase() { return cmd -> null; }
         @Bean EditEmpresaUseCase editEmpresaUseCase() { return cmd -> null; }
         @Bean EditTratoUseCase editTratoUseCase() {
@@ -233,23 +229,14 @@ class AgentConversationIT {
             return command -> null;
         }
         @Bean SpringAiCrmTools crmTools(GetAllContactosUseCase get, CreateContactoUseCase create,
-                EditContactoUseCase editContacto, GetAllEmpresasUseCase findCompanies,
+                EditContactoUseCase editContacto,
                 CreateEmpresaUseCase createCompany, EditEmpresaUseCase editCompany,
                 EditTratoUseCase editTratoUseCase, ObjectMapper om) {
             return new SpringAiCrmTools(get, create, editContacto,
-                    findCompanies, createCompany, editCompany,
+                    createCompany, editCompany,
                     editTratoUseCase, om);
         }
         @Bean ObjectMapper objectMapper() { return new ObjectMapper(); }
-        @Bean WaProperties waProperties() { return new WaProperties("test-key", null); }
-        @Bean WaApiKeyFilter waApiKeyFilter(WaProperties p) { return new WaApiKeyFilter(p); }
-        @Bean com.ar.crm2.whatsapp.application.bot.port.in.FindBotByTokenUseCase findBotByTokenUseCase() {
-            return token -> Optional.empty();
-        }
-        @Bean BotApiTokenFilter botApiTokenFilter(
-                com.ar.crm2.whatsapp.application.bot.port.in.FindBotByTokenUseCase find) {
-            return new BotApiTokenFilter(find);
-        }
         @Bean CreateUserTurnService createUserTurnService(CreateUserTurnPort p) { return new CreateUserTurnService(p); }
         @Bean CompleteUserTurnService completeUserTurnService(FindCompletedAssistantContentPort fa,
                 FindCompletedVisibleHistoryPort fh, FindEligibleDurableMemoriesPort fm,

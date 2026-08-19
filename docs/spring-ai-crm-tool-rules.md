@@ -90,9 +90,9 @@ A new allowlisted CRM tool must be:
 
 | Rule | Why |
 |------|-----|
-| Every write tool MUST require the authenticated actor via `ToolContext` before the use case runs. | Audit trail and identity discipline. |
+| Every write tool MUST require the authenticated actor via `ToolContext` before the use case runs. This validates trusted request context; it does not by itself prove target authorization or persisted audit. | Identity discipline without overstating downstream enforcement. |
 | Every write tool MUST delegate to a use case that is the source of truth for authorization semantics — do not re-implement ownership/role checks in the tool. | Avoids drift between tool and REST surfaces. |
-| **DEVELOPMENT-ONLY TECHNICAL DEBT:** `edit_trato` currently delegates to `EditTratoUseCase`, which does NOT receive or check the authenticated actor. This gap is accepted temporarily so the maintainer can observe how the LLM uses the tool. Production safety requires adding `actorUsuarioId` to `EditTratoCommand` (or a parallel authorization adapter) and enforcing it in the use case. Do NOT close this gap in tooling code; redesign the application authorization model in a dedicated task. | Honest record of the gap; the rules remain normative for production. |
+| **DEVELOPMENT-ONLY TECHNICAL DEBT:** `edit_trato` validates that trusted actor context exists, then delegates to `EditTratoUseCase`, which does NOT receive or check that actor. Therefore the current backend path performs no actor-aware target authorization for this mutation. This gap is accepted temporarily so the maintainer can observe how the LLM uses the tool. Production safety requires adding `actorUsuarioId` to `EditTratoCommand` (or a parallel authorization adapter) and enforcing it in the use case. Do NOT close this gap in tooling code; redesign the Application authorization model in a dedicated task. | Honest record of the gap; the rules remain normative for production. |
 | Idempotency for write tools MUST live in the Application layer (e.g. via the agent tool-action ledger), not in the tool. | The tool should stay a thin mapper. |
 | Write effects MUST be auditable through the existing Application logging or the durable agent-tool-action ledger; the tool MUST NOT add its own audit logging. | One audit story, owned by Application. |
 
@@ -102,7 +102,7 @@ For every new (or modified) tool, add or update the following tests:
 
 | Test class | Location | Must cover |
 |------------|----------|------------|
-| `SpringAiCrmToolsTest` | `infrastructure/.../test/.../adapter/out/ai/tool/` | Allowlist exact three names; each tool's discovery carries real annotation metadata; the generated JSON schema requires exactly the documented fields; schemas never expose actor/owner/turn/handle; mapper validation surfaces through `ToolExecutionException` with the original `IllegalArgumentException` cause; use-case failure propagates unchanged. |
+| `SpringAiCrmToolsTest` | `infrastructure/.../test/.../adapter/out/ai/tool/` | Allowlist exact six names; each tool's discovery carries real annotation metadata; the generated JSON schema requires exactly the documented fields; schemas never expose actor/owner/turn/handle; mapper validation surfaces through `ToolExecutionException` with the original `IllegalArgumentException` cause; use-case failure propagates unchanged. |
 | `CrmToolMapperTest` | `infrastructure/.../test/.../adapter/out/ai/tool/` | Mapper accepts valid required + optional inputs; rejects null/blank required inputs with the documented message; rejects unknown enum names; maps domain entity to bounded output. |
 | `AgentConfigTest` | `boot/.../test/.../config/` | Production default-system template advertises every allowlisted tool by name. |
 | `AgentConfigOpenAiWiringTest` | `boot/.../test/.../config/` | Same — through the configured `ChatClient` round-trip. |
@@ -142,9 +142,8 @@ Copy and complete this checklist when adding a new tool.
 | `find_contacts` | `findContacts` | `GetAllContactosUseCase` | Read-only, hard cap 20, trusted actor injected. |
 | `create_contact` | `createContact` | `CreateContactoUseCase` | Required: `empresaId`, `nombre`, `estadoRelacion`. Trusted actor becomes `creadoPor`. |
 | `edit_contact` | `editContact` | `EditContactoUseCase` | Required: `id`, `nombre`, `estadoRelacion`. Optional: `correo`, `responsableId`, `telefono`, `cargo`, `comoNosConocio`. Preserves `empresaId` and `creadoPor`. |
-| `find_companies` | `findCompanies` | `GetAllEmpresasUseCase` | Read-only, optional filters: `search`, `estadoRelacion`, `sector`, `responsableId`, `web`. Trusted actor validated at the trust boundary; the canonical company search does not accept an actor scope parameter. |
 | `create_company` | `createCompany` | `CreateEmpresaUseCase` | Required: `nombre`. Optional: `sector`, `telefono`, `paginaWeb`, `facebook`, `instagram`, `twitter`, `estadoRelacion`, `responsableId`, `notas`. Trusted actor becomes `creadoPor`. |
 | `edit_company` | `editCompany` | `EditEmpresaUseCase` | Required: `id`, `nombre`. Optional: `sector`, `telefono`, `paginaWeb`, `facebook`, `instagram`, `twitter`, `estadoRelacion`, `responsableId`, `notas`. Preserves `creadoPor`. |
-| `edit_trato` | `editTrato` | `EditTratoUseCase` | Required: `id`, `responsableId`, `nombre`. Optional: `valorEstimado`, `probabilidad`, `fechaCierreEsperada`, `tipoContrato`. Preserves `estado` and `motivoPerdida`. **DEVELOPMENT-ONLY TECHNICAL DEBT:** `EditTratoUseCase` does not receive the authenticated actor. |
+| `edit_trato` | `editTrato` | `EditTratoUseCase` | Required: `id`, `responsableId`, `nombre`. Optional: `valorEstimado`, `probabilidad`, `fechaCierreEsperada`, `tipoContrato`. Preserves non-editable deal state. **DEVELOPMENT-ONLY TECHNICAL DEBT:** trusted actor presence is validated at the tool boundary, but `EditTratoUseCase` does not receive the actor or enforce actor-aware target authorization. |
 
 Company deletion is intentionally NOT exposed: no `delete_company` tool exists, and none must be added without re-opening the canonical authorization design.

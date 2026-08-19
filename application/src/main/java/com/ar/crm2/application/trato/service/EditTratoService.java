@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 /**
  * Application service implementing EditTratoUseCase.
  * Orchestrates loading the aggregate, applying the immutable domain update, and saving.
- * Preserves: id, contactoId, creadoEn, motivoPerdida.
+ * Preserves: id, contactoId, creadoEn, estado.
  */
 @RequiredArgsConstructor
 public class EditTratoService implements EditTratoUseCase {
@@ -40,7 +40,6 @@ public class EditTratoService implements EditTratoUseCase {
                 command.fechaCierreEsperada(),
                 command.tipoContrato(),
                 existing.getEstado(),
-                existing.getMotivoPerdida(),
                 existing.getCreadoEn(),
                 LocalDateTime.now()
         );

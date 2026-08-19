@@ -6,7 +6,6 @@ import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
-import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.config.testing.CapturingChatModel;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,7 +34,7 @@ import static org.mockito.Mockito.mock;
  * <p>Corrected A3 contract: AgentConfig composes a SINGLE shared
  * {@link SpringAiCrmTools} bean and registers it once via
  * {@code ChatClient.Builder#defaultTools(Object...)}. The configured
- * {@link ChatClient} exposes the three allowlisted CRM tools to every
+ * {@link ChatClient} exposes the six allowlisted CRM tools to every
  * request; the per-request actor identity travels separately through
  * {@code ChatClient.RequestSpec#toolContext(...)} set by the adapter.
  */
@@ -46,7 +45,6 @@ class AgentConfigTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class),
@@ -181,7 +179,6 @@ class AgentConfigTest {
                 .contains("find_contacts")
                 .contains("create_contact")
                 .contains("edit_contact")
-                .contains("find_companies")
                 .contains("create_company")
                 .contains("edit_company")
                 .contains("edit_trato");
@@ -258,7 +255,7 @@ class AgentConfigTest {
 
     @Test
     void sharedSpringAiCrmToolsIsRegisteredAsDefaultToolsOnTheConfiguredChatClient() {
-        // The configured ChatClient must expose the three shared tools
+        // The configured ChatClient must expose the six shared tools
         // through the maintained Spring AI 2.0 defaultTools path. The
         // exact tool names appear in the ChatClient's default callbacks
         // (introspected via getToolCallbacks() if exposed; otherwise via
@@ -269,7 +266,7 @@ class AgentConfigTest {
 
         // Round-trip exercises the configured ChatClient end-to-end.
         // The captured prompt includes the tool definitions sent to the
-        // model. The three allowlisted tool names must be present.
+        // model. The six allowlisted tool names must be present.
         configured.prompt()
                 .system(spec -> spec.param("durable_memories", ""))
                 .user("hi")
@@ -278,11 +275,10 @@ class AgentConfigTest {
 
         String renderedSystem = model.capturedPrompt().getInstructions().get(0).getText();
         assertThat(renderedSystem)
-                .as("the configured client must advertise all seven allowlisted tools by name")
+                .as("the configured client must advertise all six allowlisted tools by name")
                 .contains("find_contacts")
                 .contains("create_contact")
                 .contains("edit_contact")
-                .contains("find_companies")
                 .contains("create_company")
                 .contains("edit_company")
                 .contains("edit_trato");
@@ -298,11 +294,10 @@ class AgentConfigTest {
             names.add(callback.getToolDefinition().name());
         }
         assertThat(names)
-                .as("the shared SpringAiCrmTools bean must produce exactly seven allowlisted callbacks")
+                .as("the shared SpringAiCrmTools bean must produce exactly six allowlisted callbacks")
                 .containsExactlyInAnyOrder(
                         "find_contacts", "create_contact", "edit_contact",
-                        "find_companies", "create_company", "edit_company",
-                        "edit_trato");
+                        "create_company", "edit_company", "edit_trato");
     }
 
     private static Method findChatClientFactoryMethod() {

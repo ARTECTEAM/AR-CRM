@@ -315,26 +315,6 @@ class AgentConversationWiringTest {
     }
 
     /**
-     * Wiring proof for the {@code find_companies} Spring AI tool: the
-     * composition root must expose exactly one
-     * {@link com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase}
-     * bean implemented by the canonical
-     * {@link com.ar.crm2.application.empresa.service.GetAllEmpresasService}.
-     */
-    @Test
-    void getAllEmpresasUseCase_isWiredAsGetAllEmpresasServiceAndExposedOnce() {
-        com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase getAllEmpresasUseCase =
-                applicationContext.getBean(
-                        com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class);
-        assertThat(getAllEmpresasUseCase)
-                .as("GetAllEmpresasUseCase must be wired as a GetAllEmpresasService instance")
-                .isInstanceOf(com.ar.crm2.application.empresa.service.GetAllEmpresasService.class);
-        assertSingleBean(
-                com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class,
-                getAllEmpresasUseCase);
-    }
-
-    /**
      * Wiring proof for the {@code create_company} Spring AI tool: the
      * composition root must expose exactly one
      * {@link com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase}
@@ -520,39 +500,9 @@ class AgentConversationWiringTest {
         @Bean com.ar.crm2.adapter.out.persistence.repository.AgendaRepository agendaRepository() {
             return mock(com.ar.crm2.adapter.out.persistence.repository.AgendaRepository.class);
         }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.NotaTratoRepository notaTratoRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.NotaTratoRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.CanalWhatsappRepository canalWhatsappRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.CanalWhatsappRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.ConversacionRepository conversacionRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.ConversacionRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.MensajeRepository mensajeRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.MensajeRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.BotRepository botRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.BotRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.AjustesWaRepository ajustesWaRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.AjustesWaRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.PlantillaRepository plantillaRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.PlantillaRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.GrupoRepository grupoRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.GrupoRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.MensajeGrupoRepository mensajeGrupoRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.MensajeGrupoRepository.class);
-        }
 
         // ── Non-repository collaborators that WiringConfig wires ───
 
-        @Bean com.ar.crm2.security.WaProperties waProperties() {
-            return new com.ar.crm2.security.WaProperties(null, null);
-        }
         @Bean com.ar.crm2.config.KeycloakAdminProperties keycloakAdminProperties() {
             return new com.ar.crm2.config.KeycloakAdminProperties();
         }
@@ -565,9 +515,6 @@ class AgentConversationWiringTest {
         }
         @Bean org.springframework.mail.javamail.JavaMailSender javaMailSender() {
             return mock(org.springframework.mail.javamail.JavaMailSender.class);
-        }
-        @Bean com.ar.crm2.adapter.out.sse.SseEmitterRegistry sseEmitterRegistry() {
-            return new com.ar.crm2.adapter.out.sse.SseEmitterRegistry();
         }
     }
 }

@@ -1,6 +1,5 @@
 package com.ar.crm2.application.empresa.port.out;
 
-import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
 import com.ar.crm2.model.entity.Empresa;
 
 import java.util.List;
@@ -18,8 +17,4 @@ public interface FindAllEmpresasPort {
      * @return list of all domain entities
      */
     List<Empresa> findAll();
-
-    default List<Empresa> findAll(EmpresaFilterCriteria criteria) {
-        return findAll();
-    }
 }

@@ -9,7 +9,6 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Spring Data JPA repository for Contacto persistence.
@@ -27,12 +26,6 @@ public interface ContactoRepository extends JpaRepository<ContactoEntity, String
         WHERE t.contactoId = :contactoId
         """)
     boolean existsTratosByContactoId(@Param("contactoId") String contactoId);
-
-    /**
-     * Usado al sincronizar el directorio de WhatsApp: evita crear contactos
-     * duplicados cuando el mismo teléfono ya existe para la empresa.
-     */
-    Optional<ContactoEntity> findByEmpresaIdAndTelefono(String empresaId, String telefono);
 
     /**
      * One atomic actor-scoped, optionally filtered, deterministically

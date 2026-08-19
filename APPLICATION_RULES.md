@@ -263,7 +263,6 @@ Ejemplos:
 * `FindEmpresaByIdPort`
 * `ExistsEmpresaByNombrePort`
 * `FindUsuarioByIdPort`
-* `FindWhatsappMessagesPort`
 * `SendEmailPort`
 
 Todas las dependencias de salida usan el sufijo `Port`; no se introduce una categoría separada llamada `Gateway`.
@@ -465,17 +464,13 @@ El `Service` no debe reimplementar reglas internas del dominio.
 Incorrecto:
 
 ```java
-if (trato.estado() != EstadoTrato.ABIERTO) {
-    throw new IllegalStateException();
-}
-trato.setEstado(EstadoTrato.GANADO);
+trato.setEstado(EstadoTrato.CERRADO);
 ```
 
 Correcto:
 
-```java
-trato.marcarComoGanado();
-```
+La creación y reconstitución de `Trato` mantienen la validación y el estado
+válido dentro del agregado; el `Service` sólo coordina puertos y dependencias.
 
 También está prohibido:
 

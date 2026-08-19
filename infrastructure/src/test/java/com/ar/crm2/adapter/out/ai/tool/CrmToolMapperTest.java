@@ -5,19 +5,18 @@ import com.ar.crm2.adapter.out.ai.tool.dto.output.CreateContactOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditCompanyOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditContactOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditTratoOutput;
-import com.ar.crm2.adapter.out.ai.tool.dto.output.FindCompaniesOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.FindContactsOutput;
 import com.ar.crm2.application.contacto.command.CreateContactoCommand;
 import com.ar.crm2.application.contacto.command.EditContactoCommand;
 import com.ar.crm2.application.contacto.command.GetAllContactosCommand;
 import com.ar.crm2.application.empresa.command.CreateEmpresaCommand;
 import com.ar.crm2.application.empresa.command.EditEmpresaCommand;
-import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
 import com.ar.crm2.application.trato.command.EditTratoCommand;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.entity.Empresa;
 import com.ar.crm2.model.entity.Trato;
 import com.ar.crm2.model.enums.EstadoRelacion;
+import com.ar.crm2.model.enums.EstadoTrato;
 import com.ar.crm2.model.enums.TipoContrato;
 import com.ar.crm2.model.vo.ContactoId;
 import com.ar.crm2.model.vo.EmpresaId;
@@ -35,7 +34,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Strict TDD contract for the A3 review cleanup {@link CrmToolMapper} —
+ * Strict TDD contract for the {@link CrmToolMapper} —
  * pure, deterministic, dependency-free. The mapper is the single trust
  * boundary that validates required fields, normalizes string inputs,
  * forces the find cap of 20, converts raw tool parameter values plus
@@ -208,54 +207,6 @@ class CrmToolMapperTest {
         assertThatThrownBy(() -> CrmToolMapper.toEditContactoCommand(
                 validId, "Contact", null, "NOT_A_STATE", null, null, null, null))
                 .as("unknown estadoRelacion")
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void findCompaniesMapsOptionalFiltersToEmpresaFilterCriteriaAndRequiresTrustedActor() {
-        EmpresaFilterCriteria criteria = CrmToolMapper.toFindCompaniesCriteria(
-                "acme", "ACTIVO", "Software",
-                UUID.fromString("77777777-7777-7777-7777-777777777777"),
-                "CON_WEB", TRUSTED_ACTOR);
-
-        assertThat(criteria.search()).isEqualTo("acme");
-        assertThat(criteria.estadoRelacion()).isEqualTo(EstadoRelacion.ACTIVO);
-        assertThat(criteria.sector()).isEqualTo("Software");
-        assertThat(criteria.responsableId())
-                .as("responsableId must be projected to the Domain UsuarioId type")
-                .isEqualTo(UsuarioId.from(UUID.fromString("77777777-7777-7777-7777-777777777777")));
-        assertThat(criteria.web()).isEqualTo(EmpresaFilterCriteria.WebFilter.CON_WEB);
-    }
-
-    @Test
-    void findCompaniesAcceptsNullFiltersButRequiresTrustedActor() {
-        EmpresaFilterCriteria criteria = CrmToolMapper.toFindCompaniesCriteria(
-                null, null, null, null, null, TRUSTED_ACTOR);
-
-        assertThat(criteria.search()).isNull();
-        assertThat(criteria.estadoRelacion()).isNull();
-        assertThat(criteria.sector()).isNull();
-        assertThat(criteria.responsableId()).isNull();
-        assertThat(criteria.web()).isNull();
-    }
-
-    @Test
-    void findCompaniesRejectsMissingTrustedActor() {
-        assertThatThrownBy(() -> CrmToolMapper.toFindCompaniesCriteria(
-                null, null, null, null, null, null))
-                .as("find_companies requires a trusted actor at the trust boundary")
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
-    void findCompaniesRejectsUnknownEstadoRelacionAndWebFilter() {
-        assertThatThrownBy(() -> CrmToolMapper.toFindCompaniesCriteria(
-                null, "NOT_A_STATE", null, null, null, TRUSTED_ACTOR))
-                .as("unknown estadoRelacion")
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> CrmToolMapper.toFindCompaniesCriteria(
-                null, null, null, null, "MAYBE_WEB", TRUSTED_ACTOR))
-                .as("unknown web filter")
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -517,36 +468,6 @@ class CrmToolMapperTest {
     }
 
     @Test
-    void findCompaniesProjectsDomainEntitiesToBoundedOutputRecords() {
-        Empresa c1 = Empresa.create(
-                "Acme", "Software", null, null, null, null, null,
-                EstadoRelacion.PROSPECTO,
-                null, null, null);
-        Empresa c2 = Empresa.create(
-                "Beta", "Retail", null, null, null, null, null,
-                EstadoRelacion.ACTIVO,
-                UsuarioId.from(UUID.fromString("77777777-7777-7777-7777-777777777777")),
-                null, null);
-
-        FindCompaniesOutput output = CrmToolMapper.toFindCompaniesOutput(List.of(c1, c2));
-
-        assertThat(output.companies()).hasSize(2);
-        assertThat(output.companies().get(0).nombre()).isEqualTo("Acme");
-        assertThat(output.companies().get(0).estadoRelacion()).isEqualTo("PROSPECTO");
-        assertThat(output.companies().get(0).sector()).isEqualTo("Software");
-        assertThat(output.companies().get(1).nombre()).isEqualTo("Beta");
-        assertThat(output.companies().get(1).estadoRelacion()).isEqualTo("ACTIVO");
-        assertThat(output.companies().get(1).responsableId())
-                .isEqualTo("77777777-7777-7777-7777-777777777777");
-    }
-
-    @Test
-    void findCompaniesMapsEmptyAndNullListToEmptyOutput() {
-        assertThat(CrmToolMapper.toFindCompaniesOutput(List.of()).companies()).isEmpty();
-        assertThat(CrmToolMapper.toFindCompaniesOutput(null).companies()).isEmpty();
-    }
-
-    @Test
     void createCompanyProjectsDomainEntityToBoundedOutput() {
         Empresa company = Empresa.create(
                 "Acme", "Software", null, null, null, null, null,
@@ -603,7 +524,8 @@ class CrmToolMapperTest {
     }
 
     @Test
-    void editTratoProjectsDomainEntityToBoundedOutputAndStripsStageAndLossReason() {
+    void editTratoProjectsDomainEntityToBoundedOutputAndStripsStage() {
+        // Current deal state is not part of the editable tool output.
         Trato updated = Trato.reconstitute(
                 TratoId.from(UUID.fromString("99999999-9999-9999-9999-999999999999")),
                 ContactoId.create(),
@@ -613,8 +535,7 @@ class CrmToolMapperTest {
                 75,
                 LocalDate.parse("2026-12-31"),
                 TipoContrato.SERVICIO,
-                null,
-                null,
+                EstadoTrato.ABIERTO,
                 LocalDateTime.now(),
                 null);
 

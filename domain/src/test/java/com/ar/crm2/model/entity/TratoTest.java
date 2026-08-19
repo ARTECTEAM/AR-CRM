@@ -101,10 +101,9 @@ class TratoTest {
                     new BigDecimal("50000.00"),
                     75,
                     LocalDate.now().plusDays(30),
-                    TipoContrato.LICENCIA,
-                    com.ar.crm2.model.enums.EstadoTrato.ABIERTO,
-                    null,
-                    haceUnaSemana,
+                     TipoContrato.LICENCIA,
+                     com.ar.crm2.model.enums.EstadoTrato.ABIERTO,
+                     haceUnaSemana,
                     haceUnaSemana
             )).doesNotThrowAnyException();
         }
@@ -123,10 +122,9 @@ class TratoTest {
                     new BigDecimal("50000.00"),
                     75,
                     LocalDate.now().plusDays(30),
-                    TipoContrato.LICENCIA,
-                    com.ar.crm2.model.enums.EstadoTrato.ABIERTO,
-                    null,
-                    haceUnaSemana,
+                     TipoContrato.LICENCIA,
+                     com.ar.crm2.model.enums.EstadoTrato.ABIERTO,
+                     haceUnaSemana,
                     haceUnaSemana
             ))
                 .isInstanceOf(InvariantViolationException.class)
@@ -147,10 +145,9 @@ class TratoTest {
                     new BigDecimal("50000.00"),
                     75,
                     LocalDate.now().plusDays(30),
-                    TipoContrato.LICENCIA,
-                    com.ar.crm2.model.enums.EstadoTrato.ABIERTO,
-                    null,
-                    haceUnaSemana,
+                     TipoContrato.LICENCIA,
+                     com.ar.crm2.model.enums.EstadoTrato.ABIERTO,
+                     haceUnaSemana,
                     haceUnaSemana
             );
 

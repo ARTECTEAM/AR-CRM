@@ -10,7 +10,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * JPA entity for tratos persistence.
+     * JPA entity for current tratos persistence.
  * Maps to the 'tratos' table with all documented columns.
  * Uses String id to match database convention (UUID stored as VARCHAR).
  */
@@ -49,14 +49,12 @@ public class TratoEntity {
     @Column(name = "tipo_contrato", length = 50)
     private TipoContrato tipoContrato;
 
-    // Nullable a propósito: con ddl-auto=update, una columna NOT NULL nueva rompería en
-    // una tabla con datos. El dominio trata null como ABIERTO (ver Trato.reconstitute).
+    // Nullable a propósito: con ddl-auto=update, una columna NOT NULL nueva
+    // rompería una tabla con datos. El dominio trata null como ABIERTO
+    // (ver Trato.reconstitute).
     @Enumerated(EnumType.STRING)
     @Column(name = "estado", length = 20)
     private EstadoTrato estado;
-
-    @Column(name = "motivo_perdida", length = 500)
-    private String motivoPerdida;
 
     @Column(name = "creado_en", nullable = false)
     private LocalDateTime creadoEn;

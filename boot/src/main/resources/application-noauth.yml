@@ -29,10 +29,3 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: ""
-
-# Evolution API — configura tus credenciales reales aquí (o en variables de entorno)
-crm2:
-  wa:
-    evolution:
-      api-url: ${EVOLUTION_API_URL:}
-      api-key: ${EVOLUTION_API_KEY:}

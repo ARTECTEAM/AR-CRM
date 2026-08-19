@@ -874,9 +874,8 @@ No se debe utilizar el sufijo `*Gateway`.
 
 Ejemplos:
 
-* `ObtenerMensajesWhatsappPort`
+* `FetchProviderRecordsPort`
 * `EnviarCorreoPort`
-* `FindEvolutionMessagesPort`
 * `UploadFilePort`
 
 Flujo:
@@ -907,9 +906,9 @@ Responsabilidades:
 Estructura recomendada:
 
 ```text
-adapter/out/evolution
-├── EvolutionAdapter
-├── EvolutionWebClient
+adapter/out/provider
+├── ProviderAdapter
+├── ProviderWebClient
 ├── dto
 └── mapper
 ```
@@ -917,29 +916,29 @@ adapter/out/evolution
 Ejemplo:
 
 ```java
-public interface ObtenerMensajesWhatsappPort {
+public interface FetchProviderRecordsPort {
 
-    List<MensajeWhatsapp> obtenerMensajes(
-            ReferenciaChat referencia
+    List<ExternalRecord> fetchRecords(
+            ExternalReference reference
     );
 }
 ```
 
 ```java
 @RequiredArgsConstructor
-public class EvolutionAdapter
-        implements ObtenerMensajesWhatsappPort {
+public class ProviderAdapter
+        implements FetchProviderRecordsPort {
 
-    private final EvolutionWebClient webClient;
+    private final ProviderWebClient webClient;
 
     @Override
-    public List<MensajeWhatsapp> obtenerMensajes(
-            ReferenciaChat referencia
+    public List<ExternalRecord> fetchRecords(
+            ExternalReference reference
     ) {
-        EvolutionMessagesResponse response =
-                webClient.findMessages(referencia);
+        ProviderRecordsResponse response =
+                webClient.fetchRecords(reference);
 
-        return EvolutionMapper.toDomain(response);
+        return ProviderMapper.toDomain(response);
     }
 }
 ```

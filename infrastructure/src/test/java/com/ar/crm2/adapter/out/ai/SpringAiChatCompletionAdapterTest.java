@@ -48,7 +48,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *     <li>Does NOT call request {@code .tools(...)} — Spring AI 2.0 runtime
  *         tools would replace builder defaults, so the adapter only supplies
  *         trusted per-request tool context and lets the configured
- *         {@code defaultTools} (the three allowlisted CRM tools) reach the
+ *         {@code defaultTools} (the six allowlisted CRM tools) reach the
  *         model unchanged.</li>
  * </ul>
  *
@@ -75,7 +75,7 @@ class SpringAiChatCompletionAdapterTest {
     /**
      * Memory-aware fixture that mirrors the shape of what the production
      * {@code com.ar.crm2.config.AgentConfig} bean owns at runtime, plus
-     * the three shared {@code defaultTools} the agent advertises. The
+     * the six shared {@code defaultTools} the agent advertises. The
      * adapter is constructed only with the configured {@link ChatClient};
      * it MUST NOT need the tools at construction time because the
      * defaults carry the tool catalog.

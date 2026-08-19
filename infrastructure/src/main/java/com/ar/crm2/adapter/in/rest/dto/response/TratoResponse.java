@@ -23,7 +23,6 @@ public record TratoResponse(
     LocalDate fechaCierreEsperada,
     TipoContrato tipoContrato,
     EstadoTrato estado,
-    String motivoPerdida,
     LocalDateTime creadoEn,
     LocalDateTime actualizadoEn
 ) {
@@ -41,7 +40,6 @@ public record TratoResponse(
             trato.getFechaCierreEsperada(),
             trato.getTipoContrato(),
             trato.getEstado(),
-            trato.getMotivoPerdida(),
             trato.getCreadoEn(),
             trato.getActualizadoEn()
         );

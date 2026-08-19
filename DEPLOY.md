@@ -70,22 +70,7 @@ KEYCLOAK_ADMIN_SECRET=<secret-del-cliente-crm2-api>
 CRM2_NOTIFICATION_MAIL_USERNAME=<tu-cuenta@gmail.com>
 CRM2_NOTIFICATION_MAIL_PASSWORD=<app-password-de-gmail>
 CRM2_MAIL_FROM_ADDRESS=<from@tudominio.com>
-
-# WhatsApp / Evolution API
-EVOLUTION_API_URL=https://<tu-evolution>.easypanel.host
-EVOLUTION_API_KEY=<api-key-global-de-evolution>
-WA_WEBHOOK_API_KEY=<secreto-fuerte>
-# URL PÚBLICA de ESTE backend. CRÍTICO: sin esto, Evolution no tiene a dónde
-# mandar los mensajes entrantes y NO llegan mensajes nuevos (ni preview ni badge).
-# Debe ser el mismo dominio público de este servicio (ver "Dominio" arriba).
-WA_WEBHOOK_BASE_URL=https://api.tudominio.com
 ```
-
-> Tras setear `WA_WEBHOOK_BASE_URL` por primera vez (o cambiarla), hay que
-> re-registrar el webhook en Evolution para los canales YA conectados:
-> `POST /api/wa/canales/reconfigurar-webhook?id=<canalId>` (o el botón
-> "Reconfigurar webhook" en la tabla de canales del frontend). Si no, Evolution
-> sigue sin saber a dónde mandar los mensajes.
 
 ---
 

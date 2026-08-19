@@ -44,7 +44,7 @@ import java.util.stream.Collectors;
  *         the framework {@code .toolContext(Map.of(...))} call so each
  *         allowlisted tool can assert ownership and authorization
  *         against server-derived values. The configured
- *         {@link ChatClient} already carries the three allowlisted CRM
+ *         {@link ChatClient} already carries the six allowlisted CRM
  *         tools through {@code defaultTools(tools)}; the adapter does
  *         NOT call request {@code .tools(...)} because Spring AI 2.0
  *         runtime tools replace builder defaults. Identity stays

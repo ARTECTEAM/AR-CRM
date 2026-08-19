@@ -8,10 +8,8 @@ import java.math.BigDecimal;
  * Bounded, model-visible output of the {@code edit_trato} tool.
  *
  * <p>Returns the canonical deal identity plus the editable business
- * fields the agent needs to refer back to the saved deal. The deal's
- * stage ({@code estado}) and loss reason ({@code motivoPerdida}) are
- * NOT modified by the underlying canonical edit use case; this tool
- * surfaces only the fields that the use case actually persists.
+ * fields the agent needs to refer back to the saved deal. Non-editable
+ * deal state is preserved by the underlying canonical edit use case.
  *
  * <p>Internal fields (creator/owner/audit identity, internal handles,
  * persistence timestamps, raw SQL, stack traces, JWTs, credentials,

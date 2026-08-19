@@ -86,21 +86,3 @@ crm2:
     # Comma-separated list of allowed frontend origins. In prod set
     # CRM2_CORS_ALLOWED_ORIGINS to your deployed frontend URL(s).
     allowed-origins: ${CRM2_CORS_ALLOWED_ORIGINS:http://localhost:5173}
-  wa:
-    # API key that n8n sends in x-api-key header to the webhook endpoint.
-    # In prod set WA_WEBHOOK_API_KEY to a strong random secret.
-    webhook-api-key: ${WA_WEBHOOK_API_KEY:change-me-in-prod}
-    # URL pública donde Evolution API puede alcanzar a ESTE backend para
-    # mandar mensajes entrantes en tiempo real (ej. https://mi-crm.easypanel.host).
-    # Vacío = no se configura webhook (ej. dev local sin túnel expuesto a internet).
-    webhook-base-url: ${WA_WEBHOOK_BASE_URL:}
-    evolution:
-      # URL base de tu servidor Evolution API (sin trailing slash)
-      api-url: ${EVOLUTION_API_URL:}
-      # Global API key de Evolution API
-      api-key: ${EVOLUTION_API_KEY:}
-
-# Sugerencia de respuesta con IA (Claude). Sin ANTHROPIC_API_KEY el botón ✨ devuelve error.
-anthropic:
-  api-key: ${ANTHROPIC_API_KEY:}
-  model: ${ANTHROPIC_MODEL:claude-haiku-4-5-20251001}

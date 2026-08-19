@@ -9,7 +9,7 @@ import java.util.UUID;
 /**
  * Command to edit an existing Trato.
  * Validates id and nombre at construction time.
- * Does NOT include contactoId, motivoPerdida, creadoEn — those are preserved from the existing entity.
+ * Does NOT include non-editable deal state or audit timestamps; those are preserved from the existing entity.
  */
 public record EditTratoCommand(
     UUID id,

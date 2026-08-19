@@ -238,19 +238,6 @@ class AgentControllerMvcTest {
     /** Bindings required by SecurityConfig filters; not relevant to agent ingress. */
     @TestConfiguration
     static class TestConfig {
-        @Bean com.ar.crm2.security.WaProperties waProperties() {
-            return new com.ar.crm2.security.WaProperties(null, null);
-        }
-        @Bean com.ar.crm2.security.WaApiKeyFilter waApiKeyFilter(com.ar.crm2.security.WaProperties p) {
-            return new com.ar.crm2.security.WaApiKeyFilter(p);
-        }
-        @Bean com.ar.crm2.whatsapp.application.bot.port.in.FindBotByTokenUseCase findBotByTokenUseCase() {
-            return token -> Optional.empty();
-        }
-        @Bean com.ar.crm2.security.BotApiTokenFilter botApiTokenFilter(
-                com.ar.crm2.whatsapp.application.bot.port.in.FindBotByTokenUseCase findBotByToken) {
-            return new com.ar.crm2.security.BotApiTokenFilter(findBotByToken);
-        }
         @Bean org.springframework.web.servlet.config.annotation.WebMvcConfigurer jacksonConverterConfigurer() {
             return new org.springframework.web.servlet.config.annotation.WebMvcConfigurer() {
                 @Override

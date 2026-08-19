@@ -27,8 +27,6 @@ import com.ar.crm2.model.enums.TipoTablero;
 import com.ar.crm2.model.vo.ColumnaId;
 import com.ar.crm2.model.vo.TableroId;
 import com.ar.crm2.security.KeycloakJwtActorContextMapper;
-import com.ar.crm2.security.WaProperties;
-import com.ar.crm2.whatsapp.application.bot.port.in.FindBotByTokenUseCase;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -110,12 +108,6 @@ class TableroControllerIT {
 
     @MockitoBean
     private KeycloakJwtActorContextMapper actorContextMapper;
-
-    @MockitoBean
-    private FindBotByTokenUseCase findBotByTokenUseCase;
-
-    @MockitoBean
-    private WaProperties waProperties;
 
     // ── Setup ───────────────────────────────────────────────────────
 

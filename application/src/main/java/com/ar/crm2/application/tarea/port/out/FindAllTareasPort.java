@@ -1,6 +1,5 @@
 package com.ar.crm2.application.tarea.port.out;
 
-import com.ar.crm2.application.tarea.query.TareaFilterCriteria;
 import com.ar.crm2.model.entity.Tarea;
 
 import java.util.List;
@@ -17,8 +16,4 @@ public interface FindAllTareasPort {
      * @return list of all Tarea domain entities
      */
     List<Tarea> findAll();
-
-    default List<Tarea> findAll(TareaFilterCriteria criteria) {
-        return findAll();
-    }
 }

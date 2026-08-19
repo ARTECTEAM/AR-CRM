@@ -6,7 +6,6 @@ import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
-import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.config.testing.CapturingChatModel;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -60,7 +59,6 @@ class AgentConfigOpenAiWiringTest {
                     mock(GetAllContactosUseCase.class),
                     mock(CreateContactoUseCase.class),
                     mock(EditContactoUseCase.class),
-                    mock(GetAllEmpresasUseCase.class),
                     mock(CreateEmpresaUseCase.class),
                     mock(EditEmpresaUseCase.class),
                     mock(EditTratoUseCase.class),
@@ -158,7 +156,7 @@ class AgentConfigOpenAiWiringTest {
             ChatClient chatClient = context.getBean(ChatClient.class);
 
             // Round-trip via the configured ChatClient — the shared tools
-            // are registered as defaultTools, so the three allowlisted
+            // are registered as defaultTools, so the six allowlisted
             // tool names appear in the captured prompt rendered to the
             // CapturingChatModel.
             chatClient.prompt()
@@ -174,7 +172,6 @@ class AgentConfigOpenAiWiringTest {
                     .contains("find_contacts")
                     .contains("create_contact")
                     .contains("edit_contact")
-                    .contains("find_companies")
                     .contains("create_company")
                     .contains("edit_company")
                     .contains("edit_trato");

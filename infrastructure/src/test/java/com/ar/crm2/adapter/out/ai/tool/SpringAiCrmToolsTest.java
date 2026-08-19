@@ -10,8 +10,6 @@ import com.ar.crm2.application.empresa.command.CreateEmpresaCommand;
 import com.ar.crm2.application.empresa.command.EditEmpresaCommand;
 import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
-import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
-import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
 import com.ar.crm2.application.trato.command.EditTratoCommand;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.model.entity.Contacto;
@@ -51,7 +49,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Spring AI 2.0 contract tests for the shared, stateless CRM tool bean.
- * They prove the seven-tool allowlist, model-visible schema boundary,
+ * They prove the six-tool allowlist, model-visible schema boundary,
  * trusted per-call identity, bounded outputs, and Application
  * delegation.
  */
@@ -76,23 +74,21 @@ class SpringAiCrmToolsTest {
             GetAllContactosUseCase contactosUseCase,
             CreateContactoUseCase createUseCase,
             EditContactoUseCase editContactoUseCase,
-            GetAllEmpresasUseCase getAllEmpresasUseCase,
             CreateEmpresaUseCase createEmpresaUseCase,
             EditEmpresaUseCase editEmpresaUseCase,
             EditTratoUseCase editTratoUseCase) {
         return new SpringAiCrmTools(
                 contactosUseCase, createUseCase, editContactoUseCase,
-                getAllEmpresasUseCase, createEmpresaUseCase, editEmpresaUseCase,
-                editTratoUseCase, new ObjectMapper());
+                createEmpresaUseCase, editEmpresaUseCase, editTratoUseCase,
+                new ObjectMapper());
     }
 
     @Test
-    void sharedToolsObjectExposesExactlySevenAllowlistedCallbacksThroughSpringAiDiscovery() {
+    void sharedToolsObjectExposesExactlySixAllowlistedCallbacksThroughSpringAiDiscovery() {
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -104,8 +100,7 @@ class SpringAiCrmToolsTest {
                 .collect(Collectors.toUnmodifiableSet());
         assertThat(names).containsExactlyInAnyOrder(
                 "find_contacts", "create_contact", "edit_contact",
-                "find_companies", "create_company", "edit_company",
-                "edit_trato");
+                "create_company", "edit_company", "edit_trato");
     }
 
     @Test
@@ -114,7 +109,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -139,7 +133,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -195,14 +188,6 @@ class SpringAiCrmToolsTest {
                 .as("edit_contact MUST NOT advertise creadoPor as an editable field")
                 .isFalse();
 
-        ToolDefinition findCompanies = byName.get("find_companies");
-        assertThat(findCompanies.description())
-                .as("find_companies description comes from @Tool annotation")
-                .contains("Search companies");
-        JsonNode findCompaniesSchema = MAPPER.readTree(findCompanies.inputSchema());
-        assertThat(findCompaniesSchema.get("properties").has("search")).isTrue();
-        assertThat(findCompaniesSchema.get("properties").has("estadoRelacion")).isTrue();
-
         ToolDefinition createCompany = byName.get("create_company");
         assertThat(createCompany.description())
                 .as("create_company description comes from @Tool annotation")
@@ -238,14 +223,10 @@ class SpringAiCrmToolsTest {
         Set<String> editRequired = new HashSet<>();
         editSchema.get("required").forEach(node -> editRequired.add(node.asText()));
         assertThat(editRequired).contains("id", "responsableId", "nombre");
-        // The deal's stage and loss reason are preserved by the canonical use
-        // case and MUST NOT be exposed as editable inputs.
+        // Non-editable deal state is not part of the edit contract.
         JsonNode editProperties = editSchema.get("properties");
         assertThat(editProperties.has("status"))
                 .as("edit_trato MUST NOT advertise status as an editable field")
-                .isFalse();
-        assertThat(editProperties.has("motivo"))
-                .as("edit_trato MUST NOT advertise motivoPerdida as an editable field")
                 .isFalse();
     }
 
@@ -255,7 +236,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -287,7 +267,6 @@ class SpringAiCrmToolsTest {
                 contactosUseCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -319,7 +298,6 @@ class SpringAiCrmToolsTest {
                 useCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -351,7 +329,6 @@ class SpringAiCrmToolsTest {
                 useCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -392,7 +369,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 createUseCase,
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -433,7 +409,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 createUseCase,
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -484,7 +459,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 editContactoUseCase,
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -531,7 +505,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 editContactoUseCase,
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -565,7 +538,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 editContactoUseCase,
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -586,142 +558,6 @@ class SpringAiCrmToolsTest {
     }
 
     @Test
-    void findCompaniesDelegatesToGetAllEmpresasUseCaseAndPreservesTrustedActorBoundary() throws Exception {
-        UUID trustedActor = UUID.fromString("ffffffff-1111-2222-3333-444444444444");
-        GetAllEmpresasUseCase getAllEmpresasUseCase = mock(GetAllEmpresasUseCase.class);
-        when(getAllEmpresasUseCase.getAll(any(EmpresaFilterCriteria.class))).thenReturn(List.of());
-        SpringAiCrmTools tools = newTools(
-                mock(GetAllContactosUseCase.class),
-                mock(CreateContactoUseCase.class),
-                mock(EditContactoUseCase.class),
-                getAllEmpresasUseCase,
-                mock(CreateEmpresaUseCase.class),
-                mock(EditEmpresaUseCase.class),
-                mock(EditTratoUseCase.class));
-
-        ToolCallback findCompanies = findCallback(
-                java.util.Arrays.asList(ToolCallbacks.from(tools)),
-                "find_companies");
-
-        String output = findCompanies.call(
-                "{\"search\":\"acme\",\"estadoRelacion\":\"ACTIVO\"}",
-                actorContext(trustedActor));
-
-        ArgumentCaptor<EmpresaFilterCriteria> captor =
-                ArgumentCaptor.forClass(EmpresaFilterCriteria.class);
-        verify(getAllEmpresasUseCase).getAll(captor.capture());
-        EmpresaFilterCriteria criteria = captor.getValue();
-        assertThat(criteria.search()).isEqualTo("acme");
-        assertThat(criteria.estadoRelacion()).isEqualTo(EstadoRelacion.ACTIVO);
-
-        JsonNode result = MAPPER.readTree(output);
-        assertThat(result.has("companies"))
-                .as("output must be the bounded FindCompaniesOutput object")
-                .isTrue();
-        assertThat(result.get("companies").isArray()).isTrue();
-        assertThat(result.get("companies")).isEmpty();
-    }
-
-    @Test
-    void findCompaniesRejectsUnknownEstadoRelacionAndWebFilterBeforeMutation() {
-        GetAllEmpresasUseCase getAllEmpresasUseCase = mock(GetAllEmpresasUseCase.class);
-        SpringAiCrmTools tools = newTools(
-                mock(GetAllContactosUseCase.class),
-                mock(CreateContactoUseCase.class),
-                mock(EditContactoUseCase.class),
-                getAllEmpresasUseCase,
-                mock(CreateEmpresaUseCase.class),
-                mock(EditEmpresaUseCase.class),
-                mock(EditTratoUseCase.class));
-
-        ToolCallback findCompanies = findCallback(
-                java.util.Arrays.asList(ToolCallbacks.from(tools)),
-                "find_companies");
-
-        Throwable badEstado = org.assertj.core.api.Assertions.catchThrowable(
-                () -> findCompanies.call("{\"estadoRelacion\":\"NOT_A_STATE\"}",
-                        actorContext(UUID.randomUUID())));
-        assertThat(badEstado)
-                .isInstanceOf(org.springframework.ai.tool.execution.ToolExecutionException.class);
-        assertThat(badEstado.getCause()).isInstanceOf(IllegalArgumentException.class);
-        assertThat(badEstado.getCause().getMessage()).contains("EstadoRelacion");
-
-        Throwable badWeb = org.assertj.core.api.Assertions.catchThrowable(
-                () -> findCompanies.call("{\"web\":\"MAYBE_WEB\"}",
-                        actorContext(UUID.randomUUID())));
-        assertThat(badWeb)
-                .isInstanceOf(org.springframework.ai.tool.execution.ToolExecutionException.class);
-        assertThat(badWeb.getCause()).isInstanceOf(IllegalArgumentException.class);
-        assertThat(badWeb.getCause().getMessage()).contains("WebFilter");
-
-        verify(getAllEmpresasUseCase, never()).getAll(any());
-    }
-
-    @Test
-    void findCompaniesEmptyResultReturnsBoundedEmptyCompaniesArray() throws Exception {
-        GetAllEmpresasUseCase useCase = mock(GetAllEmpresasUseCase.class);
-        when(useCase.getAll(any(EmpresaFilterCriteria.class))).thenReturn(List.of());
-        SpringAiCrmTools tools = newTools(
-                mock(GetAllContactosUseCase.class),
-                mock(CreateContactoUseCase.class),
-                mock(EditContactoUseCase.class),
-                useCase,
-                mock(CreateEmpresaUseCase.class),
-                mock(EditEmpresaUseCase.class),
-                mock(EditTratoUseCase.class));
-
-        ToolCallback findCompanies = findCallback(
-                java.util.Arrays.asList(ToolCallbacks.from(tools)),
-                "find_companies");
-
-        String output = findCompanies.call("{}", actorContext(UUID.randomUUID()));
-        JsonNode result = MAPPER.readTree(output);
-        assertThat(result.get("companies").isArray()).isTrue();
-        assertThat(result.get("companies")).isEmpty();
-    }
-
-    @Test
-    void findCompaniesNonEmptyResultReturnsBoundedBusinessOutputOnly() throws Exception {
-        Empresa company = Empresa.create(
-                "Acme", "Software", "+525500000000",
-                "https://acme.example", null, null, null,
-                EstadoRelacion.ACTIVO,
-                UsuarioId.from(UUID.randomUUID()), null, null);
-        GetAllEmpresasUseCase useCase = mock(GetAllEmpresasUseCase.class);
-        when(useCase.getAll(any(EmpresaFilterCriteria.class))).thenReturn(List.of(company));
-        SpringAiCrmTools tools = newTools(
-                mock(GetAllContactosUseCase.class),
-                mock(CreateContactoUseCase.class),
-                mock(EditContactoUseCase.class),
-                useCase,
-                mock(CreateEmpresaUseCase.class),
-                mock(EditEmpresaUseCase.class),
-                mock(EditTratoUseCase.class));
-
-        ToolCallback findCompanies = findCallback(
-                java.util.Arrays.asList(ToolCallbacks.from(tools)),
-                "find_companies");
-
-        String output = findCompanies.call("{}", actorContext(UUID.randomUUID()));
-        JsonNode companies = MAPPER.readTree(output).get("companies");
-        assertThat(companies.isArray()).isTrue();
-        assertThat(companies).hasSize(1);
-        assertThat(companies.get(0).get("nombre").asText()).isEqualTo("Acme");
-        assertThat(companies.get(0).get("estadoRelacion").asText()).isEqualTo("ACTIVO");
-        assertThat(output)
-                .as("bounded output must not leak domain internals")
-                .doesNotContain("creadoPor")
-                .doesNotContain("creadoEn")
-                .doesNotContain("actualizadoEn")
-                .doesNotContain("paginaWeb")
-                .doesNotContain("facebook")
-                .doesNotContain("instagram")
-                .doesNotContain("twitter")
-                .doesNotContain("telefono")
-                .doesNotContain("notas");
-    }
-
-    @Test
     void createCompanyDelegatesToCreateEmpresaUseCaseWithActorResolvedFromToolContext() throws Exception {
         UUID trustedActor = UUID.fromString("cccc2222-3333-4444-5555-666666666666");
         CreateEmpresaUseCase createEmpresaUseCase = mock(CreateEmpresaUseCase.class);
@@ -735,7 +571,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 createEmpresaUseCase,
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -777,7 +612,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 createEmpresaUseCase,
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -826,7 +660,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 editEmpresaUseCase,
                 mock(EditTratoUseCase.class));
@@ -872,7 +705,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 editEmpresaUseCase,
                 mock(EditTratoUseCase.class));
@@ -900,6 +732,7 @@ class SpringAiCrmToolsTest {
 
     @Test
     void editTratoDelegatesToCanonicalEditTratoUseCase() throws Exception {
+        // The canonical use case preserves the deal state while editing fields.
         UUID trustedActor = UUID.fromString("abcdefab-1111-2222-3333-444444444444");
         UUID tratoId = UUID.fromString("99999999-9999-9999-9999-999999999999");
         UUID responsableId = UUID.fromString("77777777-7777-7777-7777-777777777777");
@@ -913,8 +746,7 @@ class SpringAiCrmToolsTest {
                 75,
                 LocalDate.parse("2026-12-31"),
                 TipoContrato.SERVICIO,
-                null,
-                null,
+                com.ar.crm2.model.enums.EstadoTrato.ABIERTO,
                 java.time.LocalDateTime.now(),
                 null);
         when(editTratoUseCase.edit(any(EditTratoCommand.class))).thenReturn(updated);
@@ -922,7 +754,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 editTratoUseCase);
@@ -956,12 +787,10 @@ class SpringAiCrmToolsTest {
         assertThat(outputJson.get("nombre").asText()).isEqualTo("Renamed Deal");
         assertThat(outputJson.get("responsableId").asText()).isEqualTo(responsableId.toString());
         assertThat(outputJson.get("tipoContrato").asText()).isEqualTo("SERVICIO");
-        // The deal's stage and loss reason are preserved by the canonical use
-        // case and MUST NOT be surfaced in the tool output.
+        // Non-editable deal state is not surfaced in the tool output.
         assertThat(output)
-                .as("edit_trato output must not leak stage or loss reason fields")
+                .as("edit_trato output must not leak non-editable deal state")
                 .doesNotContain("estado")
-                .doesNotContain("motivoPerdida")
                 .doesNotContain("creadoEn")
                 .doesNotContain("actualizadoEn")
                 .doesNotContain("contactoId");
@@ -974,7 +803,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 editTratoUseCase);
@@ -1009,7 +837,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 editTratoUseCase);
@@ -1040,7 +867,6 @@ class SpringAiCrmToolsTest {
                 useCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -1071,7 +897,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 useCase,
                 mock(EditTratoUseCase.class));
@@ -1101,7 +926,6 @@ class SpringAiCrmToolsTest {
                 useCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -1128,7 +952,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -1162,7 +985,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -1186,7 +1008,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -1206,13 +1027,12 @@ class SpringAiCrmToolsTest {
     @Test
     void noCompanyDeleteToolIsExposedByTheSharedSpringAiCrmToolsBean() {
         // Defence-in-depth: explicit allowlist check, in addition to the
-        // generic seven-tool discovery assertion, that no tool that even
+        // generic six-tool discovery assertion, that no tool that even
         // hints at company deletion is exposed.
         SpringAiCrmTools tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
@@ -1229,7 +1049,7 @@ class SpringAiCrmToolsTest {
     }
 
     @Test
-    void sharedToolsConstructorIsLombokGeneratedAndTakesExactlyEightSharedDependencies() throws Exception {
+    void sharedToolsConstructorIsLombokGeneratedAndTakesExactlySevenSharedDependencies() throws Exception {
         // Constructor shape protects composition-root wiring.
         Constructor<?>[] constructors = SpringAiCrmTools.class.getDeclaredConstructors();
         assertThat(constructors).hasSize(1);
@@ -1238,7 +1058,6 @@ class SpringAiCrmToolsTest {
                 GetAllContactosUseCase.class,
                 CreateContactoUseCase.class,
                 EditContactoUseCase.class,
-                GetAllEmpresasUseCase.class,
                 CreateEmpresaUseCase.class,
                 EditEmpresaUseCase.class,
                 EditTratoUseCase.class,
@@ -1248,7 +1067,6 @@ class SpringAiCrmToolsTest {
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
-                mock(GetAllEmpresasUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class),

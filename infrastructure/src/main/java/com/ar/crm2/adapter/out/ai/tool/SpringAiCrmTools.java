@@ -5,14 +5,12 @@ import com.ar.crm2.adapter.out.ai.tool.dto.output.CreateContactOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditCompanyOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditContactOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditTratoOutput;
-import com.ar.crm2.adapter.out.ai.tool.dto.output.FindCompaniesOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.FindContactsOutput;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
-import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.entity.Empresa;
@@ -37,22 +35,21 @@ import java.util.UUID;
  * through the per-request {@link ToolContext}; they are absent from the
  * generated JSON schema.
  *
- * <p>The current allowlist exposes seven thin adapters:
+ * <p>The current allowlist exposes six thin adapters:
  * {@code find_contacts}, {@code create_contact}, {@code edit_contact},
- * {@code find_companies}, {@code create_company}, {@code edit_company},
- * and {@code edit_trato}. Company deletion is intentionally NOT
- * exposed — no {@code delete_company} tool exists and none must be
- * added without re-opening the canonical authorization design.
+ * {@code create_company}, {@code edit_company}, and {@code edit_trato}.
+ * Company deletion is intentionally NOT exposed — no
+ * {@code delete_company} tool exists and none must be added without
+ * re-opening the canonical authorization design.
  *
  * <p>{@code edit_trato} is the canonical write tool for deals. It is a
  * thin adapter that maps model-visible arguments to the existing
  * {@code EditTratoCommand} and delegates to {@link EditTratoUseCase}.
- * The canonical use case preserves the deal's stage and loss reason;
- * {@code edit_trato} therefore does NOT advertise status or motivo as
- * editable fields. The authenticated actor is required at the tool
- * boundary for audit context, but is NOT used to populate the editable
- * {@code responsableId} field — that is a business assignment, not the
- * authenticated user.
+ * The canonical use case preserves the deal's stage; {@code edit_trato}
+ * therefore does NOT advertise status as an editable field. The
+ * authenticated actor is required at the tool boundary for audit
+ * context, but is NOT used to populate the editable {@code responsableId}
+ * field — that is a business assignment, not the authenticated user.
  *
  * <p>{@code edit_contact} and {@code edit_company} mirror the REST
  * surface exactly: they accept the editable business fields the
@@ -67,7 +64,6 @@ public class SpringAiCrmTools {
     private final GetAllContactosUseCase getAllContactosUseCase;
     private final CreateContactoUseCase createContactoUseCase;
     private final EditContactoUseCase editContactoUseCase;
-    private final GetAllEmpresasUseCase getAllEmpresasUseCase;
     private final CreateEmpresaUseCase createEmpresaUseCase;
     private final EditEmpresaUseCase editEmpresaUseCase;
     private final EditTratoUseCase editTratoUseCase;
@@ -152,30 +148,6 @@ public class SpringAiCrmTools {
     }
 
     @Tool(
-            name = "find_companies",
-            description = "Search companies visible to the current CRM actor. "
-                    + "All filters are optional; the actor scope is implicit and is NOT a model-visible argument. "
-                    + "The canonical company search does not return a hard cap; the adapter applies "
-                    + "the supplied filters exactly as documented and orders results as persisted."
-    )
-    public String findCompanies(
-            @ToolParam(required = false, description = "Free-text search applied to company name and related fields.") String search,
-            @ToolParam(required = false, description = "Relationship state filter (exact EstadoRelacion name).") String estadoRelacion,
-            @ToolParam(required = false, description = "Sector filter (exact value).") String sector,
-            @ToolParam(required = false, description = "Responsible user UUID filter.") UUID responsableId,
-            @ToolParam(required = false, description = "Web filter; CON_WEB or SIN_WEB.") String web,
-            ToolContext toolContext
-    ) throws JsonProcessingException {
-        UUID trustedActor = requireActor(toolContext);
-        List<Empresa> companies = getAllEmpresasUseCase.getAll(
-                CrmToolMapper.toFindCompaniesCriteria(
-                        search, estadoRelacion, sector, responsableId, web,
-                        trustedActor));
-        FindCompaniesOutput output = CrmToolMapper.toFindCompaniesOutput(companies);
-        return objectMapper.writeValueAsString(output);
-    }
-
-    @Tool(
             name = "create_company",
             description = "Create a new company. "
                     + "The actor identity is trusted and is NOT a model-visible argument. "
@@ -239,9 +211,8 @@ public class SpringAiCrmTools {
             name = "edit_trato",
             description = "Edit an existing deal's editable business fields (name, estimated value, "
                     + "probability, expected close date, contract type, or responsible user). "
-                    + "The deal's stage (estado) and loss reason (motivoPerdida) are NOT changed by "
-                    + "this tool; closing a deal requires a dedicated follow-up flow outside this "
-                    + "tool's surface. "
+                    + "The deal's stage (estado) is NOT changed by this tool; closing a deal "
+                    + "requires a dedicated follow-up flow outside this tool's surface. "
                     + "The actor identity is trusted and is NOT a model-visible argument. "
                     + "responsableId is the deal's business responsible user (the editable field), "
                     + "NOT the authenticated actor; pass the user the deal should be reassigned to."

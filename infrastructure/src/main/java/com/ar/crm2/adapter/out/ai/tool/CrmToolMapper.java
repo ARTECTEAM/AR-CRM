@@ -5,14 +5,12 @@ import com.ar.crm2.adapter.out.ai.tool.dto.output.CreateContactOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditCompanyOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditContactOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditTratoOutput;
-import com.ar.crm2.adapter.out.ai.tool.dto.output.FindCompaniesOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.FindContactsOutput;
 import com.ar.crm2.application.contacto.command.CreateContactoCommand;
 import com.ar.crm2.application.contacto.command.EditContactoCommand;
 import com.ar.crm2.application.contacto.command.GetAllContactosCommand;
 import com.ar.crm2.application.empresa.command.CreateEmpresaCommand;
 import com.ar.crm2.application.empresa.command.EditEmpresaCommand;
-import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
 import com.ar.crm2.application.trato.command.EditTratoCommand;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.entity.Empresa;
@@ -28,7 +26,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Pure, deterministic mapper between the A3 annotation-driven tool
+ * Pure, deterministic mapper between the Spring AI 2.0 tool
  * DTOs and the existing Application use-case commands/output shapes.
  *
  * <p>The mapper is the single point where:
@@ -38,7 +36,6 @@ import java.util.UUID;
  *         ({@link GetAllContactosCommand},
  *         {@link CreateContactoCommand},
  *         {@link EditContactoCommand},
- *         {@link EmpresaFilterCriteria},
  *         {@link CreateEmpresaCommand},
  *         {@link EditEmpresaCommand}, and the canonical
  *         {@link EditTratoCommand}). The trusted actor identity is
@@ -48,10 +45,9 @@ import java.util.UUID;
  *     <li>Domain {@link Contacto} / {@link Empresa} / {@link Trato}
  *         entities become the bounded, safe {@link FindContactsOutput},
  *         {@link CreateContactOutput}, {@link EditContactOutput},
- *         {@link FindCompaniesOutput}, {@link CreateCompanyOutput},
- *         {@link EditCompanyOutput}, and {@link EditTratoOutput}
- *         records. No SQL, credentials, stack traces, or internal
- *         handles ever reach the model.</li>
+ *         {@link CreateCompanyOutput}, {@link EditCompanyOutput},
+ *         and {@link EditTratoOutput} records. No SQL, credentials,
+ *         stack traces, or internal handles ever reach the model.</li>
  * </ul>
  *
  * <p>The mapper enforces the {@code find_contacts = 20} hard cap and
@@ -162,9 +158,9 @@ public final class CrmToolMapper {
      * {@link EditTratoCommand} consumed by {@code EditTratoUseCase}.
      * Validates the {@code id} / {@code responsableId} / {@code nombre}
      * triple required by the contract and normalizes optional strings
-     * and the {@link TipoContrato} name. The deal's {@code estado} and
-     * {@code motivoPerdida} are intentionally absent from this tool —
-     * the canonical use case preserves them.
+     * and the {@link TipoContrato} name. The deal's {@code estado} is
+     * intentionally absent from this tool — the canonical use case
+     * preserves it.
      */
     public static EditTratoCommand toEditTratoCommand(
             UUID id, UUID responsableId, String nombre,
@@ -181,29 +177,6 @@ public final class CrmToolMapper {
         return new EditTratoCommand(
                 id, responsableId, trimmedNombre,
                 valorEstimado, probabilidad, fechaCierreEsperada, parsedTipoContrato);
-    }
-
-    /**
-     * Maps raw {@code find_companies} parameter values plus the trusted
-     * actor into the existing {@link EmpresaFilterCriteria}. The
-     * actor is required at the trust boundary but is intentionally not
-     * propagated into the criteria — the canonical company search
-     * contract does not accept an actor scope parameter. The mapper
-     * still validates the trusted actor so the tool fails closed when
-     * identity is missing.
-     */
-    public static EmpresaFilterCriteria toFindCompaniesCriteria(
-            String search, String estadoRelacion, String sector,
-            UUID responsableId, String web, UUID trustedActorUsuarioId) {
-        if (trustedActorUsuarioId == null) {
-            throw new IllegalArgumentException("trustedActorUsuarioId is required");
-        }
-        EstadoRelacion parsedEstado = parseEstadoRelacion(estadoRelacion, "find_companies");
-        EmpresaFilterCriteria.WebFilter parsedWeb = parseWebFilter(web);
-        return new EmpresaFilterCriteria(
-                trimToNull(search), parsedEstado, trimToNull(sector),
-                responsableId == null ? null : com.ar.crm2.model.vo.UsuarioId.from(responsableId),
-                parsedWeb);
     }
 
     /**
@@ -316,10 +289,10 @@ public final class CrmToolMapper {
 
     /**
      * Projects the {@code edit_trato} domain entity to the bounded
-     * model-visible output. The deal's {@code estado} and
-     * {@code motivoPerdida} are intentionally omitted because the
-     * canonical edit use case preserves them — surfacing them in the
-     * tool output would falsely imply the tool changed them.
+     * model-visible output. The deal's {@code estado} is intentionally
+     * omitted because the canonical edit use case preserves it —
+     * surfacing it in the tool output would falsely imply the tool
+     * changed it.
      */
     public static EditTratoOutput toEditTratoOutput(Trato trato) {
         if (trato == null) {
@@ -335,31 +308,6 @@ public final class CrmToolMapper {
                 fecha == null ? null : fecha.format(DateTimeFormatter.ISO_LOCAL_DATE),
                 trato.getTipoContrato() == null ? null : trato.getTipoContrato().name()
         );
-    }
-
-    /**
-     * Projects the {@code find_companies} domain result to the bounded
-     * model-visible output. Null or empty inputs map to an empty
-     * {@link FindCompaniesOutput}; internal fields are stripped.
-     */
-    public static FindCompaniesOutput toFindCompaniesOutput(List<Empresa> companies) {
-        if (companies == null || companies.isEmpty()) {
-            return new FindCompaniesOutput(List.of());
-        }
-        List<FindCompaniesOutput.CompanySummary> summaries = new ArrayList<>(companies.size());
-        for (Empresa company : companies) {
-            if (company == null) {
-                continue;
-            }
-            summaries.add(new FindCompaniesOutput.CompanySummary(
-                    String.valueOf(company.getId().value()),
-                    company.getNombre(),
-                    company.getSector(),
-                    company.getEstadoRelacion() == null ? null : company.getEstadoRelacion().name(),
-                    company.getResponsableId() == null ? null : String.valueOf(company.getResponsableId().value())
-            ));
-        }
-        return new FindCompaniesOutput(List.copyOf(summaries));
     }
 
     /**
@@ -426,19 +374,6 @@ public final class CrmToolMapper {
         } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException(
                     toolName + " estadoRelacion must equal an EstadoRelacion name, was: " + trimmed);
-        }
-    }
-
-    private static EmpresaFilterCriteria.WebFilter parseWebFilter(String value) {
-        String trimmed = trimToNull(value);
-        if (trimmed == null) {
-            return null;
-        }
-        try {
-            return EmpresaFilterCriteria.WebFilter.valueOf(trimmed);
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException(
-                    "find_companies web must equal a WebFilter name (CON_WEB or SIN_WEB), was: " + trimmed);
         }
     }
 

@@ -8,7 +8,6 @@ import com.ar.crm2.application.ficha.port.out.ExistsFichasByColumnaIdPort;
 import com.ar.crm2.application.ficha.port.out.FindAllFichasPort;
 import com.ar.crm2.application.ficha.port.out.FindFichaByIdPort;
 import com.ar.crm2.application.ficha.port.out.SaveFichaPort;
-import com.ar.crm2.application.ficha.query.FichaFilterCriteria;
 import com.ar.crm2.model.entity.Ficha;
 import com.ar.crm2.model.vo.ColumnaId;
 import com.ar.crm2.model.vo.FichaId;
@@ -33,25 +32,9 @@ public class FichaRepositoryAdapter
 
     @Override
     public List<Ficha> findAll() {
-        return findAll(FichaFilterCriteria.empty());
-    }
-
-    @Override
-    public List<Ficha> findAll(FichaFilterCriteria criteria) {
         return repository.findAll().stream()
             .map(FichaMapper::toDomain)
-            .filter(ficha -> matches(ficha, criteria))
             .toList();
-    }
-
-    private boolean matches(Ficha ficha, FichaFilterCriteria criteria) {
-        if (criteria == null) criteria = FichaFilterCriteria.empty();
-        if (criteria.tipoFicha() != null && ficha.getTipoFicha() != criteria.tipoFicha()) return false;
-        if (criteria.tratoId() != null && !criteria.tratoId().equals(ficha.getTratoId())) return false;
-        if (criteria.tareaId() != null && !criteria.tareaId().equals(ficha.getTareaId())) return false;
-        if (criteria.tratoIds() != null && !criteria.tratoIds().isEmpty() && !criteria.tratoIds().contains(ficha.getTratoId())) return false;
-        if (criteria.tareaIds() != null && !criteria.tareaIds().isEmpty() && !criteria.tareaIds().contains(ficha.getTareaId())) return false;
-        return true;
     }
 
     @Override

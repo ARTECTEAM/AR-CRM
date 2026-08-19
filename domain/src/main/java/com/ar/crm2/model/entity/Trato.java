@@ -41,7 +41,6 @@ public class Trato {
     private final LocalDate fechaCierreEsperada;
     private final TipoContrato tipoContrato;
     private final EstadoTrato estado;
-    private final String motivoPerdida;
     private final LocalDateTime creadoEn;
     private final LocalDateTime actualizadoEn;
 
@@ -75,25 +74,9 @@ public class Trato {
             fechaCierreEsperada,
             tipoContrato,
             EstadoTrato.ABIERTO,
-            null,
             LocalDateTime.now(),
             null
         );
-    }
-
-    /** Marca la oportunidad como ganada. */
-    public Trato ganar() {
-        return new Trato(id, contactoId, responsableId, nombre, valorEstimado, probabilidad,
-            fechaCierreEsperada, tipoContrato, EstadoTrato.GANADO, null, creadoEn, LocalDateTime.now());
-    }
-
-    /** Marca la oportunidad como perdida, con el motivo. */
-    public Trato perder(String motivo) {
-        DomainAssert.lengthBetween(motivo, "motivo", 1, 500);
-
-        return new Trato(id, contactoId, responsableId, nombre, valorEstimado, probabilidad,
-            fechaCierreEsperada, tipoContrato, EstadoTrato.PERDIDO,
-            motivo.trim(), creadoEn, LocalDateTime.now());
     }
 
     /**
@@ -109,7 +92,6 @@ public class Trato {
         LocalDate fechaCierreEsperada,
         TipoContrato tipoContrato,
         EstadoTrato estado,
-        String motivoPerdida,
         LocalDateTime creadoEn,
         LocalDateTime actualizadoEn
     ) {
@@ -129,7 +111,6 @@ public class Trato {
             fechaCierreEsperada,
             tipoContrato,
             estado != null ? estado : EstadoTrato.ABIERTO,
-            motivoPerdida,
             creadoEn,
             actualizadoEn
         );
