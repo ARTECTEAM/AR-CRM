@@ -4,8 +4,11 @@ import com.ar.crm2.application.columna.port.in.CreateColumnaUseCase;
 import com.ar.crm2.application.columna.port.in.EditColumnaUseCase;
 import com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase;
 import com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase;
+import com.ar.crm2.application.ficha.port.in.CreateFichaUseCase;
+import com.ar.crm2.application.ficha.port.in.EditFichaUseCase;
 import com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase;
 import com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase;
+import com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase;
 import com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase;
 import com.ar.crm2.application.tablero.port.in.CreateTableroUseCase;
 import com.ar.crm2.application.tablero.port.in.EditTableroUseCase;
@@ -52,6 +55,9 @@ public final class SpringAiDevelopmentCrmTools {
     private final EditColumnaUseCase editColumnaUseCase;
     private final GetAllFichasUseCase getAllFichasUseCase;
     private final GetFichaByIdUseCase getFichaByIdUseCase;
+    private final CreateFichaUseCase createFichaUseCase;
+    private final EditFichaUseCase editFichaUseCase;
+    private final MoverColumnaFichaUseCase moverColumnaFichaUseCase;
     @Tool(name = "list_tableros", description = "List CRM boards in stable ID order with bounded output. Actor context is trusted and implicit.")
     public TablerosOutput listTableros(ToolContext toolContext) {
         requireActor(toolContext);
@@ -160,6 +166,40 @@ public final class SpringAiDevelopmentCrmTools {
         requireActor(toolContext);
         return CrmToolMapper.toFichaOutput(
                 getFichaByIdUseCase.getById(CrmToolMapper.toGetFichaByIdCommand(id)));
+    }
+
+    @Tool(name = "create_ficha", description = "Create a CRM card. etiquetaIds is an optional initial complete label set.")
+    public FichaOutput createFicha(@ToolParam(description = "Column UUID.") UUID columnaId,
+            @ToolParam(description = "Card type (TipoFicha name).") String tipoFicha,
+            @ToolParam(required = false, description = "Deal UUID for TRATO cards.") UUID tratoId,
+            @ToolParam(required = false, description = "Task UUID for TAREA cards.") UUID tareaId,
+            @ToolParam(required = false, description = "Initial complete Etiqueta UUID set.") List<UUID> etiquetaIds,
+            ToolContext toolContext) {
+        requireActor(toolContext);
+        return CrmToolMapper.toFichaOutput(createFichaUseCase.create(
+                CrmToolMapper.toCreateFichaCommand(columnaId, tipoFicha, tratoId, tareaId, etiquetaIds)));
+    }
+
+    @Tool(name = "edit_ficha", description = "Edit a CRM card and replace its complete label set. etiquetaIds is required; [] clears all labels.")
+    public FichaOutput editFicha(@ToolParam(description = "Card UUID.") UUID id,
+            @ToolParam(description = "Column UUID.") UUID columnaId,
+            @ToolParam(description = "Card type (TipoFicha name).") String tipoFicha,
+            @ToolParam(required = false, description = "Deal UUID for TRATO cards.") UUID tratoId,
+            @ToolParam(required = false, description = "Task UUID for TAREA cards.") UUID tareaId,
+            @ToolParam(description = "Complete replacement Etiqueta UUID set; [] clears all labels.") List<UUID> etiquetaIds,
+            ToolContext toolContext) {
+        requireActor(toolContext);
+        return CrmToolMapper.toFichaOutput(editFichaUseCase.edit(
+                CrmToolMapper.toEditFichaCommand(id, columnaId, tipoFicha, tratoId, tareaId, etiquetaIds)));
+    }
+
+    @Tool(name = "move_ficha_to_columna", description = "Move a CRM card to another column. Actor context is implicit.")
+    public FichaOutput moveFichaToColumna(@ToolParam(description = "Card UUID.") UUID fichaId,
+            @ToolParam(description = "Target column UUID.") UUID targetColumnaId,
+            ToolContext toolContext) {
+        requireActor(toolContext);
+        return CrmToolMapper.toFichaOutput(moverColumnaFichaUseCase.moverAColumna(
+                CrmToolMapper.toMoverColumnaFichaCommand(fichaId, targetColumnaId)));
     }
 
     private static UUID requireActor(ToolContext toolContext) {
