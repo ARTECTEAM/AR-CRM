@@ -22,17 +22,25 @@ import java.util.UUID;
  *       ingress and is threaded unchanged through chat completion.</li>
  * </ul>
  *
- * <p>Both identity fields are validated for presence during
- * construction; the caller cannot omit either.
+ * <p>The actor subject and CRM user identity are required and validated
+ * during construction. The trusted super-user identity is a separate,
+ * optional claim and is never synthesized from the normal user identity.
  */
 public record CompleteUserTurnCommand(
         String actorSubject,
         UUID actorUsuarioId,
+        UUID actorSuperUsuarioId,
         UUID turnId,
         String opaqueHandle,
         String prompt,
         int visibleHistoryLimit
 ) {
+
+    public CompleteUserTurnCommand(
+            String actorSubject, UUID actorUsuarioId, UUID turnId, String opaqueHandle,
+            String prompt, int visibleHistoryLimit) {
+        this(actorSubject, actorUsuarioId, null, turnId, opaqueHandle, prompt, visibleHistoryLimit);
+    }
 
     public CompleteUserTurnCommand {
         actorSubject = ApplicationAssert.requiredTrimmed(actorSubject, "actorSubject");

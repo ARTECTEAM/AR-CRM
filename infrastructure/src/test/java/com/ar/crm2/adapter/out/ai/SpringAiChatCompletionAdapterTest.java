@@ -16,6 +16,7 @@ import org.springframework.ai.chat.model.Generation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -369,6 +370,21 @@ class SpringAiChatCompletionAdapterTest {
             assertThat(instruction.getText())
                     .doesNotContain(ACTOR_USUARIO_ID.toString());
         }
+    }
+
+    @Test
+    void trustedToolContextCarriesDistinctOptionalSuperUsuarioClaim() {
+        UUID superUsuarioId = UUID.fromString("11111111-2222-3333-4444-555555555555");
+
+        Map<String, Object> privileged = SpringAiChatCompletionAdapter.trustedToolContext(
+                OWNER, ACTOR_USUARIO_ID, superUsuarioId, TURN);
+        Map<String, Object> normal = SpringAiChatCompletionAdapter.trustedToolContext(
+                OWNER, ACTOR_USUARIO_ID, null, TURN);
+
+        assertThat(privileged).containsEntry("actorUsuarioId", ACTOR_USUARIO_ID)
+                .containsEntry("actorSuperUsuarioId", superUsuarioId);
+        assertThat(normal).containsEntry("actorUsuarioId", ACTOR_USUARIO_ID)
+                .doesNotContainKey("actorSuperUsuarioId");
     }
 
     @Test

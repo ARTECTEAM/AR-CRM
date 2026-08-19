@@ -24,6 +24,8 @@ class CompleteUserTurnServiceTest {
 
     private static final UUID ACTOR_USUARIO_ID =
             UUID.fromString("aaaaaaaa-1111-2222-3333-444444444444");
+    private static final UUID ACTOR_SUPER_USUARIO_ID =
+            UUID.fromString("bbbbbbbb-1111-2222-3333-444444444444");
 
     @Test
     void allowsDirectConstructionWithoutDependencyNullValidation() {
@@ -82,12 +84,14 @@ class CompleteUserTurnServiceTest {
         );
 
         String content = service.complete(new CompleteUserTurnCommand(
-                "owner-a", ACTOR_USUARIO_ID, turnId, "handle-a", "  current prompt  ", 7));
+                "owner-a", ACTOR_USUARIO_ID, ACTOR_SUPER_USUARIO_ID,
+                turnId, "handle-a", "  current prompt  ", 7));
 
         assertEquals("canonical converged output", content);
         assertEquals(1, chatCompletionPort.calls);
         assertEquals(AgentOwnerId.from("owner-a"), chatCompletionPort.ownerId);
         assertEquals(ACTOR_USUARIO_ID, chatCompletionPort.actorUsuarioId);
+        assertEquals(ACTOR_SUPER_USUARIO_ID, chatCompletionPort.actorSuperUsuarioId);
         assertEquals(TurnId.from(turnId), chatCompletionPort.turnId);
         assertEquals(orderedHistory, chatCompletionPort.visibleHistory);
         assertEquals(List.of("remember the customer timezone"), chatCompletionPort.durableMemories);
@@ -168,7 +172,7 @@ class CompleteUserTurnServiceTest {
                 (ownerId, turnId, opaqueHandle, maximumMessages) -> List.of(VisibleMessage.user("history")),
                 ownerId -> List.of("memory"),
                 completionPort,
-                (ownerId, actorUsuarioId, turnId, visibleHistory, durableMemories, prompt) -> {
+                (ownerId, actorUsuarioId, actorSuperUsuarioId, turnId, visibleHistory, durableMemories, prompt) -> {
                     throw new IllegalStateException("provider failed");
                 }
         );
@@ -327,6 +331,7 @@ class CompleteUserTurnServiceTest {
         private int calls;
         private AgentOwnerId ownerId;
         private UUID actorUsuarioId;
+        private UUID actorSuperUsuarioId;
         private TurnId turnId;
         private List<VisibleMessage> visibleHistory;
         private List<String> durableMemories;
@@ -340,6 +345,7 @@ class CompleteUserTurnServiceTest {
         public String complete(
                 AgentOwnerId ownerId,
                 UUID actorUsuarioId,
+                UUID actorSuperUsuarioId,
                 TurnId turnId,
                 List<VisibleMessage> visibleHistory,
                 List<String> durableMemories,
@@ -348,6 +354,7 @@ class CompleteUserTurnServiceTest {
             calls++;
             this.ownerId = ownerId;
             this.actorUsuarioId = actorUsuarioId;
+            this.actorSuperUsuarioId = actorSuperUsuarioId;
             this.turnId = turnId;
             this.visibleHistory = visibleHistory;
             this.durableMemories = durableMemories;

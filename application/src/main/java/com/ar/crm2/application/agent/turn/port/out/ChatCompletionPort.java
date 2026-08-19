@@ -31,6 +31,7 @@ public interface ChatCompletionPort {
     String complete(
             AgentOwnerId ownerId,
             UUID actorUsuarioId,
+            UUID actorSuperUsuarioId,
             TurnId turnId,
             List<VisibleMessage> visibleHistory,
             List<String> durableMemories,

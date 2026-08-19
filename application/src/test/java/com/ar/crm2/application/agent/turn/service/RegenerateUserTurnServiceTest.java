@@ -135,7 +135,7 @@ class RegenerateUserTurnServiceTest {
                 (ownerId, turnId, opaqueHandle) -> "original user content",
                 ownerId -> List.of("memory"),
                 completionPort,
-                (ownerId, actorUsuarioId, turnId, visibleHistory, durableMemories, prompt) -> {
+                (ownerId, actorUsuarioId, actorSuperUsuarioId, turnId, visibleHistory, durableMemories, prompt) -> {
                     throw new IllegalStateException("provider failed");
                 }
         );
@@ -218,6 +218,7 @@ class RegenerateUserTurnServiceTest {
         public String complete(
                 AgentOwnerId ownerId,
                 UUID actorUsuarioId,
+                UUID actorSuperUsuarioId,
                 TurnId turnId,
                 List<VisibleMessage> visibleHistory,
                 List<String> durableMemories,

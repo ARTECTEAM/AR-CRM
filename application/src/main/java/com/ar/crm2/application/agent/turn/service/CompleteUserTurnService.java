@@ -47,7 +47,8 @@ public class CompleteUserTurnService implements CompleteUserTurnUseCase {
                 ownerId, turnId, command.opaqueHandle(), command.visibleHistoryLimit());
         List<String> durableMemories = findEligibleDurableMemoriesPort.findEligibleDurableMemories(ownerId);
         String assistantContent = chatCompletionPort.complete(
-                ownerId, actorUsuarioId, turnId, visibleHistory, durableMemories, command.prompt());
+                ownerId, actorUsuarioId, command.actorSuperUsuarioId(), turnId,
+                visibleHistory, durableMemories, command.prompt());
         return completePreparedTurnPort.completePreparedTurn(ownerId, turnId, command.opaqueHandle(), assistantContent);
     }
 

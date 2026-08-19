@@ -274,7 +274,8 @@ class AgentConversationIT {
                     .filter(tool -> "find_contacts".equals(tool.getToolDefinition().name()))
                     .findFirst().orElseThrow();
         }
-        @Override public String complete(AgentOwnerId ownerId, UUID actorUsuarioId, TurnId turnId,
+        @Override public String complete(AgentOwnerId ownerId, UUID actorUsuarioId, UUID actorSuperUsuarioId,
+                TurnId turnId,
                 List<VisibleMessage> visibleHistory, List<String> durableMemories, String normalizedPrompt) {
             calls.incrementAndGet(); lastHistory = visibleHistory; lastMemories = durableMemories;
             ownerIds.add(ownerId.value());
