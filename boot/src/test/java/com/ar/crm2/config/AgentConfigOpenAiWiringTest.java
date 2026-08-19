@@ -2,8 +2,12 @@ package com.ar.crm2.config;
 
 import com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
+import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
-import com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase;
+import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
+import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
+import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
+import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.config.testing.CapturingChatModel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -55,7 +59,11 @@ class AgentConfigOpenAiWiringTest {
             return new SpringAiCrmTools(
                     mock(GetAllContactosUseCase.class),
                     mock(CreateContactoUseCase.class),
-                    mock(AgentCrmWriteUseCase.class),
+                    mock(EditContactoUseCase.class),
+                    mock(GetAllEmpresasUseCase.class),
+                    mock(CreateEmpresaUseCase.class),
+                    mock(EditEmpresaUseCase.class),
+                    mock(EditTratoUseCase.class),
                     new ObjectMapper());
         }
     }
@@ -165,7 +173,15 @@ class AgentConfigOpenAiWiringTest {
                     .as("the shared tools must be advertised through the configured ChatClient")
                     .contains("find_contacts")
                     .contains("create_contact")
-                    .contains("update_deal_stage");
+                    .contains("edit_contact")
+                    .contains("find_companies")
+                    .contains("create_company")
+                    .contains("edit_company")
+                    .contains("edit_trato");
+            assertThat(systemText)
+                    .as("no company-delete tool must be advertised")
+                    .doesNotContain("delete_company")
+                    .doesNotContain("delete_empresa");
         }
     }
 

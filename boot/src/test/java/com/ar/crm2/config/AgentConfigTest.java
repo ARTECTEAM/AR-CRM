@@ -2,8 +2,12 @@ package com.ar.crm2.config;
 
 import com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
+import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
-import com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase;
+import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
+import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
+import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
+import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.config.testing.CapturingChatModel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -41,7 +45,11 @@ class AgentConfigTest {
         return new SpringAiCrmTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
-                mock(AgentCrmWriteUseCase.class),
+                mock(EditContactoUseCase.class),
+                mock(GetAllEmpresasUseCase.class),
+                mock(CreateEmpresaUseCase.class),
+                mock(EditEmpresaUseCase.class),
+                mock(EditTratoUseCase.class),
                 new ObjectMapper());
     }
 
@@ -153,7 +161,7 @@ class AgentConfigTest {
     }
 
     @Test
-    void defaultSystemTemplateIsScopedToExistingPipelyCrmBehaviorAndReferencesTheThreeAllowlistedTools() {
+    void defaultSystemTemplateIsScopedToExistingPipelyCrmBehaviorAndReferencesAllAllowlistedTools() {
         CapturingChatModel model = new CapturingChatModel("ok");
         ChatClient configured = new AgentConfig().chatClient(model, newNoopTools());
 
@@ -169,10 +177,14 @@ class AgentConfigTest {
                 .as("template names the Pipely CRM context")
                 .contains("Pipely CRM");
         assertThat(text)
-                .as("template references the three allowlisted tool names")
+                .as("template references every allowlisted tool name")
                 .contains("find_contacts")
                 .contains("create_contact")
-                .contains("update_deal_stage");
+                .contains("edit_contact")
+                .contains("find_companies")
+                .contains("create_company")
+                .contains("edit_company")
+                .contains("edit_trato");
         assertThat(text)
                 .as("template forbids the model from supplying actor identity")
                 .containsIgnoringCase("actor");
@@ -183,6 +195,10 @@ class AgentConfigTest {
         assertThat(text)
                 .as("template mentions the durable memory placeholder")
                 .containsIgnoringCase("durable memory");
+        assertThat(text)
+                .as("company deletion is intentionally not advertised")
+                .doesNotContain("delete_company")
+                .doesNotContain("delete_empresa");
     }
 
     @Test
@@ -262,10 +278,14 @@ class AgentConfigTest {
 
         String renderedSystem = model.capturedPrompt().getInstructions().get(0).getText();
         assertThat(renderedSystem)
-                .as("the configured client must advertise all three allowlisted tools by name")
+                .as("the configured client must advertise all seven allowlisted tools by name")
                 .contains("find_contacts")
                 .contains("create_contact")
-                .contains("update_deal_stage");
+                .contains("edit_contact")
+                .contains("find_companies")
+                .contains("create_company")
+                .contains("edit_company")
+                .contains("edit_trato");
 
         // The shared tools object must be reusable across ChatClient
         // builds — the same shared instance produces the same callback
@@ -278,8 +298,11 @@ class AgentConfigTest {
             names.add(callback.getToolDefinition().name());
         }
         assertThat(names)
-                .as("the shared SpringAiCrmTools bean must produce exactly three allowlisted callbacks")
-                .containsExactlyInAnyOrder("find_contacts", "create_contact", "update_deal_stage");
+                .as("the shared SpringAiCrmTools bean must produce exactly seven allowlisted callbacks")
+                .containsExactlyInAnyOrder(
+                        "find_contacts", "create_contact", "edit_contact",
+                        "find_companies", "create_company", "edit_company",
+                        "edit_trato");
     }
 
     private static Method findChatClientFactoryMethod() {

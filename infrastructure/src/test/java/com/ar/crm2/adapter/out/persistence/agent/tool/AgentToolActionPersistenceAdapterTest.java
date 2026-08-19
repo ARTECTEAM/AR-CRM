@@ -71,8 +71,8 @@ class AgentToolActionPersistenceAdapterTest {
     void roundTripsEveryFieldAndKeepsLookupOwnerScoped() {
         AgentOwnerId owner = AgentOwnerId.from("owner-a");
         TurnId turn = turn("11111111-1111-1111-1111-111111111111");
-        AgentToolAction pending = pending(owner, turn, AgentToolName.UPDATE_DEAL_STAGE,
-                "{\"dealId\":\"42\",\"status\":\"GANADO\"}", CREATED_AT);
+        AgentToolAction pending = pending(owner, turn, AgentToolName.EDIT_TRATO,
+                "{\"id\":\"42\",\"responsableId\":\"77\",\"nombre\":\"Renamed Deal\"}", CREATED_AT);
 
         adapter.save(pending);
         AgentToolAction completed = adapter.markCompleted(owner, pending.getId(),
@@ -82,7 +82,7 @@ class AgentToolActionPersistenceAdapterTest {
         assertThat(found.getId()).isEqualTo(pending.getId());
         assertThat(found.getOwnerId()).isEqualTo(owner);
         assertThat(found.getTurnId()).isEqualTo(turn);
-        assertThat(found.getToolName()).isEqualTo(AgentToolName.UPDATE_DEAL_STAGE);
+        assertThat(found.getToolName()).isEqualTo(AgentToolName.EDIT_TRATO);
         assertThat(found.getCanonicalArguments()).isEqualTo(pending.getCanonicalArguments());
         assertThat(found.getStatus()).isEqualTo(AgentToolActionStatus.COMPLETED);
         assertThat(found.getResource()).isEqualTo(new AgentToolResource("trato", "42"));
@@ -251,14 +251,14 @@ class AgentToolActionPersistenceAdapterTest {
     void persistsCanonicalToolNameAndReconstitutesItFromTheDatabase() {
         AgentOwnerId owner = AgentOwnerId.from("owner-a");
         AgentToolAction pending = pending(owner, turn("88888888-8888-8888-8888-888888888888"),
-                AgentToolName.UPDATE_DEAL_STAGE, "{\"status\":\"GANADO\"}", CREATED_AT);
+                AgentToolName.EDIT_TRATO, "{\"id\":\"42\",\"nombre\":\"Renamed Deal\"}", CREATED_AT);
         adapter.save(pending);
 
         AgentToolActionEntity stored = repository.findById(pending.getId().value()).orElseThrow();
         AgentToolAction roundTripped = adapter.findByOwnerAndId(owner, pending.getId()).orElseThrow();
 
-        assertThat(stored.getToolName()).isEqualTo(AgentToolName.UPDATE_DEAL_STAGE.storageName());
-        assertThat(roundTripped.getToolName()).isEqualTo(AgentToolName.UPDATE_DEAL_STAGE);
+        assertThat(stored.getToolName()).isEqualTo(AgentToolName.EDIT_TRATO.storageName());
+        assertThat(roundTripped.getToolName()).isEqualTo(AgentToolName.EDIT_TRATO);
     }
 
     @Test

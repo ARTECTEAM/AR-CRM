@@ -98,7 +98,6 @@ class AgentConversationWiringTest {
     @Autowired private ReplaceDurableMemoryUseCase replaceDurableMemoryUseCase;
     @Autowired private DeleteDurableMemoryUseCase deleteDurableMemoryUseCase;
     @Autowired private PurgeDurableMemoriesUseCase purgeDurableMemoriesUseCase;
-    @Autowired private com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase agentCrmWriteUseCase;
     @Autowired private ApplicationContext applicationContext;
 
     /**
@@ -277,18 +276,136 @@ class AgentConversationWiringTest {
     /**
      * C1 corrective wiring proof: the composition root must expose
      * exactly one {@link
-     * com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase}
-     * bean implemented by the deal-authorizing
-     * {@link com.ar.crm2.application.agent.tool.service.AgentCrmWriteService}.
+     * com.ar.crm2.application.trato.port.in.EditTratoUseCase}
+     * bean implemented by the canonical
+     * {@link com.ar.crm2.application.trato.service.EditTratoService}
+     * backing the {@code edit_trato} Spring AI tool.
      */
     @Test
-    void agentCrmWriteUseCase_isWiredAsAgentCrmWriteServiceAndExposedOnce() {
-        assertThat(agentCrmWriteUseCase)
-                .as("AgentCrmWriteUseCase must be wired as an AgentCrmWriteService instance")
-                .isInstanceOf(com.ar.crm2.application.agent.tool.service.AgentCrmWriteService.class);
+    void editTratoUseCase_isWiredAsEditTratoServiceAndExposedOnce() {
+        com.ar.crm2.application.trato.port.in.EditTratoUseCase editTratoUseCase =
+                applicationContext.getBean(
+                        com.ar.crm2.application.trato.port.in.EditTratoUseCase.class);
+        assertThat(editTratoUseCase)
+                .as("EditTratoUseCase must be wired as an EditTratoService instance")
+                .isInstanceOf(com.ar.crm2.application.trato.service.EditTratoService.class);
         assertSingleBean(
-                com.ar.crm2.application.agent.tool.port.in.AgentCrmWriteUseCase.class,
-                agentCrmWriteUseCase);
+                com.ar.crm2.application.trato.port.in.EditTratoUseCase.class,
+                editTratoUseCase);
+    }
+
+    /**
+     * Wiring proof for the {@code edit_contact} Spring AI tool: the
+     * composition root must expose exactly one
+     * {@link com.ar.crm2.application.contacto.port.in.EditContactoUseCase}
+     * bean implemented by the canonical
+     * {@link com.ar.crm2.application.contacto.service.EditContactoService}.
+     */
+    @Test
+    void editContactoUseCase_isWiredAsEditContactoServiceAndExposedOnce() {
+        com.ar.crm2.application.contacto.port.in.EditContactoUseCase editContactoUseCase =
+                applicationContext.getBean(
+                        com.ar.crm2.application.contacto.port.in.EditContactoUseCase.class);
+        assertThat(editContactoUseCase)
+                .as("EditContactoUseCase must be wired as an EditContactoService instance")
+                .isInstanceOf(com.ar.crm2.application.contacto.service.EditContactoService.class);
+        assertSingleBean(
+                com.ar.crm2.application.contacto.port.in.EditContactoUseCase.class,
+                editContactoUseCase);
+    }
+
+    /**
+     * Wiring proof for the {@code find_companies} Spring AI tool: the
+     * composition root must expose exactly one
+     * {@link com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase}
+     * bean implemented by the canonical
+     * {@link com.ar.crm2.application.empresa.service.GetAllEmpresasService}.
+     */
+    @Test
+    void getAllEmpresasUseCase_isWiredAsGetAllEmpresasServiceAndExposedOnce() {
+        com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase getAllEmpresasUseCase =
+                applicationContext.getBean(
+                        com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class);
+        assertThat(getAllEmpresasUseCase)
+                .as("GetAllEmpresasUseCase must be wired as a GetAllEmpresasService instance")
+                .isInstanceOf(com.ar.crm2.application.empresa.service.GetAllEmpresasService.class);
+        assertSingleBean(
+                com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class,
+                getAllEmpresasUseCase);
+    }
+
+    /**
+     * Wiring proof for the {@code create_company} Spring AI tool: the
+     * composition root must expose exactly one
+     * {@link com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase}
+     * bean implemented by the canonical
+     * {@link com.ar.crm2.application.empresa.service.CreateEmpresaService}.
+     */
+    @Test
+    void createEmpresaUseCase_isWiredAsCreateEmpresaServiceAndExposedOnce() {
+        com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase createEmpresaUseCase =
+                applicationContext.getBean(
+                        com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase.class);
+        assertThat(createEmpresaUseCase)
+                .as("CreateEmpresaUseCase must be wired as a CreateEmpresaService instance")
+                .isInstanceOf(com.ar.crm2.application.empresa.service.CreateEmpresaService.class);
+        assertSingleBean(
+                com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase.class,
+                createEmpresaUseCase);
+    }
+
+    /**
+     * Wiring proof for the {@code edit_company} Spring AI tool: the
+     * composition root must expose exactly one
+     * {@link com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase}
+     * bean implemented by the canonical
+     * {@link com.ar.crm2.application.empresa.service.EditEmpresaService}.
+     */
+    @Test
+    void editEmpresaUseCase_isWiredAsEditEmpresaServiceAndExposedOnce() {
+        com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase editEmpresaUseCase =
+                applicationContext.getBean(
+                        com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase.class);
+        assertThat(editEmpresaUseCase)
+                .as("EditEmpresaUseCase must be wired as an EditEmpresaService instance")
+                .isInstanceOf(com.ar.crm2.application.empresa.service.EditEmpresaService.class);
+        assertSingleBean(
+                com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase.class,
+                editEmpresaUseCase);
+    }
+
+    /**
+     * Defence-in-depth wiring proof: the shared {@code SpringAiCrmTools}
+     * bean MUST NOT take any delete-company use case as a constructor
+     * dependency. The REST controllers may still wire a
+     * {@code DeleteEmpresaUseCase} for the HTTP surface, but the
+     * Spring AI tools bean must remain a thin adapter over the
+     * allowlisted canonical use cases — exposing a delete-company
+     * tool would silently let the agent destroy company records.
+     *
+     * <p>This test reflects on the {@code SpringAiCrmTools}
+     * constructor's parameter types and asserts that none of them
+     * matches {@code DeleteEmpresaUseCase} or {@code DeleteContactoUseCase}.
+     */
+    @Test
+    void springAiCrmToolsConstructorDoesNotInjectAnyDeleteUseCase() {
+        java.lang.reflect.Constructor<?>[] constructors =
+                com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools.class.getDeclaredConstructors();
+        assertThat(constructors)
+                .as("SpringAiCrmTools must expose exactly one constructor")
+                .hasSize(1);
+        Class<?>[] parameterTypes = constructors[0].getParameterTypes();
+        for (Class<?> type : parameterTypes) {
+            assertThat(type.getSimpleName())
+                    .as("SpringAiCrmTools constructor must NOT depend on any Delete*UseCase")
+                    .doesNotStartWith("Delete");
+            assertThat(type)
+                    .as("SpringAiCrmTools constructor must NOT depend on DeleteEmpresaUseCase")
+                    .isNotEqualTo(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class);
+            assertThat(type)
+                    .as("SpringAiCrmTools constructor must NOT depend on DeleteContactoUseCase")
+                    .isNotEqualTo(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class);
+        }
     }
 
     private void assertSingleBean(Class<?> type, Object expected) {

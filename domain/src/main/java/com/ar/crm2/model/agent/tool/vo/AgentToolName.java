@@ -12,7 +12,11 @@ public enum AgentToolName {
 
     FIND_CONTACTS("find_contacts"),
     CREATE_CONTACT("create_contact"),
-    UPDATE_DEAL_STAGE("update_deal_stage");
+    EDIT_CONTACT("edit_contact"),
+    FIND_COMPANIES("find_companies"),
+    CREATE_COMPANY("create_company"),
+    EDIT_COMPANY("edit_company"),
+    EDIT_TRATO("edit_trato");
 
     private final String storageName;
 

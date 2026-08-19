@@ -13,7 +13,6 @@ import com.ar.crm2.application.notatrato.port.in.GetNotasByTratoUseCase;
 import com.ar.crm2.application.security.ActorContext;
 import com.ar.crm2.security.ActorContextRequestAttributeFilter;
 import com.ar.crm2.adapter.in.rest.dto.response.NotaTratoResponse;
-import com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase;
 import com.ar.crm2.application.trato.port.in.CreateTratoUseCase;
 import com.ar.crm2.application.trato.port.in.DeleteTratoUseCase;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
@@ -57,7 +56,6 @@ public class TratoController {
     private final GetTratoByIdUseCase getByIdUseCase;
     private final EditTratoUseCase editUseCase;
     private final DeleteTratoUseCase deleteUseCase;
-    private final CambiarEstadoTratoUseCase cambiarEstadoUseCase;
     private final CrearNotaTratoUseCase crearNotaUseCase;
     private final GetNotasByTratoUseCase getNotasUseCase;
 
@@ -141,24 +139,7 @@ public class TratoController {
         return ResponseEntity.ok(TratoResponse.fromDomain(trato));
     }
 
-    /** Marca la oportunidad como ganada. */
-    @PutMapping("/ganar")
-    public ResponseEntity<TratoResponse> ganar(@RequestParam UUID id) {
-        return ResponseEntity.ok(TratoResponse.fromDomain(cambiarEstadoUseCase.ganar(id)));
-    }
 
-    /** Marca la oportunidad como perdida, con motivo. */
-    @PutMapping("/perder")
-    public ResponseEntity<TratoResponse> perder(@RequestParam UUID id, @Valid @RequestBody PerderTratoRequest request) {
-        return ResponseEntity.ok(TratoResponse.fromDomain(cambiarEstadoUseCase.perder(id, request.motivo())));
-    }
-
-    /** Lista las notas/eventos del timeline de un trato (más recientes primero). */
-    @GetMapping("/notas/get-all")
-    public ResponseEntity<List<NotaTratoResponse>> getNotas(@RequestParam UUID tratoId) {
-        return ResponseEntity.ok(
-            getNotasUseCase.getByTrato(tratoId).stream().map(NotaTratoResponse::fromDomain).toList());
-    }
 
     /** Crea una nota manual en el trato (autor = usuario del JWT). */
     @PostMapping("/notas/create")

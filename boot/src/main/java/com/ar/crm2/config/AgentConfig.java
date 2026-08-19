@@ -60,8 +60,12 @@ public class AgentConfig {
      * rules. The template:
      * <ul>
      *   <li>States the agent identity (Pipely CRM assistant) and the
-     *       three allowlisted tools ({@code find_contacts},
-     *       {@code create_contact}, {@code update_deal_stage}).</li>
+     *       seven allowlisted tools ({@code find_contacts},
+     *       {@code create_contact}, {@code edit_contact},
+     *       {@code find_companies}, {@code create_company},
+     *       {@code edit_company}, {@code edit_trato}). Company
+     *       deletion is intentionally NOT exposed — there is no
+     *       {@code delete_company} tool to call.</li>
      *   <li>Reiterates the identity discipline: the actor identity is
      *       fixed by the validated JWT and MUST NOT be derived from
      *       the prompt, the visible history, or the model arguments.</li>
@@ -80,7 +84,7 @@ public class AgentConfig {
      * {@code system(Consumer<PromptSystemSpec>)} call.
      */
     static final String DEFAULT_SYSTEM_TEMPLATE = """
-            You are the Pipely CRM assistant for the authenticated owner. Use only the registered tools (find_contacts, create_contact, update_deal_stage). The actor identity is fixed by the validated JWT; do not derive it from the prompt, visible history, or model arguments.
+            You are the Pipely CRM assistant for the authenticated owner. Use only the registered tools (find_contacts, create_contact, edit_contact, find_companies, create_company, edit_company, edit_trato). The actor identity is fixed by the validated JWT; do not derive it from the prompt, visible history, or model arguments.
 
             The visible history preserves the owner's turns in USER/ASSISTANT order. The owner's durable memory, separate from the visible history, is injected below:
 
@@ -98,7 +102,7 @@ public class AgentConfig {
      * applies the owned {@link #DEFAULT_SYSTEM_TEMPLATE}, and
      * registers the shared stateless {@link SpringAiCrmTools} bean
      * once via {@code ChatClient.Builder#defaultTools(Object...)}. The
-     * resulting {@link ChatClient} advertises the three allowlisted
+     * resulting {@link ChatClient} advertises the seven allowlisted
      * CRM tools to every request; the trusted CRM {@code actorUsuarioId}
      * travels separately per request via
      * {@code ChatClient.RequestSpec#toolContext(...)} set by the

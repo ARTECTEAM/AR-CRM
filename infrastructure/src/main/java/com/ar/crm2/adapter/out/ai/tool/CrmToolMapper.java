@@ -1,15 +1,28 @@
 package com.ar.crm2.adapter.out.ai.tool;
 
+import com.ar.crm2.adapter.out.ai.tool.dto.output.CreateCompanyOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.CreateContactOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.EditCompanyOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.EditContactOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.EditTratoOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.FindCompaniesOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.FindContactsOutput;
-import com.ar.crm2.adapter.out.ai.tool.dto.output.UpdateDealStageOutput;
 import com.ar.crm2.application.contacto.command.CreateContactoCommand;
+import com.ar.crm2.application.contacto.command.EditContactoCommand;
 import com.ar.crm2.application.contacto.command.GetAllContactosCommand;
+import com.ar.crm2.application.empresa.command.CreateEmpresaCommand;
+import com.ar.crm2.application.empresa.command.EditEmpresaCommand;
+import com.ar.crm2.application.empresa.query.EmpresaFilterCriteria;
+import com.ar.crm2.application.trato.command.EditTratoCommand;
 import com.ar.crm2.model.entity.Contacto;
+import com.ar.crm2.model.entity.Empresa;
 import com.ar.crm2.model.entity.Trato;
 import com.ar.crm2.model.enums.EstadoRelacion;
-import com.ar.crm2.model.enums.EstadoTrato;
+import com.ar.crm2.model.enums.TipoContrato;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -22,23 +35,28 @@ import java.util.UUID;
  * <ul>
  *     <li>Raw tool parameter values plus the trusted actor map into
  *         the existing Application command objects
- *         ({@link GetAllContactosCommand} and
- *         {@link CreateContactoCommand}) and into the typed
- *         {@code CambiarEstadoTratoUseCase} argument tuple. The
- *         trusted actor/owner identity is threaded from the caller
- *         (the {@code ToolContext}-resolved server-side UUID) —
- *         never from the model.</li>
- *     <li>Domain {@link Contacto} / {@link Trato} entities become the
- *         bounded, safe {@link FindContactsOutput},
- *         {@link CreateContactOutput}, and
- *         {@link UpdateDealStageOutput} records. No SQL, credentials,
- *         stack traces, or internal handles ever reach the model.</li>
+ *         ({@link GetAllContactosCommand},
+ *         {@link CreateContactoCommand},
+ *         {@link EditContactoCommand},
+ *         {@link EmpresaFilterCriteria},
+ *         {@link CreateEmpresaCommand},
+ *         {@link EditEmpresaCommand}, and the canonical
+ *         {@link EditTratoCommand}). The trusted actor identity is
+ *         threaded from the caller (the
+ *         {@code ToolContext}-resolved server-side UUID) — never from
+ *         the model.</li>
+ *     <li>Domain {@link Contacto} / {@link Empresa} / {@link Trato}
+ *         entities become the bounded, safe {@link FindContactsOutput},
+ *         {@link CreateContactOutput}, {@link EditContactOutput},
+ *         {@link FindCompaniesOutput}, {@link CreateCompanyOutput},
+ *         {@link EditCompanyOutput}, and {@link EditTratoOutput}
+ *         records. No SQL, credentials, stack traces, or internal
+ *         handles ever reach the model.</li>
  * </ul>
  *
- * <p>The mapper also enforces the
- * {@code find_contacts = 20} hard cap and the {@code PERDIDO}
- * requires {@code motivo} rule at the trust boundary, before any
- * use case is invoked.
+ * <p>The mapper enforces the {@code find_contacts = 20} hard cap and
+ * every other tool's required-field rules at the trust boundary,
+ * before any use case is invoked.
  */
 public final class CrmToolMapper {
 
@@ -104,28 +122,134 @@ public final class CrmToolMapper {
     }
 
     /**
-     * Maps raw {@code update_deal_stage} parameter values into the
-     * typed tuple consumed by the existing
-     * {@code CambiarEstadoTratoUseCase}. Validates deal id, status
-     * membership (only {@code GANADO} or {@code PERDIDO}), and the
-     * {@code motivo} requirement for {@code PERDIDO}.
+     * Maps raw {@code edit_contact} parameter values into the
+     * canonical {@link EditContactoCommand} consumed by
+     * {@code EditContactoUseCase}. Validates required fields and
+     * normalizes optional strings and the {@link EstadoRelacion}
+     * name. {@code creadoPor} is intentionally absent from this tool
+     * — the canonical use case preserves the original creator.
+     *
+     * <p>The {@code estadoRelacion} argument is required and
+     * non-blank, mirroring the REST {@code EditContactoRequest} bean
+     * validation and the Domain {@code Contacto.reconstitute} null
+     * assertion. Surfacing the requirement at the trust boundary
+     * fails closed before the use case can throw a domain-level
+     * exception.
      */
-    public static UpdateDealStageArguments toUpdateDealStageArguments(
-            UUID id, String status, String motivo) {
+    public static EditContactoCommand toEditContactoCommand(
+            UUID id, String nombre, String correo, String estadoRelacion,
+            UUID responsableId, String telefono, String cargo, String comoNosConocio) {
         if (id == null) {
-            throw new IllegalArgumentException("update_deal_stage requires id");
+            throw new IllegalArgumentException("edit_contact requires id");
         }
-        String trimmedStatus = requireNonBlank(status, "update_deal_stage requires status");
-        if (!"GANADO".equals(trimmedStatus) && !"PERDIDO".equals(trimmedStatus)) {
+        String trimmedNombre = requireNonBlank(nombre, "edit_contact requires nombre");
+        String trimmedEstado = requireNonBlank(estadoRelacion, "edit_contact requires estadoRelacion");
+        EstadoRelacion parsedEstado;
+        try {
+            parsedEstado = EstadoRelacion.valueOf(trimmedEstado);
+        } catch (IllegalArgumentException ex) {
             throw new IllegalArgumentException(
-                    "update_deal_stage status must be GANADO or PERDIDO, was: " + trimmedStatus);
+                    "edit_contact estadoRelacion must equal an EstadoRelacion name, was: "
+                            + trimmedEstado);
         }
-        String trimmedMotivo = trimToNull(motivo);
-        if ("PERDIDO".equals(trimmedStatus) && trimmedMotivo == null) {
-            throw new IllegalArgumentException(
-                    "update_deal_stage requires motivo when status is PERDIDO");
+        return new EditContactoCommand(
+                id, trimmedNombre, trimToNull(correo), parsedEstado,
+                responsableId, trimToNull(telefono), trimToNull(cargo), trimToNull(comoNosConocio));
+    }
+
+    /**
+     * Maps raw {@code edit_trato} parameter values into the canonical
+     * {@link EditTratoCommand} consumed by {@code EditTratoUseCase}.
+     * Validates the {@code id} / {@code responsableId} / {@code nombre}
+     * triple required by the contract and normalizes optional strings
+     * and the {@link TipoContrato} name. The deal's {@code estado} and
+     * {@code motivoPerdida} are intentionally absent from this tool —
+     * the canonical use case preserves them.
+     */
+    public static EditTratoCommand toEditTratoCommand(
+            UUID id, UUID responsableId, String nombre,
+            BigDecimal valorEstimado, Integer probabilidad,
+            LocalDate fechaCierreEsperada, String tipoContrato) {
+        if (id == null) {
+            throw new IllegalArgumentException("edit_trato requires id");
         }
-        return new UpdateDealStageArguments(id, trimmedStatus, trimmedMotivo);
+        if (responsableId == null) {
+            throw new IllegalArgumentException("edit_trato requires responsableId");
+        }
+        String trimmedNombre = requireNonBlank(nombre, "edit_trato requires nombre");
+        TipoContrato parsedTipoContrato = parseTipoContrato(tipoContrato);
+        return new EditTratoCommand(
+                id, responsableId, trimmedNombre,
+                valorEstimado, probabilidad, fechaCierreEsperada, parsedTipoContrato);
+    }
+
+    /**
+     * Maps raw {@code find_companies} parameter values plus the trusted
+     * actor into the existing {@link EmpresaFilterCriteria}. The
+     * actor is required at the trust boundary but is intentionally not
+     * propagated into the criteria — the canonical company search
+     * contract does not accept an actor scope parameter. The mapper
+     * still validates the trusted actor so the tool fails closed when
+     * identity is missing.
+     */
+    public static EmpresaFilterCriteria toFindCompaniesCriteria(
+            String search, String estadoRelacion, String sector,
+            UUID responsableId, String web, UUID trustedActorUsuarioId) {
+        if (trustedActorUsuarioId == null) {
+            throw new IllegalArgumentException("trustedActorUsuarioId is required");
+        }
+        EstadoRelacion parsedEstado = parseEstadoRelacion(estadoRelacion, "find_companies");
+        EmpresaFilterCriteria.WebFilter parsedWeb = parseWebFilter(web);
+        return new EmpresaFilterCriteria(
+                trimToNull(search), parsedEstado, trimToNull(sector),
+                responsableId == null ? null : com.ar.crm2.model.vo.UsuarioId.from(responsableId),
+                parsedWeb);
+    }
+
+    /**
+     * Maps raw {@code create_company} parameter values plus the
+     * trusted actor into the existing {@link CreateEmpresaCommand}.
+     * Validates required fields and the {@link EstadoRelacion} name
+     * before the use case runs. The trusted actor becomes
+     * {@code creadoPor} on the canonical command.
+     */
+    public static CreateEmpresaCommand toCreateEmpresaCommand(
+            String nombre, String sector, String telefono, String paginaWeb,
+            String facebook, String instagram, String twitter,
+            String estadoRelacion, UUID responsableId, String notas,
+            UUID trustedActorUsuarioId) {
+        if (trustedActorUsuarioId == null) {
+            throw new IllegalArgumentException("trustedActorUsuarioId is required");
+        }
+        String trimmedNombre = requireNonBlank(nombre, "create_company requires nombre");
+        EstadoRelacion parsedEstado = parseEstadoRelacion(estadoRelacion, "create_company");
+        return new CreateEmpresaCommand(
+                trimmedNombre, trimToNull(sector), trimToNull(telefono), trimToNull(paginaWeb),
+                trimToNull(facebook), trimToNull(instagram), trimToNull(twitter),
+                parsedEstado, responsableId, trustedActorUsuarioId, trimToNull(notas));
+    }
+
+    /**
+     * Maps raw {@code edit_company} parameter values into the
+     * canonical {@link EditEmpresaCommand} consumed by
+     * {@code EditEmpresaUseCase}. Validates required fields and
+     * normalizes optional strings and the {@link EstadoRelacion}
+     * name. {@code creadoPor} is intentionally absent from this tool
+     * — the canonical use case preserves the original creator.
+     */
+    public static EditEmpresaCommand toEditEmpresaCommand(
+            UUID id, String nombre, String sector, String telefono, String paginaWeb,
+            String facebook, String instagram, String twitter,
+            String estadoRelacion, UUID responsableId, String notas) {
+        if (id == null) {
+            throw new IllegalArgumentException("edit_company requires id");
+        }
+        String trimmedNombre = requireNonBlank(nombre, "edit_company requires nombre");
+        EstadoRelacion parsedEstado = parseEstadoRelacion(estadoRelacion, "edit_company");
+        return new EditEmpresaCommand(
+                id, trimmedNombre, trimToNull(sector), trimToNull(telefono), trimToNull(paginaWeb),
+                trimToNull(facebook), trimToNull(instagram), trimToNull(twitter),
+                parsedEstado, responsableId, trimToNull(notas));
     }
 
     // ── entity → output ─────────────────────────────────────────────
@@ -171,17 +295,108 @@ public final class CrmToolMapper {
     }
 
     /**
-     * Projects the {@code update_deal_stage} domain entity to the
-     * bounded model-visible output. Internal fields are stripped.
+     * Projects the {@code edit_contact} domain entity to the bounded
+     * model-visible output. Internal fields are stripped.
      */
-    public static UpdateDealStageOutput toUpdateDealStageOutput(Trato trato) {
-        if (trato == null) {
-            return new UpdateDealStageOutput(null, null);
+    public static EditContactOutput toEditContactOutput(Contacto contact) {
+        if (contact == null) {
+            return new EditContactOutput(null, null, null, null, null, null, null, null);
         }
-        EstadoTrato estado = trato.getEstado();
-        return new UpdateDealStageOutput(
+        return new EditContactOutput(
+                String.valueOf(contact.getId().value()),
+                contact.getNombre(),
+                contact.getCorreo(),
+                contact.getEstadoRelacion() == null ? null : contact.getEstadoRelacion().name(),
+                contact.getResponsableId() == null ? null : String.valueOf(contact.getResponsableId().value()),
+                contact.getTelefono(),
+                contact.getCargo(),
+                contact.getComoNosConocio()
+        );
+    }
+
+    /**
+     * Projects the {@code edit_trato} domain entity to the bounded
+     * model-visible output. The deal's {@code estado} and
+     * {@code motivoPerdida} are intentionally omitted because the
+     * canonical edit use case preserves them — surfacing them in the
+     * tool output would falsely imply the tool changed them.
+     */
+    public static EditTratoOutput toEditTratoOutput(Trato trato) {
+        if (trato == null) {
+            return new EditTratoOutput(null, null, null, null, null, null, null);
+        }
+        LocalDate fecha = trato.getFechaCierreEsperada();
+        return new EditTratoOutput(
                 String.valueOf(trato.getId().value()),
-                estado == null ? null : estado.name()
+                trato.getNombre(),
+                trato.getResponsableId() == null ? null : String.valueOf(trato.getResponsableId().value()),
+                trato.getValorEstimado(),
+                trato.getProbabilidad(),
+                fecha == null ? null : fecha.format(DateTimeFormatter.ISO_LOCAL_DATE),
+                trato.getTipoContrato() == null ? null : trato.getTipoContrato().name()
+        );
+    }
+
+    /**
+     * Projects the {@code find_companies} domain result to the bounded
+     * model-visible output. Null or empty inputs map to an empty
+     * {@link FindCompaniesOutput}; internal fields are stripped.
+     */
+    public static FindCompaniesOutput toFindCompaniesOutput(List<Empresa> companies) {
+        if (companies == null || companies.isEmpty()) {
+            return new FindCompaniesOutput(List.of());
+        }
+        List<FindCompaniesOutput.CompanySummary> summaries = new ArrayList<>(companies.size());
+        for (Empresa company : companies) {
+            if (company == null) {
+                continue;
+            }
+            summaries.add(new FindCompaniesOutput.CompanySummary(
+                    String.valueOf(company.getId().value()),
+                    company.getNombre(),
+                    company.getSector(),
+                    company.getEstadoRelacion() == null ? null : company.getEstadoRelacion().name(),
+                    company.getResponsableId() == null ? null : String.valueOf(company.getResponsableId().value())
+            ));
+        }
+        return new FindCompaniesOutput(List.copyOf(summaries));
+    }
+
+    /**
+     * Projects the {@code create_company} domain entity to the bounded
+     * model-visible output. Internal fields are stripped.
+     */
+    public static CreateCompanyOutput toCreateCompanyOutput(Empresa company) {
+        if (company == null) {
+            return new CreateCompanyOutput(null, null, null, null, null);
+        }
+        return new CreateCompanyOutput(
+                String.valueOf(company.getId().value()),
+                company.getNombre(),
+                company.getSector(),
+                company.getEstadoRelacion() == null ? null : company.getEstadoRelacion().name(),
+                company.getResponsableId() == null ? null : String.valueOf(company.getResponsableId().value())
+        );
+    }
+
+    /**
+     * Projects the {@code edit_company} domain entity to the bounded
+     * model-visible output. Internal fields are stripped; social
+     * handles are intentionally omitted from this summary.
+     */
+    public static EditCompanyOutput toEditCompanyOutput(Empresa company) {
+        if (company == null) {
+            return new EditCompanyOutput(null, null, null, null, null, null, null, null);
+        }
+        return new EditCompanyOutput(
+                String.valueOf(company.getId().value()),
+                company.getNombre(),
+                company.getSector(),
+                company.getEstadoRelacion() == null ? null : company.getEstadoRelacion().name(),
+                company.getResponsableId() == null ? null : String.valueOf(company.getResponsableId().value()),
+                company.getPaginaWeb(),
+                company.getTelefono(),
+                company.getNotas()
         );
     }
 
@@ -201,12 +416,42 @@ public final class CrmToolMapper {
         return trimmed;
     }
 
-    /**
-     * Argument tuple for the existing {@code CambiarEstadoTratoUseCase}.
-     * The mapper produces this struct so the {@code SpringAiCrmTools}
-     * annotations can map directly without relying on positional
-     * arguments at the use case boundary.
-     */
-    public record UpdateDealStageArguments(UUID tratoId, String status, String motivo) {
+    private static EstadoRelacion parseEstadoRelacion(String value, String toolName) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        try {
+            return EstadoRelacion.valueOf(trimmed);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(
+                    toolName + " estadoRelacion must equal an EstadoRelacion name, was: " + trimmed);
+        }
+    }
+
+    private static EmpresaFilterCriteria.WebFilter parseWebFilter(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        try {
+            return EmpresaFilterCriteria.WebFilter.valueOf(trimmed);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(
+                    "find_companies web must equal a WebFilter name (CON_WEB or SIN_WEB), was: " + trimmed);
+        }
+    }
+
+    private static TipoContrato parseTipoContrato(String value) {
+        String trimmed = trimToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        try {
+            return TipoContrato.valueOf(trimmed);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(
+                    "edit_trato tipoContrato must equal a TipoContrato name, was: " + trimmed);
+        }
     }
 }
