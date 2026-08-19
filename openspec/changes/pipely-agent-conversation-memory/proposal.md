@@ -10,12 +10,12 @@ Sales users need one conversation that remembers relevant context and performs a
 
 ### In Scope
 - One authenticated conversational endpoint: receive a request, derive the actor, reconstruct memory, invoke the LLM/tools, persist conversation state, and return the final assistant response.
-- An explicit Spring AI tool allowlist: `find_contacts`, `create_contact`, and `update_deal_stage`.
-- Tools delegate only to existing Application use cases. Validated server-side JWT/`ActorContext` supplies actor/owner identity; model arguments cannot. Existing authentication, permission checks, owner/tenant isolation, and write idempotency remain mandatory.
+- An explicit Spring AI tool allowlist of six shared CRM tools: `find_contacts`, `create_contact`, `edit_contact`, `create_company`, `edit_company`, and `edit_trato`.
+- Tools delegate only to existing Application use cases. Validated server-side JWT/`ActorContext` supplies actor/owner identity; model arguments cannot. Existing authentication, permission checks, owner/tenant isolation, and write idempotency remain mandatory where the backing Application contract supports them. `edit_trato` currently validates trusted actor presence but delegates to an actor-free use case, so actor-aware target authorization remains explicit development-only debt outside this removal pass.
 - Persistent visible history with explicit `USER`/`ASSISTANT` roles; bounded model context reconstruction; durable owner memory with the agreed explicit lifecycle, eligibility, stable ordering, isolation, and cross-request recall. These remain separate context sources and never leak across owners.
 
 ### Out of Scope
-- Any CRM tool/effect beyond the three allowlisted tools, arbitrary discovery, or repository exposure.
+- Any CRM tool/effect beyond the six allowlisted tools, arbitrary discovery, or repository exposure.
 - Public completion/regeneration routes, public opaque handles, or inferred regeneration behavior.
 - RAG, vector stores, MCP, and streaming/multimodal/structured-output platform work unless a selected tool contract strictly requires it.
 - Advanced concurrent convergence, handle rotation/expiry, exhaustive provider recovery, exhaustive confirmation/compensation, and exhaustive edge-case handling.
@@ -25,10 +25,10 @@ Sales users need one conversation that remembers relevant context and performs a
 ### New Capabilities
 - `agent-conversation`: one owner-isolated interaction, visible history, bounded context, and final response.
 - `agent-durable-memory`: durable explicit owner memory, lifecycle, deterministic eligibility/order, and recall.
-- `agent-crm-tools`: controlled execution of the three allowlisted CRM actions through Application use cases.
+- `agent-crm-tools`: controlled execution of the six allowlisted CRM actions through Application use cases.
 
 ### Modified Capabilities
-- `security`: JWT-derived actor propagation, owner/tenant isolation, and preservation of existing permission checks at agent ingress and tool execution.
+- `security`: JWT-derived actor propagation, owner/tenant isolation, preservation of existing permission checks where supported, and explicit tracking of the actor-free `edit_trato` authorization gap.
 
 ## Approach
 
@@ -60,7 +60,7 @@ Validated JWT/`ActorContext`, existing CRM use cases and permissions, Spring AI,
 
 ## Success Criteria
 
-- [ ] A valid owner request can use each allowlisted tool and return a final response; unauthenticated or cross-owner work is rejected.
+- [ ] A valid owner request can use each allowlisted tool and return a final response; unauthenticated work is rejected, and cross-owner work is rejected by actor-aware Application contracts. The current `edit_trato` exception remains blocked from production acceptance until actor-aware authorization is added.
 - [ ] Later requests reconstruct role-preserving bounded history and eligible durable memory without cross-owner leakage.
 - [ ] Retries do not duplicate visible conversation state or CRM writes.
 - [ ] No non-allowlisted tool or public completion/regeneration surface exists.

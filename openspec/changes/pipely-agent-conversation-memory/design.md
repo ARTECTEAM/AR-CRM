@@ -1,62 +1,64 @@
-# Design: Pipely Agent Conversation Memory — V1 Correctness Correction
+# Design: Pipely Agent Conversation Memory — Current CRM Tool Surface
 
 ## Technical Approach
 
-Preserve `POST /api/agent/messages`, visible history, durable-memory recall, Spring AI completion, and shared DefaultTools. Correct only writes: the completion adapter adds trusted owner and turn beside the actor UUID in request `ToolContext`; tools map model arguments but delegate both writes to a new Application orchestrator. Ambiguous durable-memory update/supersession remains outside v1.
+Preserve `POST /api/agent/messages`, visible history, durable-memory recall, Spring AI completion, and one shared DefaultTools bean. Keep each tool as a thin adapter that validates model arguments and delegates to an existing canonical Application use case.
+
+The active catalog contains exactly six tools: `find_contacts`, `create_contact`, `edit_contact`, `create_company`, `edit_company`, and `edit_trato`. WhatsApp integrations, deal notes, stage-specific writes, legacy list filters, and `find_companies` are outside the current surface.
 
 ## Architecture Decisions
 
-| Decision | Choice and rationale |
+| Decision | Current choice and rationale |
 |---|---|
-| Trusted action scope | Use server-derived `(AgentOwnerId, TurnId, AgentToolName)` as the v1 slot; actor UUID and normalized arguments form its canonical payload. All trusted values come from `ChatCompletionPort` → `ToolContext`, stay outside schemas, and fail closed. Annotated Spring AI 2.0 tools cannot read the provider call id, so v1 allows one distinct invocation of each write tool per turn; another payload is rejected. |
-| Deal authorization | No safe capability exists: `CambiarEstadoTratoUseCase` is actor-free and `TratoController` supplies no actor. The new Application service loads `Trato` and requires `responsableId == actorUsuarioId` before save/note. Strict ownership is safer than invented role semantics; REST stays unchanged. |
-| Ledger integration | Reuse `AgentToolAction`, its three ports, and adapter; add one atomic-execution port and a unique `(owner_id, turn_id, tool_name)` slot. Application compares canonical payloads, replays `COMPLETED`, rejects mismatch, or executes `PENDING`. |
-| Atomicity | Claim commits briefly. Execution locks the row and atomically authorizes, writes CRM state/note, and completes the ledger. Failure rolls back effects/completion, leaving `PENDING`; concurrent retries wait and replay. |
-| Canonical replay | The service returns the stored resource. Tools rebuild the bounded output from the matched normalized command and resource id, without another CRM call. |
+| Tool boundary | Trusted actor data comes from server-built `ToolContext`, remains outside model schemas, and fails closed when absent. |
+| Application reuse | Tools call the same canonical use cases used by other adapters. No agent-specific business use-case layer remains. |
+| Contact search | Preserve the actor-scoped database query and the 20-result cap. |
+| Company access | Keep company create/edit. Company search is removed until a replacement query contract is designed. |
+| Deal editing | `edit_trato` delegates to `EditTratoUseCase`. Actor-aware deal authorization remains documented development debt in the downstream use case. |
+| Removed integrations | The WhatsApp/Evolution/n8n/Anthropic module and its controllers, persistence, security, wiring, configuration, and schema are removed. |
+| Legacy deal states | Persisted `GANADO` and `PERDIDO` values are normalized to `CERRADO` before JPA enum hydration. |
 
 ## Data Flow
 
 ```text
 JWT ActorContext → CompleteUserTurnService → ChatCompletionPort
-  → ToolContext(owner, actor UUID, turn) → SpringAiCrmTools
-  → AgentCrmWriteUseCase → claim canonical action
-  → lock action → authorize → CRM save/note → complete ledger → commit
-                         ↘ completed replay: prior bounded outcome, no effect
+  → server-built ToolContext → SpringAiCrmTools
+  → CrmToolMapper validation → canonical Application use case
+  → bounded tool output → assistant response
 ```
 
-## File Changes
+## Main Components
 
-| File | Action | Description |
-|---|---|---|
-| `application/src/main/java/com/ar/crm2/application/agent/tool/command/AgentCrmWriteCommand.java` | Create | Sealed trusted create/stage commands. |
-| `application/src/main/java/com/ar/crm2/application/agent/tool/port/in/AgentCrmWriteUseCase.java` | Create | Write orchestration boundary. |
-| `application/src/main/java/com/ar/crm2/application/agent/tool/port/out/ExecuteAgentToolActionAtomicallyPort.java` | Create | Lock-held effect contract. |
-| `application/src/main/java/com/ar/crm2/application/agent/tool/service/AgentCrmWriteService.java` | Create | Canonicalization, replay, mismatch, and deal ownership policy. |
-| `infrastructure/src/main/java/com/ar/crm2/adapter/out/ai/SpringAiChatCompletionAdapter.java` | Modify | Attach trusted owner and turn beside actor. |
-| `infrastructure/src/main/java/com/ar/crm2/adapter/out/ai/tool/{SpringAiCrmTools,CrmToolMapper}.java` | Modify | Require trusted scope, delegate writes to Application, and render canonical replay. |
-| `infrastructure/src/main/java/com/ar/crm2/adapter/out/persistence/agent/tool/{AgentToolActionEntity,AgentToolActionRepository,AgentToolActionPersistenceAdapter}.java` | Modify | Unique action slot plus lock-held atomic execution. |
-| `boot/src/main/java/com/ar/crm2/config/WiringConfig.java` | Modify | Compose the new Application service/port; keep one shared tools bean. |
-| `application/src/test/java/com/ar/crm2/application/agent/tool/service/AgentCrmWriteServiceTest.java` | Create | Application RED/GREEN policy tests. |
-| Existing `SpringAiCrmToolsTest`, `SpringAiChatCompletionAdapterTest`, `AgentToolActionPersistenceAdapterTest`, `AgentConfigTest`, and `AgentConversationWiringTest` | Modify | Adapter, transaction, and composition proofs. |
+| Component | Responsibility |
+|---|---|
+| `SpringAiCrmTools` | Declares the six model-visible tools and validates trusted context presence. |
+| `CrmToolMapper` | Normalizes model arguments and maps bounded outputs. |
+| `AgentConfig` | Registers one shared DefaultTools bean and advertises the six-tool catalog. |
+| `WiringConfig` | Injects only the canonical use cases required by the active tools. |
+| Agent conversation/memory packages | Preserve turn idempotency, visible history, and durable recall independently of removed CRM integrations. |
+| `schema.sql` | Retains non-WhatsApp compatibility patches and normalizes legacy deal states. |
 
-## Interfaces / Contracts
+## Removed Surface
 
-`AgentCrmWriteUseCase.execute(AgentCrmWriteCommand)` receives trusted scope plus normalized data. `ExecuteAgentToolActionAtomicallyPort.execute(claim, effect)` returns the immutable completed action; `effect` runs only while canonical `PENDING` is locked. Neither contract is model-visible or controller-owned.
+- WhatsApp channels, conversations, messages, groups, media, webhooks, SSE, bots, CSAT, autoresponders, Evolution, n8n, and Anthropic suggestion.
+- Deal notes/timeline and ganar/perder-specific domain behavior.
+- Empresa, trato, tarea, ficha, and tablero filter-criteria verticals.
+- `find_companies` and its bounded output.
+- `AgentCrmWriteUseCase`, `AgentCrmWriteService`, and stage-specific tool contracts.
 
 ## Testing Strategy
 
-| Layer | RED/GREEN proof |
+| Layer | Proof |
 |---|---|
-| Application unit | Owner succeeds; unauthorized actor causes no deal save/note; completed replay skips effects; mismatched actor/payload fails first. |
-| Infrastructure H2 | Context stays outside schemas; both writes replay identical JSON; concurrent/sequential retries create one contact or one stage event/note; injected failures roll back effects and completion. |
-| Boot/component | Service and atomic port are unique and wired into unchanged shared DefaultTools. No network E2E. |
+| Domain/Application | Current `Trato` state model and canonical use-case contracts compile and pass focused tests. |
+| Infrastructure | Six-tool schemas/mapping pass; actor-scoped contact search remains; legacy deal rows normalize before repository hydration. |
+| Boot | Shared DefaultTools wiring and six-tool inventory pass focused context tests. |
+| Package | All remaining Maven modules package successfully. |
 
-## Migration / Rollout and Review Workload Forecast
+Full `mvn verify` still reports the unrelated baseline `TableroControllerIT` authorization mismatch (`201` expected, `403` actual). It is not evidence against this removal change.
 
-The pre-release ledger must be empty before adding the unique slot constraint; no CRM business-data migration is required. Roll back by disabling ingress/tool registration.
+## Migration and Rollout
 
-One child is not realistic: forecast **950–1,250 A+D**. Use the approved feature-branch chain: **C1 authorization + trusted owner/turn propagation (350–500)**, then **C2 atomic ledger integration for both writes (600–750)**. Each child carries its RED/GREEN tests; C2 must be split again before apply if it forecasts above 800.
+`schema.sql` idempotently maps existing `tratos.estado` values `GANADO` and `PERDIDO` to `CERRADO`. Existing WhatsApp tables are not dropped automatically; database cleanup is a separate operator decision.
 
-## Open Questions
-
-None. General role-based deal permission and ambiguous durable-memory supersession are v2 work, not implementation tasks for this correction.
+The maintainer-approved delivery is one PR with an explicit `size:exception`, organized as two work-unit commits: legacy runtime/product removal plus data compatibility, followed by the six-tool contract, active documentation, and verification evidence. No push has occurred yet; this design does not create or claim a feature-branch chain.
