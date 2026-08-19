@@ -1,8 +1,16 @@
 package com.ar.crm2.config;
 
 import com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools;
+import com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
+import org.springframework.ai.chat.client.advisor.observation.DefaultAdvisorObservationConvention;
+import org.springframework.ai.chat.client.observation.DefaultChatClientObservationConvention;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.model.tool.ToolCallingManager;
+import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
+import io.micrometer.observation.ObservationRegistry;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -110,9 +118,13 @@ public class AgentConfig {
      * — Spring AI 2.0 runtime tools would replace builder defaults,
      * so omitting that call preserves the configured allowlist.
      *
-     * <p>Construction uses Spring AI 2.0's direct
-     * {@code ChatClient.builder(ChatModel).defaultSystem(String).defaultTools(...).build()}
-     * path. The {@link SpringAiCrmTools} bean is provided by
+     * <p>Construction supplies Spring AI 2.0's auto-registered
+     * {@link ToolCallingAdvisor} builder with one explicit
+     * {@link ToolCallingManager}. That manager owns the complete tool loop and
+     * uses the configured {@link ToolExecutionExceptionProcessor}; no second
+     * tool advisor is added. The advisor keeps its framework default order, so
+     * any memory advisor remains outside the tool loop as Spring AI specifies.
+     * The {@link SpringAiCrmTools} bean is provided by
      * {@code boot.WiringConfig}; this factory only consumes it.
      *
      * <p>This is the only {@link ChatClient} bean in the application
@@ -120,10 +132,42 @@ public class AgentConfig {
      * is no duplicate or ambiguous ChatClient bean.
      */
     @Bean
-    public ChatClient chatClient(@Qualifier("openAiChatModel") ChatModel chatModel, SpringAiCrmTools tools) {
-        return ChatClient.builder(chatModel)
+    public ChatClient chatClient(
+            @Qualifier("openAiChatModel") ChatModel chatModel,
+            SpringAiCrmTools tools,
+            ToolExecutionExceptionProcessor exceptionProcessor) {
+        return buildChatClient(chatModel, tools, exceptionProcessor);
+    }
+
+    ChatClient chatClient(ChatModel chatModel, SpringAiCrmTools tools) {
+        ObjectMapper objectMapper = new ObjectMapper();
+        return buildChatClient(
+                chatModel, tools, new SafeToolExecutionExceptionProcessor(objectMapper));
+    }
+
+    ChatClient buildChatClient(
+            ChatModel chatModel,
+            SpringAiCrmTools tools,
+            ToolExecutionExceptionProcessor exceptionProcessor) {
+        ToolCallingManager toolCallingManager = ToolCallingManager.builder()
+                .observationRegistry(ObservationRegistry.NOOP)
+                .toolExecutionExceptionProcessor(exceptionProcessor)
+                .build();
+        ToolCallingAdvisor.Builder<?> toolCallingAdvisor = ToolCallingAdvisor.builder()
+                .toolCallingManager(toolCallingManager);
+        return ChatClient.builder(
+                        chatModel,
+                        ObservationRegistry.NOOP,
+                        new DefaultChatClientObservationConvention(),
+                        new DefaultAdvisorObservationConvention(),
+                        toolCallingAdvisor)
                 .defaultSystem(DEFAULT_SYSTEM_TEMPLATE)
                 .defaultTools(tools)
                 .build();
+    }
+
+    @Bean
+    public ToolExecutionExceptionProcessor toolExecutionExceptionProcessor(ObjectMapper objectMapper) {
+        return new SafeToolExecutionExceptionProcessor(objectMapper);
     }
 }

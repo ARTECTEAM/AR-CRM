@@ -11,20 +11,33 @@ import com.ar.crm2.config.testing.CapturingChatModel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.chat.model.Generation;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Focused contract for the production
@@ -41,8 +54,12 @@ import static org.mockito.Mockito.mock;
 class AgentConfigTest {
 
     private static SpringAiCrmTools newNoopTools() {
+        return newTools(mock(GetAllContactosUseCase.class));
+    }
+
+    private static SpringAiCrmTools newTools(GetAllContactosUseCase getAllContactosUseCase) {
         return new SpringAiCrmTools(
-                mock(GetAllContactosUseCase.class),
+                getAllContactosUseCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
                 mock(CreateEmpresaUseCase.class),
@@ -93,7 +110,7 @@ class AgentConfigTest {
     void chatClientFactoryConsumesTheSharedStatelessSpringAiCrmToolsBean() {
         // The factory signature must accept the shared SpringAiCrmTools
         // bean — NOT a binder or any request-scoped type. The shared
-        // tools carry only the existing use cases and ObjectMapper.
+        // tools carry only the existing use cases.
         Method chatClientMethod = findChatClientFactoryMethod();
 
         Parameter[] parameters = chatClientMethod.getParameters();
@@ -180,8 +197,7 @@ class AgentConfigTest {
                 .contains("create_contact")
                 .contains("edit_contact")
                 .contains("create_company")
-                .contains("edit_company")
-                .contains("edit_trato");
+                .contains("edit_company", "edit_trato");
         assertThat(text)
                 .as("template forbids the model from supplying actor identity")
                 .containsIgnoringCase("actor");
@@ -255,7 +271,7 @@ class AgentConfigTest {
 
     @Test
     void sharedSpringAiCrmToolsIsRegisteredAsDefaultToolsOnTheConfiguredChatClient() {
-        // The configured ChatClient must expose the six shared tools
+         // The configured ChatClient must expose the shared non-delete tools
         // through the maintained Spring AI 2.0 defaultTools path. The
         // exact tool names appear in the ChatClient's default callbacks
         // (introspected via getToolCallbacks() if exposed; otherwise via
@@ -266,7 +282,7 @@ class AgentConfigTest {
 
         // Round-trip exercises the configured ChatClient end-to-end.
         // The captured prompt includes the tool definitions sent to the
-        // model. The six allowlisted tool names must be present.
+         // model. All non-delete allowlisted tool names must be present.
         configured.prompt()
                 .system(spec -> spec.param("durable_memories", ""))
                 .user("hi")
@@ -275,13 +291,12 @@ class AgentConfigTest {
 
         String renderedSystem = model.capturedPrompt().getInstructions().get(0).getText();
         assertThat(renderedSystem)
-                .as("the configured client must advertise all six allowlisted tools by name")
+                .as("the configured client must advertise all non-delete allowlisted tools by name")
                 .contains("find_contacts")
                 .contains("create_contact")
                 .contains("edit_contact")
                 .contains("create_company")
-                .contains("edit_company")
-                .contains("edit_trato");
+                .contains("edit_company", "edit_trato");
 
         // The shared tools object must be reusable across ChatClient
         // builds — the same shared instance produces the same callback
@@ -294,10 +309,107 @@ class AgentConfigTest {
             names.add(callback.getToolDefinition().name());
         }
         assertThat(names)
-                .as("the shared SpringAiCrmTools bean must produce exactly six allowlisted callbacks")
-                .containsExactlyInAnyOrder(
-                        "find_contacts", "create_contact", "edit_contact",
-                        "create_company", "edit_company", "edit_trato");
+                 .as("the shared SpringAiCrmTools bean must produce exactly the non-delete allowlisted callbacks")
+                 .containsExactlyInAnyOrder(
+                         "find_contacts", "create_contact", "edit_contact", "create_company", "edit_company", "edit_trato");
+    }
+
+    @Test
+    void realToolLoopRedactsSensitiveDownstreamFailureBeforeSecondModelRequest() {
+        String sentinel = "SENSITIVE_SQL_PROVIDER_DETAIL";
+        GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
+        when(useCase.getAll(any())).thenThrow(new IllegalStateException(sentinel));
+        SequentialToolCallingChatModel model =
+                new SequentialToolCallingChatModel("find_contacts", "{}");
+        ChatClient configured = new AgentConfig().buildChatClient(
+                model, newTools(useCase),
+                new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()));
+
+        String content = configured.prompt()
+                .system(spec -> spec.param("durable_memories", ""))
+                .user("find contacts")
+                .toolContext(Map.of("actorUsuarioId", UUID.randomUUID()))
+                .call()
+                .content();
+
+        assertThat(content).isEqualTo("final-response");
+        assertThat(model.prompts()).hasSize(2);
+        String result = toolResponseData(model.prompts().get(1));
+        assertThat(result)
+                .isEqualTo("{\"success\":false,\"code\":\"TOOL_EXECUTION_FAILED\","
+                        + "\"message\":\"The tool could not be completed.\"}")
+                .doesNotContain(sentinel)
+                .doesNotContain("IllegalStateException");
+        assertThat(model.prompts().get(1).getContents()).doesNotContain(sentinel);
+    }
+
+    @Test
+    void realToolLoopReturnsOnlyStableCodeForExplicitSafeValidationFailure() {
+        GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
+        when(useCase.getAll(any())).thenThrow(
+                new com.ar.crm2.adapter.out.ai.tool.SafeToolValidationException("sensitive validation detail"));
+        SequentialToolCallingChatModel model = new SequentialToolCallingChatModel(
+                "find_contacts", "{}");
+        ChatClient configured = new AgentConfig().buildChatClient(
+                model, newTools(useCase),
+                new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()));
+
+        configured.prompt()
+                .system(spec -> spec.param("durable_memories", ""))
+                .user("find contacts")
+                .toolContext(Map.of("actorUsuarioId", UUID.randomUUID()))
+                .call()
+                .content();
+
+        assertThat(model.prompts()).hasSize(2);
+        assertThat(toolResponseData(model.prompts().get(1)))
+                .isEqualTo("{\"success\":false,\"code\":\"TOOL_VALIDATION_FAILED\","
+                        + "\"message\":\"The tool input is invalid.\"}")
+                .doesNotContain("sensitive validation detail");
+    }
+
+    private static String toolResponseData(Prompt prompt) {
+        ToolResponseMessage message = prompt.getInstructions().stream()
+                .filter(ToolResponseMessage.class::isInstance)
+                .map(ToolResponseMessage.class::cast)
+                .findFirst()
+                .orElseThrow();
+        assertThat(message.getResponses()).hasSize(1);
+        return message.getResponses().get(0).responseData();
+    }
+
+    private static final class SequentialToolCallingChatModel implements ChatModel {
+        private final String toolName;
+        private final String arguments;
+        private final List<Prompt> prompts = new ArrayList<>();
+
+        private SequentialToolCallingChatModel(String toolName, String arguments) {
+            this.toolName = toolName;
+            this.arguments = arguments;
+        }
+
+        @Override
+        public ChatResponse call(Prompt prompt) {
+            prompts.add(prompt);
+            if (prompts.size() == 1) {
+                AssistantMessage toolCall = AssistantMessage.builder()
+                        .content("")
+                        .toolCalls(List.of(new AssistantMessage.ToolCall(
+                                "call-1", "function", toolName, arguments)))
+                        .build();
+                return new ChatResponse(List.of(new Generation(toolCall)));
+            }
+            return new ChatResponse(List.of(new Generation(new AssistantMessage("final-response"))));
+        }
+
+        @Override
+        public ChatOptions getOptions() {
+            return ToolCallingChatOptions.builder().build();
+        }
+
+        private List<Prompt> prompts() {
+            return List.copyOf(prompts);
+        }
     }
 
     private static Method findChatClientFactoryMethod() {
