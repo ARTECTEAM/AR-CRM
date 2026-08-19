@@ -35,7 +35,7 @@ public class AgentVisibleHistoryEntity {
     @Column(name = "role", length = 20, nullable = false)
     private String role;
 
-    @Column(name = "content", nullable = false)
+    @Column(name = "content", length = 4096, nullable = false)
     private String content;
 
     @Column(name = "visible_at", nullable = false)
