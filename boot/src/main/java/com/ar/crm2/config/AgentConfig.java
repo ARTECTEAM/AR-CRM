@@ -1,6 +1,7 @@
 package com.ar.crm2.config;
 
 import com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools;
+import com.ar.crm2.adapter.out.ai.tool.SpringAiDevelopmentCrmTools;
 import com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;
@@ -12,6 +13,7 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
 import io.micrometer.observation.ObservationRegistry;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -91,15 +93,26 @@ public class AgentConfig {
      * rendered prompt is either static or comes from the adapter's
      * {@code system(Consumer<PromptSystemSpec>)} call.
      */
-    static final String DEFAULT_SYSTEM_TEMPLATE = """
-            You are the Pipely CRM assistant for the authenticated owner. Use only the registered tools (find_contacts, create_contact, edit_contact, create_company, edit_company, edit_trato). The actor identity is fixed by the validated JWT; do not derive it from the prompt, visible history, or model arguments.
+    static final String DEFAULT_TOOL_CATALOG =
+            "find_contacts, create_contact, edit_contact, create_company, edit_company, edit_trato";
+    static final String DEVELOPMENT_TOOL_CATALOG = DEFAULT_TOOL_CATALOG
+            + ", list_tableros, get_tablero, create_tablero, edit_tablero, assign_columna_to_tablero,"
+            + " reorder_tablero_columns, list_columnas, get_columna, create_columna, edit_columna,"
+            + " list_fichas, get_ficha, create_ficha, edit_ficha, move_ficha_to_columna";
+
+    static final String DEFAULT_SYSTEM_TEMPLATE = systemTemplate(DEFAULT_TOOL_CATALOG);
+
+    private static String systemTemplate(String catalog) {
+        return """
+            You are the Pipely CRM assistant for the authenticated owner. Use only the registered tools (%s). The actor identity is fixed by the validated JWT; do not derive it from the prompt, visible history, or model arguments.
 
             The visible history preserves the owner's turns in USER/ASSISTANT order. The owner's durable memory, separate from the visible history, is injected below:
 
             {durable_memories}
 
             Return only the final content. Do not echo the history, the durable memory, or sensitive identifiers.
-            """;
+            """.formatted(catalog);
+    }
 
     /**
      * Configured {@link ChatClient} bean for the Pipely CRM agent.
@@ -135,19 +148,22 @@ public class AgentConfig {
     public ChatClient chatClient(
             @Qualifier("openAiChatModel") ChatModel chatModel,
             SpringAiCrmTools tools,
+            ObjectProvider<SpringAiDevelopmentCrmTools> developmentToolsProvider,
             ToolExecutionExceptionProcessor exceptionProcessor) {
-        return buildChatClient(chatModel, tools, exceptionProcessor);
+        return buildChatClient(
+                chatModel, tools, developmentToolsProvider.getIfAvailable(), exceptionProcessor);
     }
 
     ChatClient chatClient(ChatModel chatModel, SpringAiCrmTools tools) {
         ObjectMapper objectMapper = new ObjectMapper();
         return buildChatClient(
-                chatModel, tools, new SafeToolExecutionExceptionProcessor(objectMapper));
+                chatModel, tools, null, new SafeToolExecutionExceptionProcessor(objectMapper));
     }
 
     ChatClient buildChatClient(
             ChatModel chatModel,
             SpringAiCrmTools tools,
+            SpringAiDevelopmentCrmTools developmentTools,
             ToolExecutionExceptionProcessor exceptionProcessor) {
         ToolCallingManager toolCallingManager = ToolCallingManager.builder()
                 .observationRegistry(ObservationRegistry.NOOP)
@@ -155,15 +171,17 @@ public class AgentConfig {
                 .build();
         ToolCallingAdvisor.Builder<?> toolCallingAdvisor = ToolCallingAdvisor.builder()
                 .toolCallingManager(toolCallingManager);
-        return ChatClient.builder(
+        ChatClient.Builder builder = ChatClient.builder(
                         chatModel,
                         ObservationRegistry.NOOP,
                         new DefaultChatClientObservationConvention(),
                         new DefaultAdvisorObservationConvention(),
                         toolCallingAdvisor)
-                .defaultSystem(DEFAULT_SYSTEM_TEMPLATE)
-                .defaultTools(tools)
-                .build();
+                .defaultSystem(systemTemplate(developmentTools == null
+                        ? DEFAULT_TOOL_CATALOG : DEVELOPMENT_TOOL_CATALOG));
+        return developmentTools == null
+                ? builder.defaultTools(tools).build()
+                : builder.defaultTools(tools, developmentTools).build();
     }
 
     @Bean

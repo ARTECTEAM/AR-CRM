@@ -1,59 +1,55 @@
-# Verification Report — Author-Removal Final Corrective Pass
+# Verification Report — Gated Tablero/Columna/Ficha Tool Corrective Pass
 
-**Change**: `pipely-agent-conversation-memory`
+**Change:** `pipely-agent-conversation-memory`
+**Date:** 2026-08-19
+**Branch:** `feat/agent-tablero-columna-ficha-tools`
 
-**Scope**: Current six-tool agent/removal tree plus legacy `Trato` state migration.
+## Current verdict
 
-**Date**: 2026-08-18
+**Narrow corrective scope passes; broad baseline remains non-green and was not rerun.** The implementation defaults to the six-tool production catalog and exposes the 15 tablero/columna/ficha callbacks only when `crm2.agent.development-tools-enabled=true` and exactly one active profile is `noauth` or `test` (21 total). Production, profile-less, unknown, `noauth,test`, and every other mixed-profile true fails startup. No delete/remove callback is registered.
 
-**Branch**: `feature/remove-julio-antonio-contributions`
+## Corrective evidence implemented
 
-## Executive Result
+- Distinct optional trusted `superUsuarioId` propagation through command/service/adapter `ToolContext`; model schemas exclude it.
+- Positive super-user and negative normal-user `create_columna` behavior.
+- Deterministic caps/order, truthful metadata, typed ID extraction, and defensive list copies.
+- Required full-replacement `edit_ficha.etiquetaIds` semantics.
+- Stable Jackson-serialized Spring AI tool errors wired into the actual two-response ChatClient loop through one explicit manager/advisor owner.
+- The exact-profile matrix distinguishes absent/default, explicit false, `noauth`-only and `test`-only acceptance, plus profile-less, unknown, production, `noauth,test`, and accepted-plus-production rejection. Successful actual ChatClient requests compare exact model-received callback names with exact rendered prompt catalog names.
+- Sentinel-backed `find_contacts` reports `returned`/`truncated`; fully materialized development lists report exact `total`/`truncated`.
 
-**Verdict: FAIL due to one unrelated baseline test failure.** The current six-tool tree, approved author removals, `GANADO`/`PERDIDO` data normalization, focused persistence coverage, package build, Spring AI suites, domain tests, and Boot wiring tests pass. The broad gate remains non-zero only because `TableroControllerIT.create_shouldReturn201WithTableroJson` expected 201 and received 403.
+## Known production blockers
 
-## Current Removal Surface
+The 15 opt-in tools remain actor/tenant unscoped in their backing Application contracts. `edit_trato` is also actor-free downstream. The existing durable `AgentToolAction` ledger cannot atomically span the CRM mutation and ledger completion; a crash between them can duplicate a retry. No idempotency guarantee is claimed and no in-memory substitute was added.
 
-- Spring AI exposes exactly six CRM tools: `find_contacts`, `create_contact`, `edit_contact`, `create_company`, `edit_company`, and `edit_trato`.
-- Removed WhatsApp, bot, notes, `find_companies`, filter-criteria, and deal win/loss application/domain/persistence surfaces remain removed.
-- No removed enum values were reintroduced; `EstadoTrato` contains only `ABIERTO` and `CERRADO`.
-- The shared `boot/src/main/resources/schema.sql` retains existing non-WA statements and adds an idempotent `tratos.estado` cleanup after Hibernate initialization.
-
-## Migration and Persistence Evidence
-
-| Test | Result | Evidence |
-|---|---:|---|
-| `TratoRepositoryIT` | **3/3 passed** | Both legacy values are inserted through JDBC, normalized twice to `CERRADO`, and hydrated through `TratoRepository`; `ABIERTO` remains unchanged. |
-| `TratoTest` | **6/6 passed** | Current domain creation and reconstitution behavior. |
-
-The H2 test changes the generated enum column to `VARCHAR(20)` before inserting legacy rows. This is necessary because H2 rejects removed enum values before the migration can run; it models PostgreSQL `EnumType.STRING` storage and proves the real repository/entity hydration path. PostgreSQL parser execution of the full shared script is not available in the local test environment.
-
-## Focused Verification
+## Verification evidence
 
 | Command / suite | Result |
 |---|---:|
-| `mvnw.cmd -pl infrastructure test -Dtest=TratoRepositoryIT` | **3/3 passed** |
-| `mvnw.cmd -pl domain test -Dtest=TratoTest` | **6/6 passed** |
-| `mvnw.cmd -pl infrastructure test -Dtest=CrmToolMapperTest,SpringAiCrmToolsTest,SpringAiChatCompletionAdapterTest` | **69/69 passed** |
-| `mvnw.cmd -pl boot -am test -Dtest=AgentConversationWiringTest,AgentConfigTest,AgentConfigOpenAiWiringTest` | **30/30 passed** |
-| `mvnw.cmd -DskipTests package` | **PASS** |
-| `mvnw.cmd verify` | **FAIL: 1 known baseline failure** |
+| Application completion contract/service tests | **15/15 passed** |
+| Infrastructure mapper/tool/adapter/identity tests plus `AgentConversationIT`; representative base/development callbacks serialize canonical record component keys through `ToolCallback.call(...)` | **89/89 passed** |
+| Boot agent configuration/wiring tests | **42/42 passed** |
+| Real two-response redaction and safe-validation loop tests | **2/2 passed** (within `AgentConfigTest`) |
+| Exact-profile environment/configuration tests | **9/9 passed** (10 contexts within `AgentDevelopmentToolsConfigTest`) |
+| Actual ChatClient callback/prompt synchronization | **4/4 passed contexts**: absent/default 6, explicit false 6, accepted `noauth` true 21, accepted `test` true 21 |
+| Focused `AgentConversationIT` | **6/6 passed** |
+| Affected Infrastructure/Boot reactor package (`-DskipTests`; focused tests run separately) | **PASS** |
+| `git diff --check` after final correction/evidence refresh | **PASS** |
 
-The broad run reached Infrastructure and executed 55 tests with 1 failure and 0 errors; Boot was skipped after the Infrastructure failure. No new migration, enum-hydration, Spring AI, domain, or packaging failure was observed.
+The broad verify was intentionally not rerun in this narrow serialization correction. The preserved prior baseline reached Infrastructure integration tests at **54/55 passed**; its only failure was the pre-existing `TableroControllerIT.create_shouldReturn201WithTableroJson` authorization mismatch (expected 201, received 403), after which Boot was skipped. The focused `AgentConversationIT` reactor run in this pass passes 6/6.
 
-## Documentation Alignment
+Callback catalogs are exact in successful modes: absent/default = **6**, explicit false under `prod` = **6**, accepted `noauth` true = **21**, and accepted `test` true = **21** (the six defaults plus 15 development callbacks). All successful modes explicitly assert absence of delete/remove names; profile-less, unknown, production, `noauth,test`, and accepted-plus-production true reject configuration creation.
 
-- `APPLICATION_RULES.md`: removed the obsolete `GANADO` setter and ganar transition example.
-- `DOMAIN_RULES.md`: removed obsolete `marcarComoGanado`/`marcarComoPerdido` behavior claims.
-- `openspec/changes/pipely-agent-conversation-memory/specs/agent-crm-tools/spec.md`: describes preserved deal state without a loss-reason contract.
-- This report now describes the current six-tool/removal tree, migration coverage, package result, and the single known 403 baseline failure.
+Exact changed-line count including untracked files: **2,582** (**2,082 additions + 500 deletions**).
 
-## Search Results
+## Seven-slice Feature Branch Chain
 
-Intentional current legacy literals are limited to the migration SQL and its focused regression test: `GANADO` and `PERDIDO` appear only as values being normalized. Historical OpenSpec archives may retain old terminology and are not part of this corrective pass. The executable/runtime WhatsApp and Evolution surfaces are removed; retained references are limited to removal context and protective ignore rules for legacy generated uploads and a credential-bearing local startup script. Those safety/context references do not advertise active functionality. No active source/test contract retains `motivoPerdida`, ganar/perder behavior, or `find_companies`.
+1. Trusted identity transport.
+2. Safe default-tool execution loop.
+3. Bounded output contracts.
+4. Read-only development callbacks (unregistered).
+5. Tablero/columna mutations (unregistered).
+6. Ficha mutations (unregistered).
+7. Environment-safe registration and catalog integration.
 
-## Final Judgment
-
-**Final review blocker: resolved in implementation.** Existing legacy PostgreSQL string values are normalized idempotently before current enum hydration, and repository regression coverage passes.
-
-**Delivery verification: not fully green** because the unrelated known `TableroControllerIT` 403 baseline remains.
+Target at most 400 changed lines per child where technically feasible. Exact per-slice counts remain unknown until staging proves them. Shared files require hunk-level staging or reconstruction, every intermediate branch must compile and pass focused tests, and documentation/verification must travel with the behavior each slice introduces.

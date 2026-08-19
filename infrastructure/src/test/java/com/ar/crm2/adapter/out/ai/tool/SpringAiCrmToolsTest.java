@@ -1050,6 +1050,65 @@ class SpringAiCrmToolsTest {
     }
 
     @Test
+    void everyNewAggregateToolRequiresActorAndDelegatesToItsInputPort() throws Exception {
+        var tableros = mock(com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase.class);
+        var tableroById = mock(com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase.class);
+        var createTablero = mock(com.ar.crm2.application.tablero.port.in.CreateTableroUseCase.class);
+        var editTablero = mock(com.ar.crm2.application.tablero.port.in.EditTableroUseCase.class);
+        var assign = mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class);
+        var reorder = mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class);
+        var columnas = mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class);
+        var columnaById = mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class);
+        var createColumna = mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class);
+        var editColumna = mock(com.ar.crm2.application.columna.port.in.EditColumnaUseCase.class);
+        var fichas = mock(com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase.class);
+        var fichaById = mock(com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase.class);
+        var createFicha = mock(com.ar.crm2.application.ficha.port.in.CreateFichaUseCase.class);
+        var editFicha = mock(com.ar.crm2.application.ficha.port.in.EditFichaUseCase.class);
+        var moveFicha = mock(com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase.class);
+        when(tableros.getAll()).thenReturn(List.of());
+        when(columnas.getAll()).thenReturn(List.of());
+        when(fichas.getAll()).thenReturn(List.of());
+        SpringAiDevelopmentCrmTools tools = new SpringAiDevelopmentCrmTools(
+                tableros, tableroById, createTablero, editTablero, assign, reorder,
+                columnas, columnaById, createColumna, editColumna,
+                fichas, fichaById, createFicha, editFicha, moveFicha);
+        ToolContext context = actorContext(UUID.randomUUID());
+
+        tools.listTableros(context);
+        tools.getTablero(UUID.randomUUID(), context);
+        tools.createTablero("Board", "Description", "TAREAS", context);
+        tools.editTablero(UUID.randomUUID(), "Board", "Description", context);
+        tools.assignColumnaToTablero(UUID.randomUUID(), UUID.randomUUID(), 1, null, BigDecimal.ZERO, context);
+        tools.reorderTableroColumns(UUID.randomUUID(), List.of(UUID.randomUUID()), context);
+        tools.listColumnas(context);
+        tools.getColumna(UUID.randomUUID(), context);
+        tools.createColumna("Column", null, "TAREAS", "PERSONALIZADA", context);
+        tools.editColumna(UUID.randomUUID(), "Column", null, "TAREAS", "PERSONALIZADA", context);
+        tools.listFichas(context);
+        tools.getFicha(UUID.randomUUID(), context);
+        tools.createFicha(UUID.randomUUID(), "TRATO", UUID.randomUUID(), null, List.of(), context);
+        tools.editFicha(UUID.randomUUID(), UUID.randomUUID(), "TRATO", UUID.randomUUID(), null, List.of(), context);
+        tools.moveFichaToColumna(UUID.randomUUID(), UUID.randomUUID(), context);
+
+        verify(tableros).getAll();
+        verify(tableroById).getById(any());
+        verify(createTablero).create(any());
+        verify(editTablero).edit(any());
+        verify(assign).asignarColumna(any());
+        verify(reorder).reordenar(any());
+        verify(columnas).getAll();
+        verify(columnaById).getById(any());
+        verify(createColumna).create(any());
+        verify(editColumna).edit(any());
+        verify(fichas).getAll();
+        verify(fichaById).getById(any());
+        verify(createFicha).create(any());
+        verify(editFicha).edit(any());
+        verify(moveFicha).moverAColumna(any());
+    }
+
+    @Test
     void noCompanyDeleteToolIsExposedByTheSharedSpringAiCrmToolsBean() {
         // Defence-in-depth: explicit allowlist check, in addition to the
         // generic six-tool discovery assertion, that no tool that even

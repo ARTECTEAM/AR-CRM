@@ -1,55 +1,50 @@
-# Tasks: Pipely Agent Conversation Memory — Legacy Surface Removal
+# Tasks: Pipely Agent Conversation Memory — Corrective Tool Pass
 
-## Review Workload Forecast
+## Current branch and delivery
 
-| Field | Value |
-|---|---|
-| Current diff | More than 9,000 deletions across approximately 295 files |
-| Review risk | High |
-| Delivery strategy | One PR with explicit `size:exception` |
-| Commit plan | Two work-unit commits |
-| Push status | No push yet |
+- Branch: `feat/agent-tablero-columna-ficha-tools`.
+- No commit, push, rebase, merge, reset, stash, or branch switch is part of this pass.
+- Review workload is above 400 changed lines. Use the dependency-ordered seven-slice Feature Branch Chain documented below. Target at most 400 changed lines per child where technically feasible; exact per-slice counts remain unproven until staging.
+- Shared files require hunk-level staging or reconstruction. Every intermediate branch must compile and pass focused tests, and each behavior carries its tests, documentation, and verification evidence.
 
-The maintainer approved one deletion-heavy PR under `size:exception`, not a feature-branch chain. Before any future push, organize the existing change as two work-unit commits: (1) legacy runtime/product surface removal plus data compatibility, and (2) the six-tool contract, active documentation, and verification evidence. No push has been performed or is authorized by this plan.
+## Completed corrective work
 
-## Work Units
+- [x] Preserve the six-tool default catalog.
+- [x] Separate the 15 tablero/columna/ficha callbacks behind `crm2.agent.development-tools-enabled=false`.
+- [x] Require both the explicit true flag and exactly one recognized non-production profile (`noauth` or `test`); reject production, profile-less, unknown, `noauth,test`, or any other mixed-profile true at startup with a stable error.
+- [x] Propagate the distinct optional trusted `superUsuarioId` claim outside model schemas.
+- [x] Reject `PREDETERMINADA` column creation without that claim; preserve normal `PERSONALIZADA` creation.
+- [x] Require `edit_ficha.etiquetaIds` and define full replacement (`[]` clears all).
+- [x] Add deterministic caps, stable typed-ID ordering, truthful metadata, and defensive list copies.
+- [x] Add a redacting Spring AI `ToolExecutionExceptionProcessor`.
+- [x] Wire that processor into the real ChatClient tool loop through one explicit `ToolCallingManager` and one auto-registered `ToolCallingAdvisor`.
+- [x] Prove redaction and explicit safe validation with two-response capturing-model loop tests.
+- [x] Prove absent/default, explicit false, `noauth`-only and `test`-only acceptance, plus profile-less, unknown, production, `noauth,test`, and accepted-plus-production rejection; successful actual ChatClient requests synchronize callback/prompt catalogs at 6/21 without direct callback introspection from tool objects.
+- [x] Keep all delete/remove callbacks absent.
+- [x] Inspect the durable `AgentToolAction` ledger and document why it cannot atomically converge the current CRM writes.
 
-### 1. Remove WhatsApp and external integrations
+## Verification checklist
 
-- [x] Delete the `whatsapp` Maven module.
-- [x] Remove Evolution, n8n bot, Anthropic suggestion, media, SSE, webhook, CSAT, autoresponder, and contact-sync adapters.
-- [x] Remove WhatsApp controllers, DTOs, persistence, security filters, Boot wiring, configuration, and schema definitions.
-- [x] Preserve non-WhatsApp Docker, Keycloak, CORS, SQL initialization, and deployment configuration.
+- [x] Focused Application tests: 15 passed.
+- [x] Focused Infrastructure mapper/tool/adapter/identity tests plus `AgentConversationIT`: 89 passed, including representative base/development `ToolCallback.call(...)` JSON serialization contracts.
+- [x] Focused Boot agent configuration/wiring tests: 42 passed; real-loop redaction, the exact-profile environment matrix, and exact successful 6/21 callback/prompt catalogs asserted.
+- [x] Affected Infrastructure/Boot reactor package with tests skipped (focused tests were run separately).
+- [x] Known broad baseline preserved, not rerun in this narrow pass: the prior safe relevant suite had one independently reproduced pre-existing `TableroControllerIT` 403 failure and no corrective-scope regression.
+- [x] Focused `AgentConversationIT`: 6 passed.
+- [x] `git diff --check` after the final serialization correction and evidence refresh.
+- [x] Actual changed-line count including untracked files: **2,582** (**2,082 additions + 500 deletions**).
 
-### 2. Remove legacy CRM product surfaces
+## Dependency-ordered review chain
 
-- [x] Remove deal notes/timeline domain, application, REST, persistence, and wiring.
-- [x] Remove ganar/perder methods, loss-reason storage, and obsolete enum values.
-- [x] Remove Empresa, Trato, Tarea, Ficha, and Tablero filter-criteria verticals.
-- [x] Restore simple no-argument list contracts.
-- [x] Preserve the actor-scoped contact search contract.
+1. Trusted identity transport, with command/service/adapter tests and identity documentation.
+2. Safe default-tool execution loop, with the configured manager/processor, two-response redaction tests, and error-policy documentation.
+3. Bounded output contracts, with DTO/mapper tests and output-contract documentation.
+4. Read-only development callbacks, with callback tests and documentation, still unregistered.
+5. Tablero/columna mutations, with tests and documentation, still unregistered.
+6. Ficha mutations, including full-replacement `etiquetaIds`, with tests and documentation, still unregistered.
+7. Environment-safe registration and catalog integration, with the exact-profile matrix, actual request/prompt synchronization tests, and deployment/catalog documentation.
 
-### 3. Reduce the Spring AI catalog
+## Remaining production work
 
-- [x] Remove `find_companies` and its mapper/output contract.
-- [x] Keep `create_company` and `edit_company`.
-- [x] Verify exactly six tools: `find_contacts`, `create_contact`, `edit_contact`, `create_company`, `edit_company`, and `edit_trato`.
-- [x] Update Boot wiring, system prompt, tests, tool rules, and active OpenSpec contracts.
-
-### 4. Migrate legacy deal state data
-
-- [x] Normalize persisted `GANADO` and `PERDIDO` values to `CERRADO` through idempotent SQL.
-- [x] Add repository-level regression coverage for repeated migration and enum hydration.
-- [x] Preserve existing valid deal states.
-
-### 5. Verification
-
-- [x] Domain tests: 6 passed.
-- [x] Trato migration/persistence tests: 3 passed.
-- [x] Infrastructure Spring AI tests: 69 passed.
-- [x] Boot wiring/configuration tests: 30 passed.
-- [x] Multi-module package completed successfully.
-- [x] Removed-symbol searches report no executable WhatsApp/Evolution surface or active filter-criteria, `find_companies`, deal-note, or ganar/perder contract; intentional safety, removal-context, migration, test, and report references remain.
-- [x] `git diff --check` passed.
-
-Full `mvn verify` remains non-green because the pre-existing `TableroControllerIT.create_shouldReturn201WithTableroJson` test expects `201` and receives `403`. This baseline authorization mismatch is tracked separately and is not part of the removal change.
+- [ ] Add actor/tenant ownership persistence and authorization to tablero/columna/ficha and actor-aware authorization to `edit_trato`.
+- [ ] Design an atomic durable convergence boundary spanning action claim, CRM mutation, and canonical result; add repeat-invocation effect tests only after that boundary exists.

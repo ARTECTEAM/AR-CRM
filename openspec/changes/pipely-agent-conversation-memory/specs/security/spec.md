@@ -1,28 +1,48 @@
 ## security (delta)
 
-### Modified Requirement: Path-Accurate Endpoint Security Coverage
-The system MUST verify actual protected paths as v1 behavior. A valid JWT MUST establish immutable ActorContext before model, memory, or tool work. Only trusted context MAY determine actor, owner, tenant, permissions, or idempotency identity; request/prompt/model/tool arguments MUST NOT override it. Conversation, memory, and tool results MUST remain owner-isolated where the backing Application contract supports owner scope. Every allowlisted tool, including `edit_trato`, requires trusted actor context at its boundary. The current `edit_trato` path does not forward that actor to its actor-free use case and therefore does not implement actor-aware target authorization; this is explicit development-only debt outside the removal pass, not a completed security guarantee. Internal handles and sensitive prompt/tool/response/memory content MUST remain out of public responses and default observability.
+### Modified requirement: trusted identity and production registration
+
+A valid JWT MUST establish immutable `ActorContext` before model, memory, or tool work. `usuarioId` and optional `superUsuarioId` are distinct claims. Only server-created context MAY carry them into tools; prompt/model arguments MUST NOT expose or override them.
+
+The production/default catalog MUST contain exactly six callbacks. The 15 actor/tenant-unscoped tablero/columna/ficha callbacks MUST require both `crm2.agent.development-tools-enabled=true` and exactly one active profile equal to `noauth` or `test`. Flag true with no profile, `noauth,test`, or any production/unrecognized/mixed profile MUST fail startup with a stable configuration error. Prompt text alone is not an enforcement boundary.
+
+All tool errors returned to the model MUST be redacted unless the originating validation exception is explicitly allowlisted as safe. Prompts, arguments, results, credentials, SQL, and sensitive exception details MUST remain out of logs and default observability.
+
+### Current authorization debt
+
+- `edit_trato` requires trusted actor presence but its use case is actor-free.
+- tablero list/get/create/edit/assign/reorder does not enforce actor/tenant ownership.
+- columna list/get/create/edit does not enforce actor/tenant ownership; only the real optional super-user claim is propagated for creation.
+- ficha list/get/create/edit/move does not enforce actor/tenant ownership.
+- The action ledger and CRM mutation are not one atomic transaction, so write retry convergence is not claimed.
+
+These are production blockers, not prompt policies. Development opt-in does not waive privilege-escalation, credential-leakage, irreversible-loss, or mutation-semantics protections.
+
+Security behavior is delivered with its owning slice in the seven-slice Feature Branch Chain in `design.md`, especially trusted identity transport (slice 1), safe default-tool execution (slice 2), unregistered callback/mutation slices (4–6), and environment-safe registration (slice 7). Documentation and verification are not detached; shared files require hunk-level staging/reconstruction, and each target-<=400-line intermediate branch must compile and pass focused tests.
 
 ### Scenarios
-#### Scenario: Missing credentials are rejected before protected work
-- GIVEN a request without valid JWT credentials
-- WHEN it reaches the conversational ingress
-- THEN the system returns 401 before model, memory, persistence, or tool work
 
-#### Scenario: Owner override cannot cross isolation boundaries
-- GIVEN an authenticated actor attempts to override another owner's identity
-- WHEN the request accesses conversation, memory, data, or tool results
-- THEN the system denies the cross-owner access
+#### Missing actor
+- GIVEN any registered callback without trusted actor context
+- WHEN it is invoked
+- THEN it fails before Application delegation
 
-#### Scenario: CRM authorization uses trusted context where supported
-- GIVEN an actor lacks current CRM permission or ownership for a target
-- WHEN an allowlisted CRM tool backed by an actor-aware Application contract is invoked
-- THEN the system denies disclosure or mutation using trusted actor context
+#### Identity separation
+- GIVEN a normal user has `usuarioId` but no `superUsuarioId`
+- WHEN a tool context is built
+- THEN no super-user entry exists and the normal user is never promoted
 
-#### Scenario: edit_trato authorization debt is not hidden
-- GIVEN `edit_trato` receives trusted actor context
-- WHEN it delegates to the current actor-free `EditTratoUseCase`
-- THEN the specification does not claim actor-aware target authorization, and production enforcement remains a dedicated Application-layer follow-up
+#### Default production posture
+- GIVEN the flag is absent/default or explicitly false in any environment
+- WHEN callback registration and prompt catalog are inspected
+- THEN only the six default tools are present and no tablero/columna/ficha callback is advertised
 
-### Superseded Statement
-The former authentication-only MVP boundary remains superseded for actor-aware CRM contracts. `edit_trato` is a documented temporary exception whose missing Application-layer authorization must not be represented as implemented.
+#### Production override fails closed
+- GIVEN the flag is true under a production, unrecognized, mixed, or profile-less runtime
+- WHEN configuration is created
+- THEN startup fails loudly with the stable development-tool configuration error
+
+#### Downstream failure
+- GIVEN a downstream exception containing internal detail
+- WHEN Spring AI processes the tool failure
+- THEN the model receives a stable redacted code/message without that detail

@@ -1,7 +1,8 @@
 # Spring AI CRM Tool Rules
 
 This document is the canonical rulebook for every Spring AI 2.0 CRM
-tool exposed by `com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools`. It
+tool exposed by `com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools` or
+`SpringAiDevelopmentCrmTools`. It
 is normative: any new CRM tool must follow every rule below, and any
 existing tool that drifts from these rules is a regression to fix.
 
@@ -29,9 +30,9 @@ A new allowlisted CRM tool must be:
    the existing Application command and delegates to the use case.
 3. Add (or reuse) a bounded output record in
    `infrastructure/.../adapter/out/ai/tool/dto/output/`.
-4. Add a `CrmToolMapper` method that converts raw values to the
-   Application command and another that projects the domain entity to
-   the bounded output.
+4. Validate and map at the boundary that owns each invariant: mapper,
+   tool trust boundary, or Application use case. Add a `CrmToolMapper`
+   projection for bounded output where needed.
 5. Update the production default-system template in
    `boot/.../config/AgentConfig.java` to advertise the new tool name.
 6. Add focused tests (next section).
@@ -71,20 +72,24 @@ A new allowlisted CRM tool must be:
 
 | Rule | Why |
 |------|-----|
-| All input validation MUST happen in the mapper (`CrmToolMapper`) before the use case runs. | Spring AI wraps mapper exceptions in `ToolExecutionException` with the original `IllegalArgumentException` as the cause; local sanitization hides real errors. |
-| Validation messages MUST be specific and machine-readable (e.g. `"edit_trato requires responsableId"`). | The model uses the message to recover and the test suite uses it to assert behavior. |
-| The tool MUST NOT catch and rewrap exceptions from the use case. | Spring AI's natural wrapper preserves the cause type and message; rewriting loses information. |
-| Required fields MUST be validated by both the `@ToolParam(required = true)` annotation (for the model) and the mapper (for the trust boundary). | Schema-required fields are advisory; the trust boundary is authoritative. |
+| Validation MUST occur at the mapper, tool boundary, or Application layer according to ownership of the invariant. | Parsing belongs in the mapper, trusted-context checks belong at the tool boundary, and business invariants remain in Application/domain. |
+| Model-visible failures MUST use stable generic redacted codes/messages. Arbitrary downstream or validation exception messages MUST never be copied into tool results. | Exception text can contain SQL, identifiers, credentials, or unstable implementation detail. |
+| Only deliberately classified safe-validation failures MAY select the stable validation code; their original exception text still MUST NOT become model visible. | Classification supports recovery without turning exception messages into an exfiltration channel. |
+| The tool MUST NOT catch and rewrap arbitrary use-case exceptions; the configured centralized processor performs classification and redaction. | One error boundary prevents per-tool drift and leakage. |
+| Required fields MUST be represented in `@ToolParam(required = true)` and validated again at the boundary that owns the invariant. | Schema-required fields are advisory; the server boundary is authoritative. |
+| The trusted `superUsuarioId`/`PREDETERMINADA` check MAY run at the tool boundary because it verifies server-created identity context before delegation; the Application service MUST continue enforcing its own column-creation rule. | This is defense in depth at a trust boundary, not duplicated target authorization. |
 
 ## Structured, bounded, non-sensitive outputs
 
 | Rule | Why |
 |------|-----|
-| Every tool MUST return a JSON-serialized record via `ObjectMapper.writeValueAsString`. | Stable contract for the model and the tests. |
+| Every `@Tool` method MUST return its concrete bounded DTO/record type. Spring AI 2.0's `DefaultToolCallResultConverter` owns Jackson serialization of that value for the model. Tool methods MUST NOT call `ObjectMapper` for result serialization. | One typed adapter contract and one framework-owned serialization boundary prevent double encoding and per-tool drift. |
+| Custom result formatting MUST use `@Tool(resultConverter = ...)` with a dedicated `ToolCallResultConverter`, never ad hoc JSON calls inside the tool method. | Keeps conversion explicit, discoverable, and controlled by Spring AI's tool execution pipeline. |
 | Output records MUST live in `infrastructure/.../adapter/out/ai/tool/dto/output/`. | One location, one naming convention. |
 | Outputs MUST NOT include: `creadoPor`, `actualizadoEn`, persistence timestamps, raw SQL, stack traces, JWTs, internal handles, cross-owner data. | Prevents information leakage through the model surface. |
 | Output fields MUST match the editable fields the use case actually persists. | Surfaces stage/loss-reason only when the use case changed them. |
-| Output records MUST carry `@JsonProperty` annotations matching their JSON keys. | Stable serialization regardless of record component renames. |
+| Plain bounded records with canonical component names are the default. Each component name is part of the model-visible JSON contract, so renaming a component is an explicit breaking tool-contract change that MUST be caught by a `ToolCallback.call(...)` JSON assertion. | Spring AI 2.0's default result converter uses Jackson 3 and serializes canonical record component names directly. |
+| Use `tools.jackson.annotation.JsonProperty` only when an intentionally required JSON key differs from the Java component name. Never use Jackson 2 `com.fasterxml.jackson.annotation.JsonProperty` to control Spring AI 2.0 tool-result serialization. | Avoids redundant annotations and prevents relying on annotations from the wrong Jackson generation. |
 
 ## Write-tool authorization, idempotency, and audit
 
@@ -92,6 +97,7 @@ A new allowlisted CRM tool must be:
 |------|-----|
 | Every write tool MUST require the authenticated actor via `ToolContext` before the use case runs. This validates trusted request context; it does not by itself prove target authorization or persisted audit. | Identity discipline without overstating downstream enforcement. |
 | Every write tool MUST delegate to a use case that is the source of truth for authorization semantics — do not re-implement ownership/role checks in the tool. | Avoids drift between tool and REST surfaces. |
+| A tool MAY fail closed on missing trusted identity required to construct a valid command, including the trusted super-user claim for `PREDETERMINADA`; this does not replace Application authorization or invariants. | Trust-boundary validation and business authorization have different owners. |
 | **DEVELOPMENT-ONLY TECHNICAL DEBT:** `edit_trato` validates that trusted actor context exists, then delegates to `EditTratoUseCase`, which does NOT receive or check that actor. Therefore the current backend path performs no actor-aware target authorization for this mutation. This gap is accepted temporarily so the maintainer can observe how the LLM uses the tool. Production safety requires adding `actorUsuarioId` to `EditTratoCommand` (or a parallel authorization adapter) and enforcing it in the use case. Do NOT close this gap in tooling code; redesign the Application authorization model in a dedicated task. | Honest record of the gap; the rules remain normative for production. |
 | Idempotency for write tools MUST live in the Application layer (e.g. via the agent tool-action ledger), not in the tool. | The tool should stay a thin mapper. |
 | Write effects MUST be auditable through the existing Application logging or the durable agent-tool-action ledger; the tool MUST NOT add its own audit logging. | One audit story, owned by Application. |
@@ -102,10 +108,11 @@ For every new (or modified) tool, add or update the following tests:
 
 | Test class | Location | Must cover |
 |------------|----------|------------|
-| `SpringAiCrmToolsTest` | `infrastructure/.../test/.../adapter/out/ai/tool/` | Allowlist exact six names; each tool's discovery carries real annotation metadata; the generated JSON schema requires exactly the documented fields; schemas never expose actor/owner/turn/handle; mapper validation surfaces through `ToolExecutionException` with the original `IllegalArgumentException` cause; use-case failure propagates unchanged. |
+| `SpringAiCrmToolsTest` | `infrastructure/.../test/.../adapter/out/ai/tool/` | Allowlist exact six names; each tool's discovery carries real annotation metadata; the generated JSON schema requires exactly the documented fields; schemas never expose actor/owner/turn/handle; mapper validation is marked explicitly; model-visible errors use stable validation/execution codes and never expose downstream exception text. |
 | `CrmToolMapperTest` | `infrastructure/.../test/.../adapter/out/ai/tool/` | Mapper accepts valid required + optional inputs; rejects null/blank required inputs with the documented message; rejects unknown enum names; maps domain entity to bounded output. |
-| `AgentConfigTest` | `boot/.../test/.../config/` | Production default-system template advertises every allowlisted tool by name. |
-| `AgentConfigOpenAiWiringTest` | `boot/.../test/.../config/` | Same — through the configured `ChatClient` round-trip. |
+| `AgentConfigTest` | `boot/.../test/.../config/` | The real two-response tool loop uses the configured redacting manager; the production default-system template advertises every allowlisted tool by name. |
+| `AgentDevelopmentToolsConfigTest` | `boot/.../test/.../config/` | Property-driven contexts distinguish absent/default, explicit false, exactly-one accepted non-production profile (`noauth` or `test`), and reject profile-less, unknown, production, `noauth,test`, or accepted-plus-production true; successful contexts synchronize model-received callback definitions and rendered prompt names at exactly six or 21, with no delete/remove callback. |
+| `AgentConfigOpenAiWiringTest` | `boot/.../test/.../config/` | Provider wiring resolves the production `ChatClient` and tool error processor. |
 | `AgentConversationWiringTest` | `boot/.../test/.../config/` | The canonical use case backing each write tool is wired exactly once. |
 
 When you remove a tool, remove its wiring bean, its mapper methods,
@@ -125,6 +132,8 @@ Copy and complete this checklist when adding a new tool.
 - [ ] Output record created under `dto/output/`
 - [ ] `CrmToolMapper.to<Name>Command(...)` validates required fields, parses enums, and rejects unknowns
 - [ ] `CrmToolMapper.to<Name>Output(...)` projects domain entity to the bounded output record
+- [ ] `@Tool` returns that concrete output record directly; no tool-local `ObjectMapper` serialization
+- [ ] A `ToolCallback.call(...)` test asserts the exact model-visible JSON keys; any intentional key/component mismatch uses Jackson 3 `tools.jackson.annotation.JsonProperty`
 - [ ] `WiringConfig` injects the canonical use case into the `springAiCrmTools` bean
 - [ ] `AgentConfig.DEFAULT_SYSTEM_TEMPLATE` advertises the new tool by name
 - [ ] Tests added in `SpringAiCrmToolsTest`, `CrmToolMapperTest`, `AgentConfigTest`, `AgentConfigOpenAiWiringTest`, `AgentConversationWiringTest`

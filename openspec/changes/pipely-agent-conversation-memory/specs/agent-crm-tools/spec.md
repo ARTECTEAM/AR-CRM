@@ -1,42 +1,54 @@
 ## agent-crm-tools
 
 ### Requirements
-- **Fixed Allowlist and Trusted Delegation:** The system MUST execute exactly `find_contacts`, `create_contact`, `edit_contact`, `create_company`, `edit_company`, and `edit_trato`; aliases/unknown calls MUST NOT execute. Tools delegate through Application use cases, never repositories. Model actor, owner, tenant, permission, and idempotency values are ignored/rejected in favor of trusted context.
-- **Find Contacts:** `find_contacts` MUST be read-only, return contacts visible under current CRM policy, and MAY use existing text, relationship-state, company, responsible-user, and source filters. It returns structured business data only.
-- **Create Contact:** `create_contact` MUST use the existing creation contract: company identity, name, and relationship state are required; optional fields are validated; creator/owner/audit identity comes from trusted context. It returns canonical contact data and safely converges on retries.
-- **Edit Deal:** `edit_trato` MUST delegate to the existing `EditTratoUseCase` and MUST only expose the editable business fields the use case accepts (id, responsableId, nombre, valorEstimado, probabilidad, fechaCierreEsperada, tipoContrato). Non-editable deal state is preserved by the canonical use case and MUST NOT be advertised as editable input. The `responsableId` field is the deal's business responsible user, NOT the authenticated actor. The tool requires trusted actor context before delegation, but the current actor-free `EditTratoUseCase` neither receives that actor nor performs actor-aware authorization. This development-only gap is documented, not fixed by this change.
-- **Controlled Tool Outcomes:** Outputs MUST be structured and MUST NOT expose SQL, credentials, stack traces, JWTs, internal handles, or cross-owner data. Reads MAY repeat; writes MUST be safely idempotent. Failures are controlled application/model outcomes.
 
-### V1 Correctness Boundary
-Actor-aware authorization remains a production acceptance criterion, but the current `edit_trato` path does not satisfy it because `EditTratoUseCase` receives no authenticated actor. Closing that gap requires a dedicated Application authorization change and is outside this removal pass; trusted-context validation at the tool boundary MUST NOT be represented as target authorization. Safe idempotency remains a CRM-write acceptance criterion: a retry with the same trusted action identity MUST NOT produce a second CRM effect.
+- **Default catalog:** With `crm2.agent.development-tools-enabled` absent or false, the system MUST register and advertise exactly `find_contacts`, `create_contact`, `edit_contact`, `create_company`, `edit_company`, and `edit_trato`.
+- **Development catalog:** With the explicit flag true and exactly one active profile equal to `noauth` or `test`, the system MUST additionally register exactly the 15 tablero/columna/ficha callbacks listed in the proposal, for a total of 21. Flag true with no profile, `noauth,test`, or any production/unrecognized/mixed profile MUST fail startup with the stable configuration error. No delete/remove callback MAY be registered in either successful mode.
+- **Trusted context:** Actor, owner, tenant, turn, and optional super-user identity MUST come only from server-created context and MUST be absent from model-visible schemas. `usuarioId` MUST NOT be converted into `superUsuarioId`.
+- **Column creation:** `create_columna` MUST pass the actual optional trusted `superUsuarioId`. `PREDETERMINADA` MUST fail before delegation when the claim is absent. `PERSONALIZADA` MAY delegate with no super-user identity.
+- **Card edit labels:** `edit_ficha.etiquetaIds` MUST be required and represent the complete replacement set; explicit `[]` means clear all. Omission MUST NOT be interpreted as clear-all.
+- **Bounded results:** All top-level and nested collections MUST be deterministically ordered, hard-capped, null-normalized, and defensively copied. Sentinel-backed `find_contacts` MUST report `returned` and truthful `truncated` without claiming an exact total. Fully materialized development lists MUST report exact `total` and truthful `truncated`; fully materialized nested collections MUST report their corresponding exact totals/truncation flags.
+- **Safe failures:** Arbitrary runtime/downstream messages MUST NOT be model visible. Only explicitly marked safe validation messages MAY be returned; all other failures MUST use a stable redacted code/message.
+- **Application delegation:** Tools MUST call Application use cases, never repositories. Trusted-context presence MUST NOT be described as actor/tenant authorization where the backing use case is unscoped.
 
-### Exact Tool Scenarios
-#### Scenario: Unknown tools are rejected
-- GIVEN a model requests an unallowlisted or aliased tool
-- WHEN the tool request is evaluated
-- THEN it is not executed
+### Development-only blockers
 
-#### Scenario: Contact search respects current visibility
-- GIVEN an authenticated actor and matching contacts
-- WHEN `find_contacts` is invoked
-- THEN it returns only contacts visible under the actor's current CRM policy
+The 15 tablero/columna/ficha tools are not production-safe: current use cases are actor/tenant unscoped. `edit_trato` remains actor-free downstream. The existing durable action ledger does not atomically include CRM writes, leaving a crash window between mutation and action completion. Therefore this spec does not claim retry convergence for these writes; production enablement requires a new atomic design and repeat-invocation effect tests.
 
-#### Scenario: Contact creation uses trusted identity
-- GIVEN valid required contact data and a trusted actor
-- WHEN `create_contact` is invoked
-- THEN it returns one canonical contact without repeating the effect on the same action retry
+Delivery follows the seven-slice Feature Branch Chain in `design.md`: trusted identity transport; safe default-tool execution loop; bounded output contracts; unregistered read-only development callbacks; unregistered tablero/columna mutations; unregistered ficha mutations; then environment-safe registration/catalog integration. Each slice carries its own tests, documentation, and verification, targets at most 400 changed lines where technically feasible, uses hunk-level staging/reconstruction for shared files, and must compile and pass focused tests before the next slice.
 
-#### Scenario: Deal-edit validation and the authorization gap are explicit
-- GIVEN an existing deal, trusted actor context, and either a valid or unsupported input
-- WHEN `edit_trato` is invoked
-- THEN a valid input mutates the editable fields while the deal's state remains unchanged; an unsupported field or invalid value mutates nothing; and the contract does not claim actor-aware target authorization that the current use case does not perform
+### Scenarios
 
-#### Scenario: edit_trato does not advertise non-editable deal state
-- GIVEN the canonical edit use case preserves non-editable deal state
-- WHEN the tool's JSON schema is introspected
-- THEN it MUST expose only the documented editable fields
+#### Default startup
+- GIVEN the development flag is absent or false
+- WHEN the CRM `ChatClient` is built
+- THEN exactly six callback schemas and exactly those six prompt catalog names are present
 
-#### Scenario: CRM write retries are safely idempotent
-- GIVEN a completed CRM write with a trusted action identity
-- WHEN the same write action is retried
-- THEN the canonical result is returned or converged without another CRM effect
+#### Development startup
+- GIVEN the development flag is true and the only active profile is `noauth` or `test`
+- WHEN the CRM `ChatClient` is built
+- THEN exactly 21 non-delete callback schemas and names are present
+
+#### Production startup rejects development tools
+- GIVEN the development flag is true and no profile or a production/unrecognized/mixed profile is active
+- WHEN configuration is created
+- THEN startup fails with the stable development-tool configuration error
+
+#### Trusted super-user propagation
+- GIVEN distinct trusted `usuarioId` and `superUsuarioId` claims
+- WHEN `create_columna` is invoked
+- THEN the command contains only the trusted `superUsuarioId`, and neither identity appears in the schema
+
+#### Normal-user column creation
+- GIVEN a trusted normal user with no super-user claim
+- WHEN `PERSONALIZADA` is requested
+- THEN creation delegates with no super-user identity
+- WHEN `PREDETERMINADA` is requested
+- THEN it fails before mutation
+
+#### Label replacement
+- GIVEN `edit_ficha`
+- WHEN `etiquetaIds` is omitted
+- THEN validation fails before mutation
+- WHEN `etiquetaIds` is `[]`
+- THEN the complete label set is cleared

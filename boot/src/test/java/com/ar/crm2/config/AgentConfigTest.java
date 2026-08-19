@@ -1,6 +1,7 @@
 package com.ar.crm2.config;
 
 import com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools;
+import com.ar.crm2.adapter.out.ai.tool.SpringAiDevelopmentCrmTools;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
@@ -69,6 +70,25 @@ class AgentConfigTest {
 
     private static ChatClient newClientUnderTest() {
         return new AgentConfig().chatClient(new CapturingChatModel("ok"), newNoopTools());
+    }
+
+    private static SpringAiDevelopmentCrmTools newNoopDevelopmentTools() {
+        return new SpringAiDevelopmentCrmTools(
+                mock(com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.CreateTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.EditTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class),
+                mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
+                mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
+                mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
+                mock(com.ar.crm2.application.columna.port.in.EditColumnaUseCase.class),
+                mock(com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase.class),
+                mock(com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase.class),
+                mock(com.ar.crm2.application.ficha.port.in.CreateFichaUseCase.class),
+                mock(com.ar.crm2.application.ficha.port.in.EditFichaUseCase.class),
+                mock(com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase.class));
     }
 
     @Test
@@ -196,7 +216,8 @@ class AgentConfigTest {
                 .contains("create_contact")
                 .contains("edit_contact")
                 .contains("create_company")
-                .contains("edit_company", "edit_trato");
+                .contains("edit_company", "edit_trato")
+                .doesNotContain("list_tableros", "create_columna", "edit_ficha");
         assertThat(text)
                 .as("template forbids the model from supplying actor identity")
                 .containsIgnoringCase("actor");
@@ -295,7 +316,8 @@ class AgentConfigTest {
                 .contains("create_contact")
                 .contains("edit_contact")
                 .contains("create_company")
-                .contains("edit_company", "edit_trato");
+                .contains("edit_company", "edit_trato")
+                .doesNotContain("list_tableros", "create_columna", "edit_ficha");
 
         // The shared tools object must be reusable across ChatClient
         // builds — the same shared instance produces the same callback
@@ -314,6 +336,28 @@ class AgentConfigTest {
     }
 
     @Test
+    void developmentToolsOptInAdvertisesExactlyTwentyOneCallbacksAndPromptNames() {
+        CapturingChatModel model = new CapturingChatModel("ok");
+        SpringAiCrmTools base = newNoopTools();
+        SpringAiDevelopmentCrmTools development = newNoopDevelopmentTools();
+        ChatClient configured = new AgentConfig().buildChatClient(
+                model, base, development,
+                new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()));
+
+        configured.prompt().system(spec -> spec.param("durable_memories", "")).user("hi").call().content();
+
+        Set<String> names = new HashSet<>();
+        for (ToolCallback callback : org.springframework.ai.support.ToolCallbacks.from(base, development)) {
+            names.add(callback.getToolDefinition().name());
+        }
+        assertThat(names).hasSize(21)
+                .contains("find_contacts", "edit_trato", "list_tableros", "create_columna", "edit_ficha")
+                .noneMatch(name -> name.contains("delete") || name.contains("remove"));
+        assertThat(model.capturedPrompt().getInstructions().get(0).getText())
+                .contains("list_tableros", "move_ficha_to_columna");
+    }
+
+    @Test
     void realToolLoopRedactsSensitiveDownstreamFailureBeforeSecondModelRequest() {
         String sentinel = "SENSITIVE_SQL_PROVIDER_DETAIL";
         GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
@@ -321,7 +365,7 @@ class AgentConfigTest {
         SequentialToolCallingChatModel model =
                 new SequentialToolCallingChatModel("find_contacts", "{}");
         ChatClient configured = new AgentConfig().buildChatClient(
-                model, newTools(useCase),
+                model, newTools(useCase), null,
                 new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()));
 
         String content = configured.prompt()
@@ -347,7 +391,7 @@ class AgentConfigTest {
         SequentialToolCallingChatModel model = new SequentialToolCallingChatModel(
                 "create_contact", "{\"nombre\":\"Ada\",\"estadoRelacion\":\"CLIENTE\"}");
         ChatClient configured = new AgentConfig().buildChatClient(
-                model, newNoopTools(),
+                model, newNoopTools(), null,
                 new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()));
 
         configured.prompt()

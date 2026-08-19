@@ -1,64 +1,54 @@
-# Design: Pipely Agent Conversation Memory — Current CRM Tool Surface
+# Design: Pipely Agent Conversation Memory — Gated CRM Tool Catalog
 
-## Technical Approach
+## Catalog composition
 
-Preserve `POST /api/agent/messages`, visible history, durable-memory recall, Spring AI completion, and one shared DefaultTools bean. Keep each tool as a thin adapter that validates model arguments and delegates to an existing canonical Application use case.
+`SpringAiCrmTools` owns the six default callbacks. `SpringAiDevelopmentCrmTools` owns the 15 tablero/columna/ficha callbacks. `AgentDevelopmentToolsConfig` creates the latter only when `crm2.agent.development-tools-enabled=true` (default `false`) and `AgentDevelopmentToolsEnvironmentGuard` confirms that exactly one Spring profile is active and it is `noauth` (local development) or `test`. No profile, `prod`, `production`, unknown profiles, and every mixed profile set—including `noauth,test`—reject flag `true` with one stable configuration error. `AgentConfig` registers and advertises the objects actually present: six callbacks when disabled, 21 only after the guard accepts the runtime.
 
-The active catalog contains exactly six tools: `find_contacts`, `create_contact`, `edit_contact`, `create_company`, `edit_company`, and `edit_trato`. WhatsApp integrations, deal notes, stage-specific writes, legacy list filters, and `find_companies` are outside the current surface.
+This is registration enforcement, not prompt-only policy. No delete/remove callback is declared in either object.
 
-## Architecture Decisions
-
-| Decision | Current choice and rationale |
-|---|---|
-| Tool boundary | Trusted actor data comes from server-built `ToolContext`, remains outside model schemas, and fails closed when absent. |
-| Application reuse | Tools call the same canonical use cases used by other adapters. No agent-specific business use-case layer remains. |
-| Contact search | Preserve the actor-scoped database query and the 20-result cap. |
-| Company access | Keep company create/edit. Company search is removed until a replacement query contract is designed. |
-| Deal editing | `edit_trato` delegates to `EditTratoUseCase`. Actor-aware deal authorization remains documented development debt in the downstream use case. |
-| Removed integrations | The WhatsApp/Evolution/n8n/Anthropic module and its controllers, persistence, security, wiring, configuration, and schema are removed. |
-| Legacy deal states | Persisted `GANADO` and `PERDIDO` values are normalized to `CERRADO` before JPA enum hydration. |
-
-## Data Flow
+## Trusted identity flow
 
 ```text
-JWT ActorContext → CompleteUserTurnService → ChatCompletionPort
-  → server-built ToolContext → SpringAiCrmTools
-  → CrmToolMapper validation → canonical Application use case
-  → bounded tool output → assistant response
+JWT ActorContext(usuarioId, optional superUsuarioId)
+  -> AgentRestMapper
+  -> CompleteUserTurnCommand
+  -> CompleteUserTurnService
+  -> ChatCompletionPort
+  -> SpringAiChatCompletionAdapter ToolContext
+  -> tool method (identity absent from model schema)
 ```
 
-## Main Components
+The two claims are never substituted for each other. `create_columna` maps the optional trusted super-user claim directly. `PREDETERMINADA` requires that claim; normal `PERSONALIZADA` creation sends `Optional.empty()`.
 
-| Component | Responsibility |
-|---|---|
-| `SpringAiCrmTools` | Declares the six model-visible tools and validates trusted context presence. |
-| `CrmToolMapper` | Normalizes model arguments and maps bounded outputs. |
-| `AgentConfig` | Registers one shared DefaultTools bean and advertises the six-tool catalog. |
-| `WiringConfig` | Injects only the canonical use cases required by the active tools. |
-| Agent conversation/memory packages | Preserve turn idempotency, visible history, and durable recall independently of removed CRM integrations. |
-| `schema.sql` | Retains non-WhatsApp compatibility patches and normalizes legacy deal states. |
+## Output and error boundaries
 
-## Removed Surface
+- Top-level lists use stable typed-ID ordering and hard cap 50.
+- Nested board columns and card labels use stable typed-ID ordering and hard cap 25.
+- Sentinel-backed `find_contacts` exposes `returned` plus truthful `truncated`; it does not claim an exact total beyond the query sentinel.
+- Fully materialized development lists expose exact `total` plus `truncated`; nested fully materialized collections expose corresponding exact totals/truncation flags.
+- Every output record list is null-normalized and defensively copied.
+- Every CRM `@Tool` method returns its concrete bounded DTO/record directly. Spring AI 2.0's `DefaultToolCallResultConverter` owns Jackson serialization; custom formatting must use `@Tool(resultConverter = ...)`, never tool-local `ObjectMapper` calls.
+- Plain bounded records use canonical component names as their model-visible JSON contract. A component rename is an explicit breaking tool-contract change and callback-level JSON contract tests must catch it. Use Jackson 3 `tools.jackson.annotation.JsonProperty` only when an intentionally required JSON key differs from the Java component name; never use Jackson 2 `com.fasterxml.jackson.annotation.JsonProperty` to control Spring AI 2.0 tool-result serialization.
+- One auto-registered `ToolCallingAdvisor` owns the real loop through an explicit `ToolCallingManager` configured with `SafeToolExecutionExceptionProcessor`; no second tool advisor is registered.
+- `SafeToolExecutionExceptionProcessor` returns a fixed validation code/message only for a `SafeToolValidationException` in the cause chain; all other failures become stable `TOOL_EXECUTION_FAILED` output without downstream text. Both records are serialized by Jackson rather than string-concatenating exception messages.
+- `edit_ficha.etiquetaIds` is schema-required and is a complete replacement; explicit `[]` clears all labels.
 
-- WhatsApp channels, conversations, messages, groups, media, webhooks, SSE, bots, CSAT, autoresponders, Evolution, n8n, and Anthropic suggestion.
-- Deal notes/timeline and ganar/perder-specific domain behavior.
-- Empresa, trato, tarea, ficha, and tablero filter-criteria verticals.
-- `find_companies` and its bounded output.
-- `AgentCrmWriteUseCase`, `AgentCrmWriteService`, and stage-specific tool contracts.
+## Known production blockers
 
-## Testing Strategy
+The current tablero/columna/ficha list/get/edit/move use cases are globally scoped and do not persist/enforce actor or tenant ownership. `CreateTableroService` does not establish ownership. `edit_trato` also delegates to an actor-free use case.
 
-| Layer | Proof |
-|---|---|
-| Domain/Application | Current `Trato` state model and canonical use-case contracts compile and pass focused tests. |
-| Infrastructure | Six-tool schemas/mapping pass; actor-scoped contact search remains; legacy deal rows normalize before repository hydration. |
-| Boot | Shared DefaultTools wiring and six-tool inventory pass focused context tests. |
-| Package | All remaining Maven modules package successfully. |
+The durable `AgentToolAction` model derives identity from owner, turn, operation name, and canonical arguments, but its claim/completion transactions are separate from CRM aggregate writes. It cannot guarantee exactly-once effects across a crash window. Integrating it superficially would create false assurance, so the 15 mutating development tools remain gated and idempotency is an explicit production blocker.
 
-Full `mvn verify` still reports the unrelated baseline `TableroControllerIT` authorization mismatch (`201` expected, `403` actual). It is not evidence against this removal change.
+## Delivery state
 
-## Migration and Rollout
+Current branch: `feat/agent-tablero-columna-ficha-tools`. No commit or push is prepared by this corrective pass. The exact total diff after this pass is recorded in `tasks.md` and `verify-report.md`; exact per-slice counts remain unknown until staging proves them. Build a Feature Branch Chain in this dependency order, targeting at most 400 changed lines per child where technically feasible:
 
-`schema.sql` idempotently maps existing `tratos.estado` values `GANADO` and `PERDIDO` to `CERRADO`. Existing WhatsApp tables are not dropped automatically; database cleanup is a separate operator decision.
+1. Trusted identity transport, including its command/service/adapter tests and identity documentation.
+2. Safe default-tool execution loop, including the configured manager/processor, real-loop redaction tests, and error-policy documentation.
+3. Bounded output contracts, including DTO/mapper tests and output-contract documentation.
+4. Read-only development callbacks, with callback tests and documentation, still unregistered.
+5. Tablero/columna mutations, with their tests and documentation, still unregistered.
+6. Ficha mutations, including full-replacement `etiquetaIds`, with tests and documentation, still unregistered.
+7. Environment-safe registration and catalog integration, with the exact-profile matrix, request/prompt synchronization tests, and deployment/catalog documentation.
 
-The maintainer-approved delivery is one PR with an explicit `size:exception`, organized as two work-unit commits: legacy runtime/product removal plus data compatibility, followed by the six-tool contract, active documentation, and verification evidence. No push has occurred yet; this design does not create or claim a feature-branch chain.
+Shared files require hunk-level staging or reconstruction onto each child branch. Every intermediate branch must compile and pass its focused tests. Documentation and verification evidence travel with the behavior each slice introduces; there is no detached optional documentation slice.

@@ -64,9 +64,9 @@ class AgentConfigOpenAiWiringTest {
                     mock(GetAllContactosUseCase.class),
                     mock(CreateContactoUseCase.class),
                     mock(EditContactoUseCase.class),
-                    mock(CreateEmpresaUseCase.class),
-                    mock(EditEmpresaUseCase.class),
-                    mock(EditTratoUseCase.class));
+                mock(CreateEmpresaUseCase.class),
+                mock(EditEmpresaUseCase.class),
+                mock(EditTratoUseCase.class));
         }
     }
 
@@ -182,7 +182,8 @@ class AgentConfigOpenAiWiringTest {
             assertThat(systemText)
                     .as("no company-delete tool must be advertised")
                     .doesNotContain("delete_company")
-                    .doesNotContain("delete_empresa");
+                    .doesNotContain("delete_empresa")
+                    .doesNotContain("list_tableros", "create_columna", "edit_ficha");
         }
     }
 
