@@ -1,7 +1,5 @@
 package com.ar.crm2.adapter.out.ai.tool.dto.output;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 /**
  * Bounded, model-visible output of the {@code edit_company} tool.
  *
@@ -17,13 +15,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * case actually changed.
  */
 public record EditCompanyOutput(
-        @JsonProperty("id") String id,
-        @JsonProperty("nombre") String nombre,
-        @JsonProperty("sector") String sector,
-        @JsonProperty("estadoRelacion") String estadoRelacion,
-        @JsonProperty("responsableId") String responsableId,
-        @JsonProperty("paginaWeb") String paginaWeb,
-        @JsonProperty("telefono") String telefono,
-        @JsonProperty("notas") String notas
+        String id,
+        String nombre,
+        String sector,
+        String estadoRelacion,
+        String responsableId,
+        String paginaWeb,
+        String telefono,
+        String notas
 ) {
 }

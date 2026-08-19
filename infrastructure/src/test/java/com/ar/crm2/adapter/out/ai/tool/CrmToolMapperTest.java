@@ -15,18 +15,34 @@ import com.ar.crm2.application.trato.command.EditTratoCommand;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.entity.Empresa;
 import com.ar.crm2.model.entity.Trato;
+import com.ar.crm2.model.entity.Columna;
+import com.ar.crm2.model.entity.ColumnaTablero;
+import com.ar.crm2.model.entity.Ficha;
+import com.ar.crm2.model.entity.FichaEtiqueta;
+import com.ar.crm2.model.entity.Tablero;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.enums.EstadoTrato;
 import com.ar.crm2.model.enums.TipoContrato;
+import com.ar.crm2.model.enums.TipoColumna;
+import com.ar.crm2.model.enums.TipoEtiqueta;
+import com.ar.crm2.model.enums.TipoFicha;
+import com.ar.crm2.model.enums.TipoTablero;
 import com.ar.crm2.model.vo.ContactoId;
 import com.ar.crm2.model.vo.EmpresaId;
 import com.ar.crm2.model.vo.TratoId;
 import com.ar.crm2.model.vo.UsuarioId;
+import com.ar.crm2.model.vo.ColumnaId;
+import com.ar.crm2.model.vo.EtiquetaId;
+import com.ar.crm2.model.vo.FichaId;
+import com.ar.crm2.model.vo.TableroId;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
@@ -48,6 +64,69 @@ class CrmToolMapperTest {
             UUID.fromString("aaaa1111-2222-3333-4444-555566667777");
 
     @Test
+    void topLevelCollectionsAreNullSafeSortedCappedAndTruthfullyDescribed() {
+        List<Columna> source = new ArrayList<>();
+        for (int i = 1; i <= 52; i++) {
+            source.add(Columna.reconstitute(new ColumnaId(new UUID(0, i)), "Column " + i,
+                    "#FFFFFF", TipoTablero.TAREAS, TipoColumna.PERSONALIZADA, false));
+        }
+        Collections.reverse(source);
+        source.add(null);
+
+        var output = CrmToolMapper.toColumnasOutput(source);
+
+        assertThat(output.columnas()).hasSize(50);
+        assertThat(output.total()).isEqualTo(52);
+        assertThat(output.truncated()).isTrue();
+        assertThat(output.columnas().get(0).id()).isEqualTo(new UUID(0, 1).toString());
+        assertThat(output.columnas().get(49).id()).isEqualTo(new UUID(0, 50).toString());
+        assertThat(CrmToolMapper.toColumnasOutput(null).columnas()).isEmpty();
+        assertThat(CrmToolMapper.toColumnasOutput(null).truncated()).isFalse();
+    }
+
+    @Test
+    void nestedCollectionsAreSortedCappedAndTruthfullyDescribed() {
+        List<ColumnaTablero> assignments = new ArrayList<>();
+        List<FichaEtiqueta> labels = new ArrayList<>();
+        for (int i = 26; i >= 1; i--) {
+            assignments.add(ColumnaTablero.reconstitute(new ColumnaId(new UUID(0, i)),
+                    TipoTablero.TRATOS, 1, null, BigDecimal.ZERO));
+            labels.add(FichaEtiqueta.reconstitute(new EtiquetaId(new UUID(0, i)), TipoEtiqueta.TRATO));
+        }
+        Tablero tablero = Tablero.reconstitute(new TableroId(new UUID(0, 99)), "Board", "Description",
+                assignments, TipoTablero.TRATOS, LocalDateTime.now());
+        Ficha ficha = Ficha.reconstitute(new FichaId(new UUID(0, 98)), new ColumnaId(new UUID(0, 1)),
+                TipoFicha.TRATO, TratoId.from(new UUID(0, 2)), null, Instant.now(), labels);
+
+        var boardOutput = CrmToolMapper.toTableroOutput(tablero);
+        var cardOutput = CrmToolMapper.toFichaOutput(ficha);
+
+        assertThat(boardOutput.columnas()).hasSize(25);
+        assertThat(boardOutput.totalColumnas()).isEqualTo(26);
+        assertThat(boardOutput.columnasTruncated()).isTrue();
+        assertThat(boardOutput.columnas().get(0).columnaId()).isEqualTo(new UUID(0, 1).toString());
+        assertThat(cardOutput.etiquetaIds()).hasSize(25);
+        assertThat(cardOutput.totalEtiquetas()).isEqualTo(26);
+        assertThat(cardOutput.etiquetasTruncated()).isTrue();
+        assertThat(cardOutput.etiquetaIds().get(0)).isEqualTo(new UUID(0, 1).toString());
+    }
+
+    @Test
+    void outputRecordsDefensivelyCopyAndNullNormalizeLists() {
+        List<com.ar.crm2.adapter.out.ai.tool.dto.output.ColumnaOutput> mutable = new ArrayList<>();
+        mutable.add(new com.ar.crm2.adapter.out.ai.tool.dto.output.ColumnaOutput(
+                "id", "name", null, "TAREAS", "PERSONALIZADA"));
+        var copied = new com.ar.crm2.adapter.out.ai.tool.dto.output.ColumnasOutput(mutable, 1, false);
+        mutable.clear();
+
+        assertThat(copied.columnas()).hasSize(1);
+        assertThatThrownBy(() -> copied.columnas().clear()).isInstanceOf(UnsupportedOperationException.class);
+        assertThat(new com.ar.crm2.adapter.out.ai.tool.dto.output.FichasOutput(null, 0, false).fichas()).isEmpty();
+        assertThat(new com.ar.crm2.adapter.out.ai.tool.dto.output.FichaOutput(
+                null, null, null, null, null, null, 0, false).etiquetaIds()).isEmpty();
+    }
+
+    @Test
     void findContactsMapsAllOptionalFiltersAndPreservesTrustedActor() {
         GetAllContactosCommand command = CrmToolMapper.toGetAllContactosCommand(
                 "acme", "PROSPECTO",
@@ -63,8 +142,8 @@ class CrmToolMapperTest {
         assertThat(command.responsableId()).isEqualTo(UUID.fromString("22222222-2222-2222-2222-222222222222"));
         assertThat(command.comoNosConocio()).isEqualTo("LinkedIn");
         assertThat(command.maxResults())
-                .as("the mapper must always apply the hard cap of 20")
-                .isEqualTo(20);
+                .as("the query fetches one sentinel row so output truncation metadata is truthful")
+                .isEqualTo(21);
     }
 
     @Test
@@ -78,7 +157,7 @@ class CrmToolMapperTest {
         assertThat(command.empresaId()).isNull();
         assertThat(command.responsableId()).isNull();
         assertThat(command.comoNosConocio()).isNull();
-        assertThat(command.maxResults()).isEqualTo(20);
+        assertThat(command.maxResults()).isEqualTo(21);
     }
 
     @Test
@@ -397,16 +476,38 @@ class CrmToolMapperTest {
         FindContactsOutput output = CrmToolMapper.toFindContactsOutput(List.of(c1, c2));
 
         assertThat(output.contacts()).hasSize(2);
-        assertThat(output.contacts().get(0).nombre()).isEqualTo("Acme");
-        assertThat(output.contacts().get(0).estadoRelacion()).isEqualTo("PROSPECTO");
-        assertThat(output.contacts().get(1).nombre()).isEqualTo("Beta");
-        assertThat(output.contacts().get(1).correo()).isEqualTo("beta@example.com");
+        assertThat(output.contacts()).extracting(FindContactsOutput.ContactSummary::id)
+                .containsExactlyElementsOf(java.util.stream.Stream.of(c1, c2)
+                        .sorted(java.util.Comparator.comparing(contact -> contact.getId().value()))
+                        .map(contact -> contact.getId().value().toString()).toList());
+        assertThat(output.contacts()).anySatisfy(contact -> {
+            assertThat(contact.nombre()).isEqualTo("Acme");
+            assertThat(contact.estadoRelacion()).isEqualTo("PROSPECTO");
+        }).anySatisfy(contact -> {
+            assertThat(contact.nombre()).isEqualTo("Beta");
+            assertThat(contact.correo()).isEqualTo("beta@example.com");
+        });
     }
 
     @Test
     void findContactsMapsEmptyAndNullListToEmptyOutput() {
         assertThat(CrmToolMapper.toFindContactsOutput(List.of()).contacts()).isEmpty();
         assertThat(CrmToolMapper.toFindContactsOutput(null).contacts()).isEmpty();
+    }
+
+    @Test
+    void findContactsUsesSentinelRowForTruthfulTruncationWithoutExposingIt() {
+        List<Contacto> contacts = new ArrayList<>();
+        for (int i = 0; i < 21; i++) {
+            contacts.add(Contacto.create(EmpresaId.from(UUID.randomUUID()), "Contact " + i,
+                    null, EstadoRelacion.PROSPECTO, null, null, null, null, null));
+        }
+
+        FindContactsOutput output = CrmToolMapper.toFindContactsOutput(contacts);
+
+        assertThat(output.contacts()).hasSize(20);
+        assertThat(output.returned()).isEqualTo(20);
+        assertThat(output.truncated()).isTrue();
     }
 
     @Test

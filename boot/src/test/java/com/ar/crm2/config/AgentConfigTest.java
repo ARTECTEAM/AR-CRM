@@ -64,8 +64,7 @@ class AgentConfigTest {
                 mock(EditContactoUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
-                mock(EditTratoUseCase.class),
-                new ObjectMapper());
+                mock(EditTratoUseCase.class));
     }
 
     private static ChatClient newClientUnderTest() {
@@ -345,18 +344,15 @@ class AgentConfigTest {
 
     @Test
     void realToolLoopReturnsOnlyStableCodeForExplicitSafeValidationFailure() {
-        GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
-        when(useCase.getAll(any())).thenThrow(
-                new com.ar.crm2.adapter.out.ai.tool.SafeToolValidationException("sensitive validation detail"));
         SequentialToolCallingChatModel model = new SequentialToolCallingChatModel(
-                "find_contacts", "{}");
+                "create_contact", "{\"nombre\":\"Ada\",\"estadoRelacion\":\"CLIENTE\"}");
         ChatClient configured = new AgentConfig().buildChatClient(
-                model, newTools(useCase),
+                model, newNoopTools(),
                 new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()));
 
         configured.prompt()
                 .system(spec -> spec.param("durable_memories", ""))
-                .user("find contacts")
+                .user("create contact")
                 .toolContext(Map.of("actorUsuarioId", UUID.randomUUID()))
                 .call()
                 .content();
@@ -365,7 +361,7 @@ class AgentConfigTest {
         assertThat(toolResponseData(model.prompts().get(1)))
                 .isEqualTo("{\"success\":false,\"code\":\"TOOL_VALIDATION_FAILED\","
                         + "\"message\":\"The tool input is invalid.\"}")
-                .doesNotContain("sensitive validation detail");
+                .doesNotContain("empresaId");
     }
 
     private static String toolResponseData(Prompt prompt) {

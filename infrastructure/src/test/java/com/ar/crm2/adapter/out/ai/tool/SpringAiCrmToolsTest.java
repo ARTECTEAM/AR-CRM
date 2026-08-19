@@ -1,5 +1,6 @@
 package com.ar.crm2.adapter.out.ai.tool;
 
+import com.ar.crm2.adapter.out.ai.tool.dto.output.FindContactsOutput;
 import com.ar.crm2.application.contacto.command.CreateContactoCommand;
 import com.ar.crm2.application.contacto.command.EditContactoCommand;
 import com.ar.crm2.application.contacto.command.GetAllContactosCommand;
@@ -49,7 +50,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * Spring AI 2.0 contract tests for the shared, stateless CRM tool bean.
- * They prove the six-tool allowlist, model-visible schema boundary,
+ * They prove the non-delete allowlist, model-visible schema boundary,
  * trusted per-call identity, bounded outputs, and Application
  * delegation.
  */
@@ -79,8 +80,7 @@ class SpringAiCrmToolsTest {
             EditTratoUseCase editTratoUseCase) {
         return new SpringAiCrmTools(
                 contactosUseCase, createUseCase, editContactoUseCase,
-                createEmpresaUseCase, editEmpresaUseCase, editTratoUseCase,
-                new ObjectMapper());
+                createEmpresaUseCase, editEmpresaUseCase, editTratoUseCase);
     }
 
     @Test
@@ -99,8 +99,7 @@ class SpringAiCrmToolsTest {
                 .map(callback -> callback.getToolDefinition().name())
                 .collect(Collectors.toUnmodifiableSet());
         assertThat(names).containsExactlyInAnyOrder(
-                "find_contacts", "create_contact", "edit_contact",
-                "create_company", "edit_company", "edit_trato");
+                "find_contacts", "create_contact", "edit_contact", "create_company", "edit_company", "edit_trato");
     }
 
     @Test
@@ -286,8 +285,8 @@ class SpringAiCrmToolsTest {
                 .isEqualTo(trustedActor);
         assertThat(command.search()).isEqualTo("acme");
         assertThat(command.maxResults())
-                .as("the hard cap of 20 must be applied regardless of filter inputs")
-                .isEqualTo(20);
+                .as("the query fetches one sentinel row while model-visible output remains capped at 20")
+                .isEqualTo(21);
     }
 
     @Test
@@ -316,6 +315,26 @@ class SpringAiCrmToolsTest {
     }
 
     @Test
+    void directToolMethodReturnsTypedBoundedOutput() {
+        GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
+        when(useCase.getAll(any(GetAllContactosCommand.class))).thenReturn(List.of());
+        SpringAiCrmTools tools = newTools(
+                useCase,
+                mock(CreateContactoUseCase.class),
+                mock(EditContactoUseCase.class),
+                mock(CreateEmpresaUseCase.class),
+                mock(EditEmpresaUseCase.class),
+                mock(EditTratoUseCase.class));
+
+        FindContactsOutput output = tools.findContacts(null, null, null, null, null,
+                actorContext(UUID.randomUUID()));
+
+        assertThat(output.contacts()).isEmpty();
+        assertThat(output.returned()).isZero();
+        assertThat(output.truncated()).isFalse();
+    }
+
+    @Test
     void findContactsNonEmptyResultReturnsBoundedBusinessOutputOnly() throws Exception {
         Contacto contact = Contacto.create(
                 EmpresaId.from(UUID.randomUUID()),
@@ -341,8 +360,12 @@ class SpringAiCrmToolsTest {
         JsonNode contacts = MAPPER.readTree(output).get("contacts");
         assertThat(contacts.isArray()).isTrue();
         assertThat(contacts).hasSize(1);
+        assertThat(contacts.get(0).get("id").asText()).isEqualTo(contact.getId().value().toString());
         assertThat(contacts.get(0).get("nombre").asText()).isEqualTo("Acme");
         assertThat(contacts.get(0).get("estadoRelacion").asText()).isEqualTo("PROSPECTO");
+        JsonNode result = MAPPER.readTree(output);
+        assertThat(result.get("returned").asInt()).isEqualTo(1);
+        assertThat(result.get("truncated").asBoolean()).isFalse();
         assertThat(output)
                 .as("bounded output must not leak domain internals")
                 .doesNotContain("creadoPor")
@@ -432,6 +455,11 @@ class SpringAiCrmToolsTest {
         assertThat(failure.getCause().getMessage())
                 .as("the original mapper validation message must reach Spring AI unchanged")
                 .isEqualTo("create_contact requires estadoRelacion");
+        assertThat(new SafeToolExecutionExceptionProcessor(MAPPER).process(
+                (org.springframework.ai.tool.execution.ToolExecutionException) failure))
+                .contains("TOOL_VALIDATION_FAILED", "The tool input is invalid.")
+                .doesNotContain("create_contact requires estadoRelacion")
+                .doesNotContain("java.lang");
         verify(createUseCase, never()).create(any());
     }
 
@@ -858,8 +886,7 @@ class SpringAiCrmToolsTest {
     }
 
     @Test
-    void useCaseFailurePropagatesThroughSpringAiToolExecutionExceptionBoundaryWithoutLocalSanitization() {
-        // No local catch means Spring AI preserves the the original cause.
+    void useCaseFailureIsRedactedByTheConfiguredExceptionProcessor() {
         GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
         when(useCase.getAll(any())).thenThrow(
                 new IllegalStateException("downstream-failure-sentinel-must-not-be-redacted"));
@@ -879,17 +906,15 @@ class SpringAiCrmToolsTest {
                 () -> findContacts.call("{}", actorContext(UUID.randomUUID())));
         assertThat(failure)
                 .isInstanceOf(org.springframework.ai.tool.execution.ToolExecutionException.class);
-        assertThat(failure.getCause())
-                .as("the cause must preserve the original use-case exception type, not a local sanitized replacement")
-                .isInstanceOf(IllegalStateException.class);
-        assertThat(failure.getCause().getMessage())
-                .as("the original cause message must reach Spring AI unchanged")
-                .contains("downstream-failure-sentinel-must-not-be-redacted");
+        String modelVisible = new SafeToolExecutionExceptionProcessor(MAPPER).process(
+                (org.springframework.ai.tool.execution.ToolExecutionException) failure);
+        assertThat(modelVisible)
+                .contains("TOOL_EXECUTION_FAILED")
+                .doesNotContain("downstream-failure-sentinel-must-not-be-redacted");
     }
 
     @Test
-    void useCaseFailurePropagatesUnchangedForCompanyTools() {
-        // Same boundary guarantee applies to every company write tool.
+    void useCaseFailureIsRedactedForCompanyTools() {
         EditEmpresaUseCase useCase = mock(EditEmpresaUseCase.class);
         when(useCase.edit(any())).thenThrow(
                 new EmpresaNotFoundExceptionSentinel("empresa-not-found-sentinel"));
@@ -910,9 +935,9 @@ class SpringAiCrmToolsTest {
                         actorContext(UUID.randomUUID())));
         assertThat(failure)
                 .isInstanceOf(org.springframework.ai.tool.execution.ToolExecutionException.class);
-        assertThat(failure.getCause())
-                .isInstanceOf(EmpresaNotFoundExceptionSentinel.class);
-        assertThat(failure.getCause().getMessage()).contains("empresa-not-found-sentinel");
+        String modelVisible = new SafeToolExecutionExceptionProcessor(MAPPER).process(
+                (org.springframework.ai.tool.execution.ToolExecutionException) failure);
+        assertThat(modelVisible).contains("TOOL_EXECUTION_FAILED").doesNotContain("empresa-not-found-sentinel");
     }
 
     @Test
@@ -1049,7 +1074,7 @@ class SpringAiCrmToolsTest {
     }
 
     @Test
-    void sharedToolsConstructorIsLombokGeneratedAndTakesExactlySevenSharedDependencies() throws Exception {
+    void sharedToolsConstructorIsLombokGeneratedAndTakesAllAllowlistedDependencies() throws Exception {
         // Constructor shape protects composition-root wiring.
         Constructor<?>[] constructors = SpringAiCrmTools.class.getDeclaredConstructors();
         assertThat(constructors).hasSize(1);
@@ -1060,8 +1085,7 @@ class SpringAiCrmToolsTest {
                 EditContactoUseCase.class,
                 CreateEmpresaUseCase.class,
                 EditEmpresaUseCase.class,
-                EditTratoUseCase.class,
-                ObjectMapper.class);
+                EditTratoUseCase.class);
         constructor.setAccessible(true);
         Object instance = constructor.newInstance(
                 mock(GetAllContactosUseCase.class),
@@ -1069,8 +1093,7 @@ class SpringAiCrmToolsTest {
                 mock(EditContactoUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 mock(EditEmpresaUseCase.class),
-                mock(EditTratoUseCase.class),
-                new ObjectMapper());
+                mock(EditTratoUseCase.class));
         assertThat(instance).isInstanceOf(SpringAiCrmTools.class);
     }
 

@@ -54,6 +54,11 @@ class AgentConfigOpenAiWiringTest {
         }
 
         @Bean
+        ObjectMapper objectMapper() {
+            return new ObjectMapper();
+        }
+
+        @Bean
         SpringAiCrmTools springAiCrmTools() {
             return new SpringAiCrmTools(
                     mock(GetAllContactosUseCase.class),
@@ -61,8 +66,7 @@ class AgentConfigOpenAiWiringTest {
                     mock(EditContactoUseCase.class),
                     mock(CreateEmpresaUseCase.class),
                     mock(EditEmpresaUseCase.class),
-                    mock(EditTratoUseCase.class),
-                    new ObjectMapper());
+                    mock(EditTratoUseCase.class));
         }
     }
 

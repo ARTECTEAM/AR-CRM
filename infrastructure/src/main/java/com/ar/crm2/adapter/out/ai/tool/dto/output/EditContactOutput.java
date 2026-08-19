@@ -1,7 +1,5 @@
 package com.ar.crm2.adapter.out.ai.tool.dto.output;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 /**
  * Bounded, model-visible output of the {@code edit_contact} tool.
  *
@@ -16,13 +14,13 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * is honest about what the use case actually changed.
  */
 public record EditContactOutput(
-        @JsonProperty("id") String id,
-        @JsonProperty("nombre") String nombre,
-        @JsonProperty("correo") String correo,
-        @JsonProperty("estadoRelacion") String estadoRelacion,
-        @JsonProperty("responsableId") String responsableId,
-        @JsonProperty("telefono") String telefono,
-        @JsonProperty("cargo") String cargo,
-        @JsonProperty("comoNosConocio") String comoNosConocio
+        String id,
+        String nombre,
+        String correo,
+        String estadoRelacion,
+        String responsableId,
+        String telefono,
+        String cargo,
+        String comoNosConocio
 ) {
 }

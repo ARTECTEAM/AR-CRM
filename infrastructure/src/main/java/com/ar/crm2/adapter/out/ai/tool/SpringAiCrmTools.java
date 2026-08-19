@@ -15,8 +15,6 @@ import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.entity.Empresa;
 import com.ar.crm2.model.entity.Trato;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
@@ -67,29 +65,26 @@ public class SpringAiCrmTools {
     private final CreateEmpresaUseCase createEmpresaUseCase;
     private final EditEmpresaUseCase editEmpresaUseCase;
     private final EditTratoUseCase editTratoUseCase;
-    private final ObjectMapper objectMapper;
-
     @Tool(
             name = "find_contacts",
             description = "Search contacts visible to the current CRM actor. "
                     + "All filters are optional; the actor scope is implicit and is NOT a model-visible argument. "
-                    + "The result is capped to 20 contacts and is ordered by recency then stable id."
+                    + "The result is capped to 20 contacts and is ordered by stable id."
     )
-    public String findContacts(
+    public FindContactsOutput findContacts(
             @ToolParam(required = false, description = "Free-text search applied to contact name.") String search,
             @ToolParam(required = false, description = "Relationship state filter (exact EstadoRelacion name).") String estadoRelacion,
             @ToolParam(required = false, description = "Company UUID filter.") UUID empresaId,
             @ToolParam(required = false, description = "Responsible user UUID filter.") UUID responsableId,
             @ToolParam(required = false, description = "Acquisition source filter (exact value).") String comoNosConocio,
             ToolContext toolContext
-    ) throws JsonProcessingException {
+    ) {
         UUID trustedActor = requireActor(toolContext);
         List<Contacto> contacts = getAllContactosUseCase.getAll(
                 CrmToolMapper.toGetAllContactosCommand(
                         search, estadoRelacion, empresaId, responsableId, comoNosConocio,
                         trustedActor));
-        FindContactsOutput output = CrmToolMapper.toFindContactsOutput(contacts);
-        return objectMapper.writeValueAsString(output);
+        return CrmToolMapper.toFindContactsOutput(contacts);
     }
 
     @Tool(
@@ -98,7 +93,7 @@ public class SpringAiCrmTools {
                     + "The actor identity is trusted and is NOT a model-visible argument. "
                     + "Existing CRM validation, permission, and audit checks apply."
     )
-    public String createContact(
+    public CreateContactOutput createContact(
             @ToolParam(description = "Company UUID the contact belongs to.") UUID empresaId,
             @ToolParam(description = "Contact name; required, non-blank.") String nombre,
             @ToolParam(required = false, description = "Contact email; optional.") String correo,
@@ -108,15 +103,14 @@ public class SpringAiCrmTools {
             @ToolParam(required = false, description = "Contact job title; optional.") String cargo,
             @ToolParam(required = false, description = "Acquisition source; optional.") String comoNosConocio,
             ToolContext toolContext
-    ) throws JsonProcessingException {
+    ) {
         UUID trustedActor = requireActor(toolContext);
         Contacto created = createContactoUseCase.create(
                 CrmToolMapper.toCreateContactoCommand(
                         empresaId, nombre, correo, estadoRelacion,
                         responsableId, telefono, cargo, comoNosConocio,
                         trustedActor));
-        CreateContactOutput output = CrmToolMapper.toCreateContactOutput(created);
-        return objectMapper.writeValueAsString(output);
+        return CrmToolMapper.toCreateContactOutput(created);
     }
 
     @Tool(
@@ -129,7 +123,7 @@ public class SpringAiCrmTools {
                     + "responsableId is the contact's business responsible user (the editable field), "
                     + "NOT the authenticated actor; pass the user the contact should be reassigned to."
     )
-    public String editContact(
+    public EditContactOutput editContact(
             @ToolParam(description = "Contact UUID; required.") UUID id,
             @ToolParam(description = "Contact name; required, non-blank.") String nombre,
             @ToolParam(required = false, description = "Contact email; optional.") String correo,
@@ -139,12 +133,12 @@ public class SpringAiCrmTools {
             @ToolParam(required = false, description = "Contact job title; optional.") String cargo,
             @ToolParam(required = false, description = "Acquisition source; optional.") String comoNosConocio,
             ToolContext toolContext
-    ) throws JsonProcessingException {
+    ) {
         requireActor(toolContext);
         Contacto updated = editContactoUseCase.edit(CrmToolMapper.toEditContactoCommand(
                 id, nombre, correo, estadoRelacion,
                 responsableId, telefono, cargo, comoNosConocio));
-        return objectMapper.writeValueAsString(CrmToolMapper.toEditContactOutput(updated));
+        return CrmToolMapper.toEditContactOutput(updated);
     }
 
     @Tool(
@@ -153,7 +147,7 @@ public class SpringAiCrmTools {
                     + "The actor identity is trusted and is NOT a model-visible argument. "
                     + "Existing CRM validation, permission, and audit checks apply."
     )
-    public String createCompany(
+    public CreateCompanyOutput createCompany(
             @ToolParam(description = "Company name; required, non-blank.") String nombre,
             @ToolParam(required = false, description = "Sector; optional.") String sector,
             @ToolParam(required = false, description = "Phone number; optional.") String telefono,
@@ -165,7 +159,7 @@ public class SpringAiCrmTools {
             @ToolParam(required = false, description = "Responsible user UUID; optional.") UUID responsableId,
             @ToolParam(required = false, description = "Free-form notes; optional.") String notas,
             ToolContext toolContext
-    ) throws JsonProcessingException {
+    ) {
         UUID trustedActor = requireActor(toolContext);
         Empresa created = createEmpresaUseCase.create(
                 CrmToolMapper.toCreateEmpresaCommand(
@@ -173,7 +167,7 @@ public class SpringAiCrmTools {
                         facebook, instagram, twitter,
                         estadoRelacion, responsableId, notas,
                         trustedActor));
-        return objectMapper.writeValueAsString(CrmToolMapper.toCreateCompanyOutput(created));
+        return CrmToolMapper.toCreateCompanyOutput(created);
     }
 
     @Tool(
@@ -185,7 +179,7 @@ public class SpringAiCrmTools {
                     + "responsableId is the company's business responsible user (the editable field), "
                     + "NOT the authenticated actor; pass the user the company should be reassigned to."
     )
-    public String editCompany(
+    public EditCompanyOutput editCompany(
             @ToolParam(description = "Company UUID; required.") UUID id,
             @ToolParam(description = "Company name; required, non-blank.") String nombre,
             @ToolParam(required = false, description = "Sector; optional.") String sector,
@@ -198,13 +192,13 @@ public class SpringAiCrmTools {
             @ToolParam(required = false, description = "Responsible user UUID; optional.") UUID responsableId,
             @ToolParam(required = false, description = "Free-form notes; optional.") String notas,
             ToolContext toolContext
-    ) throws JsonProcessingException {
+    ) {
         requireActor(toolContext);
         Empresa updated = editEmpresaUseCase.edit(CrmToolMapper.toEditEmpresaCommand(
                 id, nombre, sector, telefono, paginaWeb,
                 facebook, instagram, twitter,
                 estadoRelacion, responsableId, notas));
-        return objectMapper.writeValueAsString(CrmToolMapper.toEditCompanyOutput(updated));
+        return CrmToolMapper.toEditCompanyOutput(updated);
     }
 
     @Tool(
@@ -217,7 +211,7 @@ public class SpringAiCrmTools {
                     + "responsableId is the deal's business responsible user (the editable field), "
                     + "NOT the authenticated actor; pass the user the deal should be reassigned to."
     )
-    public String editTrato(
+    public EditTratoOutput editTrato(
             @ToolParam(description = "Deal UUID; required.") UUID id,
             @ToolParam(description = "Responsible user UUID; required by the canonical edit use case. "
                     + "This is the deal's business responsable, NOT the authenticated actor.") UUID responsableId,
@@ -227,11 +221,11 @@ public class SpringAiCrmTools {
             @ToolParam(required = false, description = "Expected close date (ISO local date); optional.") LocalDate fechaCierreEsperada,
             @ToolParam(required = false, description = "Contract type (TipoContrato name); optional.") String tipoContrato,
             ToolContext toolContext
-    ) throws JsonProcessingException {
+    ) {
         requireActor(toolContext);
         Trato updated = editTratoUseCase.edit(CrmToolMapper.toEditTratoCommand(
                 id, responsableId, nombre, valorEstimado, probabilidad, fechaCierreEsperada, tipoContrato));
-        return objectMapper.writeValueAsString(CrmToolMapper.toEditTratoOutput(updated));
+        return CrmToolMapper.toEditTratoOutput(updated);
     }
 
     private static UUID requireActor(ToolContext toolContext) {

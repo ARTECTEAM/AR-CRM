@@ -891,23 +891,24 @@ public class WiringConfig {
      * ({@code GetAllContactosUseCase}, {@code CreateContactoUseCase},
      * {@code EditContactoUseCase}, {@code CreateEmpresaUseCase},
      * {@code EditEmpresaUseCase}, and the canonical
-     * {@code EditTratoUseCase}), plus the Jackson
-     * {@code ObjectMapper} used to serialize bounded outputs. It
+     * {@code EditTratoUseCase}). Spring AI's default result converter
+     * serializes the bounded return records. The bean
      * carries NO request actor, owner, or turn: every trusted CRM
      * identity piece reaches each tool through the framework's
      * per-request {@code ToolContext} parameter on the
      * {@link ChatClient#prompt()} call. Boot registers this same
      * shared object once via {@code ChatClient.Builder#defaultTools(tools)}
-     * in {@link AgentConfig}; every request through the configured
-     * {@code ChatClient} advertises exactly the six allowlisted
-     * tools ({@code find_contacts}, {@code create_contact},
+     * in {@link AgentConfig}; every request through the default configured
+     * {@code ChatClient} advertises these six non-delete tools
+     * ({@code find_contacts}, {@code create_contact},
      * {@code edit_contact}, {@code create_company},
      * {@code edit_company}, {@code edit_trato}) and Spring AI 2.0's
      * {@code JsonSchemaGenerator} excludes any {@code ToolContext} from
      * the generated JSON schema.
      *
-      * <p>Company deletion and company search are outside this six-tool
-      * allowlist.
+      * <p>All board, column, and card deletion/removal operations are outside
+      * this allowlist. Temporary actor/tenant authorization debt is documented
+      * in the infrastructure adapter and blocks production exposure.
      *
      * <p>No REST endpoint is added for these tools: tool-only features
      * MUST NOT create controllers without a separate HTTP use case.
@@ -919,27 +920,20 @@ public class WiringConfig {
             EditContactoUseCase editContactoUseCase,
             com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase createEmpresaUseCase,
             com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase editEmpresaUseCase,
-            com.ar.crm2.application.trato.port.in.EditTratoUseCase editTratoUseCase,
-            com.fasterxml.jackson.databind.ObjectMapper objectMapper
+            com.ar.crm2.application.trato.port.in.EditTratoUseCase editTratoUseCase
     ) {
         return new com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools(
-                getAllContactosUseCase,
-                createContactoUseCase,
-                editContactoUseCase,
-                createEmpresaUseCase,
-                editEmpresaUseCase,
-                editTratoUseCase,
-                objectMapper);
+                getAllContactosUseCase, createContactoUseCase, editContactoUseCase,
+                createEmpresaUseCase, editEmpresaUseCase, editTratoUseCase);
     }
 
     /**
      * Provider-neutral Spring AI completion adapter.
      *
      * <p>The adapter consumes only the configured {@link ChatClient}
-      * (produced by {@link AgentConfig} with the six shared CRM tools
-     * registered via {@code defaultTools(tools)}) and forwards the
-     * trusted CRM {@code actorUsuarioId} per request through the
-     * framework {@code .toolContext(Map.of("actorUsuarioId", ...))} call.
+      * (produced by {@link AgentConfig} with the configured CRM catalog)
+     * and forwards distinct trusted CRM user and optional super-user claims
+     * per request through the framework tool context.
      * The adapter does NOT call request {@code .tools(...)} because
      * Spring AI 2.0 runtime tools replace builder defaults — omitting
      * that call preserves the configured allowlist.

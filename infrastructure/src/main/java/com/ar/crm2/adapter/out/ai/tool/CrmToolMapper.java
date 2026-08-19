@@ -6,15 +6,40 @@ import com.ar.crm2.adapter.out.ai.tool.dto.output.EditCompanyOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditContactOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.EditTratoOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.FindContactsOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.ColumnaOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.ColumnasOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.FichaOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.FichasOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.TableroOutput;
+import com.ar.crm2.adapter.out.ai.tool.dto.output.TablerosOutput;
 import com.ar.crm2.application.contacto.command.CreateContactoCommand;
 import com.ar.crm2.application.contacto.command.EditContactoCommand;
 import com.ar.crm2.application.contacto.command.GetAllContactosCommand;
 import com.ar.crm2.application.empresa.command.CreateEmpresaCommand;
 import com.ar.crm2.application.empresa.command.EditEmpresaCommand;
 import com.ar.crm2.application.trato.command.EditTratoCommand;
+import com.ar.crm2.application.tablero.command.AsignarColumnaTableroCommand;
+import com.ar.crm2.application.tablero.command.CreateTableroCommand;
+import com.ar.crm2.application.tablero.command.EditTableroCommand;
+import com.ar.crm2.application.tablero.command.GetTableroByIdCommand;
+import com.ar.crm2.application.tablero.command.ReordenarColumnasCommand;
+import com.ar.crm2.application.columna.command.CreateColumnaCommand;
+import com.ar.crm2.application.columna.command.EditColumnaCommand;
+import com.ar.crm2.application.columna.command.GetColumnaByIdCommand;
+import com.ar.crm2.application.ficha.command.CreateFichaCommand;
+import com.ar.crm2.application.ficha.command.EditFichaCommand;
+import com.ar.crm2.application.ficha.command.GetFichaByIdCommand;
+import com.ar.crm2.application.ficha.command.MoverColumnaFichaCommand;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.entity.Empresa;
 import com.ar.crm2.model.entity.Trato;
+import com.ar.crm2.model.entity.Tablero;
+import com.ar.crm2.model.entity.Columna;
+import com.ar.crm2.model.entity.Ficha;
+import com.ar.crm2.model.enums.TipoColumna;
+import com.ar.crm2.model.enums.TipoFicha;
+import com.ar.crm2.model.enums.TipoTablero;
+import com.ar.crm2.model.vo.ColumnaId;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.enums.TipoContrato;
 
@@ -22,8 +47,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.Optional;
 
 /**
  * Pure, deterministic mapper between the Spring AI 2.0 tool
@@ -57,14 +85,133 @@ import java.util.UUID;
 public final class CrmToolMapper {
 
     /**
-     * Hard cap applied to every {@code find_contacts} invocation.
-     * The Application search contract supports a positive bound;
-     * supplying this value overrides any upstream default and
-     * guarantees the cap.
+     * Hard model-visible cap applied to every {@code find_contacts} invocation.
+     * The query fetches one additional sentinel row so truncation can be
+     * reported without exposing more than this cap.
      */
     public static final int FIND_CONTACTS_MAX_RESULTS = 20;
+    public static final int FIND_CONTACTS_QUERY_LIMIT = FIND_CONTACTS_MAX_RESULTS + 1;
+    public static final int LIST_MAX_RESULTS = 50;
+    public static final int NESTED_MAX_RESULTS = 25;
 
     private CrmToolMapper() {
+    }
+
+    public static GetTableroByIdCommand toGetTableroByIdCommand(UUID id) {
+        return new GetTableroByIdCommand(id);
+    }
+
+    public static CreateTableroCommand toCreateTableroCommand(
+            String nombre, String descripcion, String tipoTablero, UUID actorId) {
+        return new CreateTableroCommand(requireNonBlank(nombre, "create_tablero requires nombre"),
+                requireNonBlank(descripcion, "create_tablero requires descripcion"),
+                parseEnum(tipoTablero, TipoTablero.class, "create_tablero tipoTablero"), true, actorId);
+    }
+
+    public static EditTableroCommand toEditTableroCommand(UUID id, String nombre, String descripcion) {
+        return new EditTableroCommand(id, nombre, descripcion);
+    }
+
+    public static AsignarColumnaTableroCommand toAsignarColumnaTableroCommand(
+            UUID tableroId, UUID columnaId, Integer limiteWip, String nota, BigDecimal totalValorEstimado) {
+        return new AsignarColumnaTableroCommand(tableroId, columnaId, limiteWip, trimToNull(nota), totalValorEstimado);
+    }
+
+    public static ReordenarColumnasCommand toReordenarColumnasCommand(UUID tableroId, List<UUID> nuevoOrden) {
+        List<ColumnaId> ids = nuevoOrden == null ? null : nuevoOrden.stream()
+                .map(ColumnaId::from).toList();
+        return new ReordenarColumnasCommand(tableroId, ids);
+    }
+
+    public static GetColumnaByIdCommand toGetColumnaByIdCommand(UUID id) {
+        return new GetColumnaByIdCommand(id);
+    }
+
+    public static CreateColumnaCommand toCreateColumnaCommand(
+            String nombre, String color, String tipoTablero, String tipoColumna, UUID trustedSuperUsuario) {
+        return new CreateColumnaCommand(Optional.ofNullable(trustedSuperUsuario),
+                requireNonBlank(nombre, "create_columna requires nombre"), trimToNull(color),
+                parseEnum(tipoTablero, TipoTablero.class, "create_columna tipoTablero"),
+                parseEnum(tipoColumna, TipoColumna.class, "create_columna tipoColumna"));
+    }
+
+    public static EditColumnaCommand toEditColumnaCommand(
+            UUID id, String nombre, String color, String tipoTablero, String tipoColumna) {
+        return new EditColumnaCommand(id, nombre, trimToNull(color),
+                parseEnum(tipoTablero, TipoTablero.class, "edit_columna tipoTablero"),
+                parseEnum(tipoColumna, TipoColumna.class, "edit_columna tipoColumna"));
+    }
+
+    public static GetFichaByIdCommand toGetFichaByIdCommand(UUID id) {
+        return new GetFichaByIdCommand(id);
+    }
+
+    public static CreateFichaCommand toCreateFichaCommand(
+            UUID columnaId, String tipoFicha, UUID tratoId, UUID tareaId, List<UUID> etiquetaIds) {
+        return new CreateFichaCommand(columnaId, parseEnum(tipoFicha, TipoFicha.class, "create_ficha tipoFicha"),
+                tratoId, tareaId, immutableIds(etiquetaIds));
+    }
+
+    public static EditFichaCommand toEditFichaCommand(
+            UUID id, UUID columnaId, String tipoFicha, UUID tratoId, UUID tareaId, List<UUID> etiquetaIds) {
+        if (etiquetaIds == null) {
+            throw new SafeToolValidationException("edit_ficha requires etiquetaIds; [] clears all labels");
+        }
+        return new EditFichaCommand(id, columnaId, parseEnum(tipoFicha, TipoFicha.class, "edit_ficha tipoFicha"),
+                tratoId, tareaId, immutableIds(etiquetaIds));
+    }
+
+    public static MoverColumnaFichaCommand toMoverColumnaFichaCommand(UUID fichaId, UUID targetColumnaId) {
+        return new MoverColumnaFichaCommand(fichaId, targetColumnaId);
+    }
+
+    public static TablerosOutput toTablerosOutput(List<Tablero> tableros) {
+        List<Tablero> ordered = ordered(tableros, Comparator.comparing(tablero -> tablero.getId().value()));
+        return new TablerosOutput(ordered.stream().limit(LIST_MAX_RESULTS)
+                .map(CrmToolMapper::toTableroOutput).toList(), ordered.size(), ordered.size() > LIST_MAX_RESULTS);
+    }
+
+    public static TableroOutput toTableroOutput(Tablero tablero) {
+        if (tablero == null) return new TableroOutput(null, null, null, null, List.of(), 0, false);
+        var ordered = ordered(tablero.getColumnasTablero(),
+                Comparator.comparing(column -> column.getColumnaId().value()));
+        var columns = ordered.stream().limit(NESTED_MAX_RESULTS)
+                .map(c -> new TableroOutput.ColumnaAssignment(
+                        c.getColumnaId().value().toString(), name(c.getTipoTablero()), c.getLimiteWip(), c.getNota(),
+                        c.getTotalValorEstimado())).toList();
+        return new TableroOutput(tablero.getId().value().toString(), tablero.getNombre(), tablero.getDescripcion(),
+                name(tablero.getTipoTablero()), columns, ordered.size(), ordered.size() > NESTED_MAX_RESULTS);
+    }
+
+    public static ColumnasOutput toColumnasOutput(List<Columna> columnas) {
+        List<Columna> ordered = ordered(columnas, Comparator.comparing(columna -> columna.getId().value()));
+        return new ColumnasOutput(ordered.stream().limit(LIST_MAX_RESULTS)
+                .map(CrmToolMapper::toColumnaOutput).toList(), ordered.size(), ordered.size() > LIST_MAX_RESULTS);
+    }
+
+    public static ColumnaOutput toColumnaOutput(Columna columna) {
+        if (columna == null) return new ColumnaOutput(null, null, null, null, null);
+        return new ColumnaOutput(columna.getId().value().toString(), columna.getColumnanombre(), columna.getColor(),
+                name(columna.getTipoTablero()), name(columna.getTipoColumna()));
+    }
+
+    public static FichasOutput toFichasOutput(List<Ficha> fichas) {
+        List<Ficha> ordered = ordered(fichas, Comparator.comparing(ficha -> ficha.getId().value()));
+        return new FichasOutput(ordered.stream().limit(LIST_MAX_RESULTS)
+                .map(CrmToolMapper::toFichaOutput).toList(), ordered.size(), ordered.size() > LIST_MAX_RESULTS);
+    }
+
+    public static FichaOutput toFichaOutput(Ficha ficha) {
+        if (ficha == null) return new FichaOutput(null, null, null, null, null, List.of(), 0, false);
+        var ordered = ordered(ficha.getEtiquetas(),
+                Comparator.comparing(etiqueta -> etiqueta.getEtiquetaId().value()));
+        var etiquetaIds = ordered.stream().limit(NESTED_MAX_RESULTS)
+                .map(etiqueta -> etiqueta.getEtiquetaId().value().toString()).toList();
+        return new FichaOutput(ficha.getId().value().toString(), ficha.getColumnaId().value().toString(),
+                name(ficha.getTipoFicha()),
+                ficha.getTratoId() == null ? null : ficha.getTratoId().value().toString(),
+                ficha.getTareaId() == null ? null : ficha.getTareaId().value().toString(),
+                etiquetaIds, ordered.size(), ordered.size() > NESTED_MAX_RESULTS);
     }
 
     // ── raw values → command ────────────────────────────────────────
@@ -78,11 +225,11 @@ public final class CrmToolMapper {
             String search, String estadoRelacion, UUID empresaId, UUID responsableId,
             String comoNosConocio, UUID trustedActorUsuarioId) {
         if (trustedActorUsuarioId == null) {
-            throw new IllegalArgumentException("trustedActorUsuarioId is required");
+            throw new SafeToolValidationException("Trusted actor context is required");
         }
         return new GetAllContactosCommand(
                 trustedActorUsuarioId, trimToNull(search), trimToNull(estadoRelacion),
-                empresaId, responsableId, trimToNull(comoNosConocio), FIND_CONTACTS_MAX_RESULTS);
+                empresaId, responsableId, trimToNull(comoNosConocio), FIND_CONTACTS_QUERY_LIMIT);
     }
 
     /**
@@ -96,10 +243,10 @@ public final class CrmToolMapper {
             UUID responsableId, String telefono, String cargo, String comoNosConocio,
             UUID trustedActorUsuarioId) {
         if (trustedActorUsuarioId == null) {
-            throw new IllegalArgumentException("trustedActorUsuarioId is required");
+            throw new SafeToolValidationException("Trusted actor context is required");
         }
         if (empresaId == null) {
-            throw new IllegalArgumentException("create_contact requires empresaId");
+            throw new SafeToolValidationException("create_contact requires empresaId");
         }
         String trimmedNombre = requireNonBlank(nombre, "create_contact requires nombre");
         String trimmedEstadoRelacion = requireNonBlank(estadoRelacion, "create_contact requires estadoRelacion");
@@ -107,9 +254,8 @@ public final class CrmToolMapper {
         try {
             estado = EstadoRelacion.valueOf(trimmedEstadoRelacion);
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException(
-                    "create_contact estadoRelacion must equal an EstadoRelacion name, was: "
-                            + trimmedEstadoRelacion);
+            throw new SafeToolValidationException(
+                    "create_contact estadoRelacion must equal an EstadoRelacion name");
         }
         return new CreateContactoCommand(
                 empresaId, trimmedNombre, trimToNull(correo), estado,
@@ -136,7 +282,7 @@ public final class CrmToolMapper {
             UUID id, String nombre, String correo, String estadoRelacion,
             UUID responsableId, String telefono, String cargo, String comoNosConocio) {
         if (id == null) {
-            throw new IllegalArgumentException("edit_contact requires id");
+            throw new SafeToolValidationException("edit_contact requires id");
         }
         String trimmedNombre = requireNonBlank(nombre, "edit_contact requires nombre");
         String trimmedEstado = requireNonBlank(estadoRelacion, "edit_contact requires estadoRelacion");
@@ -144,9 +290,8 @@ public final class CrmToolMapper {
         try {
             parsedEstado = EstadoRelacion.valueOf(trimmedEstado);
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException(
-                    "edit_contact estadoRelacion must equal an EstadoRelacion name, was: "
-                            + trimmedEstado);
+            throw new SafeToolValidationException(
+                    "edit_contact estadoRelacion must equal an EstadoRelacion name");
         }
         return new EditContactoCommand(
                 id, trimmedNombre, trimToNull(correo), parsedEstado,
@@ -167,10 +312,10 @@ public final class CrmToolMapper {
             BigDecimal valorEstimado, Integer probabilidad,
             LocalDate fechaCierreEsperada, String tipoContrato) {
         if (id == null) {
-            throw new IllegalArgumentException("edit_trato requires id");
+            throw new SafeToolValidationException("edit_trato requires id");
         }
         if (responsableId == null) {
-            throw new IllegalArgumentException("edit_trato requires responsableId");
+            throw new SafeToolValidationException("edit_trato requires responsableId");
         }
         String trimmedNombre = requireNonBlank(nombre, "edit_trato requires nombre");
         TipoContrato parsedTipoContrato = parseTipoContrato(tipoContrato);
@@ -192,7 +337,7 @@ public final class CrmToolMapper {
             String estadoRelacion, UUID responsableId, String notas,
             UUID trustedActorUsuarioId) {
         if (trustedActorUsuarioId == null) {
-            throw new IllegalArgumentException("trustedActorUsuarioId is required");
+            throw new SafeToolValidationException("Trusted actor context is required");
         }
         String trimmedNombre = requireNonBlank(nombre, "create_company requires nombre");
         EstadoRelacion parsedEstado = parseEstadoRelacion(estadoRelacion, "create_company");
@@ -215,7 +360,7 @@ public final class CrmToolMapper {
             String facebook, String instagram, String twitter,
             String estadoRelacion, UUID responsableId, String notas) {
         if (id == null) {
-            throw new IllegalArgumentException("edit_company requires id");
+            throw new SafeToolValidationException("edit_company requires id");
         }
         String trimmedNombre = requireNonBlank(nombre, "edit_company requires nombre");
         EstadoRelacion parsedEstado = parseEstadoRelacion(estadoRelacion, "edit_company");
@@ -234,21 +379,20 @@ public final class CrmToolMapper {
      */
     public static FindContactsOutput toFindContactsOutput(List<Contacto> contacts) {
         if (contacts == null || contacts.isEmpty()) {
-            return new FindContactsOutput(List.of());
+            return new FindContactsOutput(List.of(), 0, false);
         }
-        List<FindContactsOutput.ContactSummary> summaries = new ArrayList<>(contacts.size());
-        for (Contacto contact : contacts) {
-            if (contact == null) {
-                continue;
-            }
+        List<Contacto> ordered = ordered(contacts, Comparator.comparing(contact -> contact.getId().value()));
+        List<FindContactsOutput.ContactSummary> summaries = new ArrayList<>(
+                Math.min(ordered.size(), FIND_CONTACTS_MAX_RESULTS));
+        for (Contacto contact : ordered.stream().limit(FIND_CONTACTS_MAX_RESULTS).toList()) {
             summaries.add(new FindContactsOutput.ContactSummary(
-                    String.valueOf(contact.getId().value()),
+                    contact.getId().value().toString(),
                     contact.getNombre(),
                     contact.getEstadoRelacion() == null ? null : contact.getEstadoRelacion().name(),
                     contact.getCorreo()
             ));
         }
-        return new FindContactsOutput(List.copyOf(summaries));
+        return new FindContactsOutput(summaries, summaries.size(), ordered.size() > FIND_CONTACTS_MAX_RESULTS);
     }
 
     /**
@@ -260,7 +404,7 @@ public final class CrmToolMapper {
             return new CreateContactOutput(null, null, null, null);
         }
         return new CreateContactOutput(
-                String.valueOf(contact.getId().value()),
+                contact.getId().value().toString(),
                 contact.getNombre(),
                 contact.getEstadoRelacion() == null ? null : contact.getEstadoRelacion().name(),
                 contact.getCorreo()
@@ -276,11 +420,11 @@ public final class CrmToolMapper {
             return new EditContactOutput(null, null, null, null, null, null, null, null);
         }
         return new EditContactOutput(
-                String.valueOf(contact.getId().value()),
+                contact.getId().value().toString(),
                 contact.getNombre(),
                 contact.getCorreo(),
                 contact.getEstadoRelacion() == null ? null : contact.getEstadoRelacion().name(),
-                contact.getResponsableId() == null ? null : String.valueOf(contact.getResponsableId().value()),
+                contact.getResponsableId() == null ? null : contact.getResponsableId().value().toString(),
                 contact.getTelefono(),
                 contact.getCargo(),
                 contact.getComoNosConocio()
@@ -300,9 +444,9 @@ public final class CrmToolMapper {
         }
         LocalDate fecha = trato.getFechaCierreEsperada();
         return new EditTratoOutput(
-                String.valueOf(trato.getId().value()),
+                trato.getId().value().toString(),
                 trato.getNombre(),
-                trato.getResponsableId() == null ? null : String.valueOf(trato.getResponsableId().value()),
+                trato.getResponsableId() == null ? null : trato.getResponsableId().value().toString(),
                 trato.getValorEstimado(),
                 trato.getProbabilidad(),
                 fecha == null ? null : fecha.format(DateTimeFormatter.ISO_LOCAL_DATE),
@@ -319,11 +463,11 @@ public final class CrmToolMapper {
             return new CreateCompanyOutput(null, null, null, null, null);
         }
         return new CreateCompanyOutput(
-                String.valueOf(company.getId().value()),
+                company.getId().value().toString(),
                 company.getNombre(),
                 company.getSector(),
                 company.getEstadoRelacion() == null ? null : company.getEstadoRelacion().name(),
-                company.getResponsableId() == null ? null : String.valueOf(company.getResponsableId().value())
+                company.getResponsableId() == null ? null : company.getResponsableId().value().toString()
         );
     }
 
@@ -337,11 +481,11 @@ public final class CrmToolMapper {
             return new EditCompanyOutput(null, null, null, null, null, null, null, null);
         }
         return new EditCompanyOutput(
-                String.valueOf(company.getId().value()),
+                company.getId().value().toString(),
                 company.getNombre(),
                 company.getSector(),
                 company.getEstadoRelacion() == null ? null : company.getEstadoRelacion().name(),
-                company.getResponsableId() == null ? null : String.valueOf(company.getResponsableId().value()),
+                company.getResponsableId() == null ? null : company.getResponsableId().value().toString(),
                 company.getPaginaWeb(),
                 company.getTelefono(),
                 company.getNotas()
@@ -359,7 +503,7 @@ public final class CrmToolMapper {
     private static String requireNonBlank(String value, String message) {
         String trimmed = trimToNull(value);
         if (trimmed == null) {
-            throw new IllegalArgumentException(message);
+            throw new SafeToolValidationException(message);
         }
         return trimmed;
     }
@@ -372,8 +516,8 @@ public final class CrmToolMapper {
         try {
             return EstadoRelacion.valueOf(trimmed);
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException(
-                    toolName + " estadoRelacion must equal an EstadoRelacion name, was: " + trimmed);
+            throw new SafeToolValidationException(
+                    toolName + " estadoRelacion must equal an EstadoRelacion name");
         }
     }
 
@@ -385,8 +529,33 @@ public final class CrmToolMapper {
         try {
             return TipoContrato.valueOf(trimmed);
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException(
-                    "edit_trato tipoContrato must equal a TipoContrato name, was: " + trimmed);
+            throw new SafeToolValidationException(
+                    "edit_trato tipoContrato must equal a TipoContrato name");
         }
+    }
+
+    private static <E extends Enum<E>> E parseEnum(String value, Class<E> type, String field) {
+        String normalized = requireNonBlank(value, field + " is required");
+        try {
+            return Enum.valueOf(type, normalized);
+        } catch (IllegalArgumentException ex) {
+            throw new SafeToolValidationException(
+                    field + " must equal a " + type.getSimpleName() + " name");
+        }
+    }
+
+    private static List<UUID> immutableIds(List<UUID> ids) {
+        return ids == null ? List.of() : List.copyOf(ids);
+    }
+
+    private static String name(Enum<?> value) {
+        return value == null ? null : value.name();
+    }
+
+    private static <T> List<T> ordered(List<T> values, Comparator<T> comparator) {
+        if (values == null || values.isEmpty()) {
+            return List.of();
+        }
+        return values.stream().filter(Objects::nonNull).sorted(comparator).toList();
     }
 }

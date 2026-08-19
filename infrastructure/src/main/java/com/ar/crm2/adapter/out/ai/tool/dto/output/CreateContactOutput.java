@@ -1,7 +1,5 @@
 package com.ar.crm2.adapter.out.ai.tool.dto.output;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 /**
  * Bounded, model-visible output of the {@code create_contact} tool.
  *
@@ -11,9 +9,9 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  * etc.) are stripped.
  */
 public record CreateContactOutput(
-        @JsonProperty("id") String id,
-        @JsonProperty("nombre") String nombre,
-        @JsonProperty("estadoRelacion") String estadoRelacion,
-        @JsonProperty("correo") String correo
+        String id,
+        String nombre,
+        String estadoRelacion,
+        String correo
 ) {
 }

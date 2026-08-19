@@ -173,10 +173,10 @@ class AgentConversationIT {
         assertThat(stubCompletion.lastMemories()).isNotEmpty();
         assertThat(stubCompletion.lastToolResult())
                 .as("authenticated conversation must execute the shared allowlisted callback")
-                .isEqualTo("{\"contacts\":[]}");
+                .isEqualTo("{\"contacts\":[],\"returned\":0,\"truncated\":false}");
         assertThat(stubCompletion.lastResponse())
                 .as("the callback result must reach the final conversational response")
-                .isEqualTo("final-after-find_contacts:{\"contacts\":[]}");
+                .isEqualTo("final-after-find_contacts:{\"contacts\":[],\"returned\":0,\"truncated\":false}");
     }
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder agentPost(
@@ -231,10 +231,10 @@ class AgentConversationIT {
         @Bean SpringAiCrmTools crmTools(GetAllContactosUseCase get, CreateContactoUseCase create,
                 EditContactoUseCase editContacto,
                 CreateEmpresaUseCase createCompany, EditEmpresaUseCase editCompany,
-                EditTratoUseCase editTratoUseCase, ObjectMapper om) {
+                EditTratoUseCase editTratoUseCase) {
             return new SpringAiCrmTools(get, create, editContacto,
                     createCompany, editCompany,
-                    editTratoUseCase, om);
+                    editTratoUseCase);
         }
         @Bean ObjectMapper objectMapper() { return new ObjectMapper(); }
         @Bean CreateUserTurnService createUserTurnService(CreateUserTurnPort p) { return new CreateUserTurnService(p); }
