@@ -8,6 +8,7 @@ import com.ar.crm2.adapter.out.persistence.agent.repository.AgentConversationRep
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRequestRepository;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentVisibleHistoryRepository;
+import com.ar.crm2.application.agent.turn.exception.AgentContextRevisionMismatchException;
 import com.ar.crm2.model.agent.enums.TurnState;
 import com.ar.crm2.model.agent.enums.VisibleMessageRole;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
@@ -38,6 +39,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class AgentTurnCompletionPersistenceAdapterTest {
 
+    private static final String CURRENT_REVISION = "revision-current";
+    private static final String STALE_REVISION = "revision-stale";
+
     @Autowired
     private AgentTurnAdapter adapter;
 
@@ -67,10 +71,19 @@ class AgentTurnCompletionPersistenceAdapterTest {
         visible(completed, "USER", "question", 1);
         visible(completed, "ASSISTANT", "canonical answer", 2);
 
-        assertThat(adapter.findCompletedAssistantContent(completed.ownerId(), completed.turnId(), completed.handle()))
+        assertThat(adapter.findCompletedAssistantContent(completed.ownerId(), completed.turnId(), completed.handle(), CURRENT_REVISION))
                 .contains("canonical answer");
-        assertThat(adapter.findCompletedAssistantContent(AgentOwnerId.from("owner-b"), completed.turnId(), completed.handle()))
+        assertThat(adapter.findCompletedAssistantContent(AgentOwnerId.from("owner-b"), completed.turnId(), completed.handle(), CURRENT_REVISION))
                 .isEmpty();
+    }
+
+    @Test
+    void completedOutputFromAnOlderAuthorizationRevisionIsNotReusable() {
+        PersistedTurn completed = persistedTurn("owner-a", TurnState.COMPLETED, 1);
+        visible(completed, "ASSISTANT", "old permission answer", 1, STALE_REVISION);
+
+        assertThat(adapter.findCompletedAssistantContent(
+                completed.ownerId(), completed.turnId(), completed.handle(), CURRENT_REVISION)).isEmpty();
     }
 
     @Test
@@ -87,7 +100,7 @@ class AgentTurnCompletionPersistenceAdapterTest {
         visible(otherOwner, "ASSISTANT", "other owner", 6);
 
         List<VisibleMessage> history = adapter.findCompletedVisibleHistory(
-                active.ownerId(), active.turnId(), active.handle(), 3);
+                active.ownerId(), active.turnId(), active.handle(), 3, CURRENT_REVISION);
 
         assertThat(history).containsExactly(
                 VisibleMessage.assistant("first assistant"),
@@ -105,7 +118,7 @@ class AgentTurnCompletionPersistenceAdapterTest {
         visible(active, "USER", "active user", 3);
 
         List<VisibleMessage> history = adapter.findCompletedVisibleHistory(
-                active.ownerId(), active.turnId(), active.handle(), 5);
+                active.ownerId(), active.turnId(), active.handle(), 5, CURRENT_REVISION);
 
         assertThat(history).hasSize(2);
         assertThat(history.get(0).role()).isEqualTo(VisibleMessageRole.USER);
@@ -120,7 +133,21 @@ class AgentTurnCompletionPersistenceAdapterTest {
         visible(active, "USER", "active user", 1);
 
         List<VisibleMessage> history = adapter.findCompletedVisibleHistory(
-                active.ownerId(), active.turnId(), active.handle(), 5);
+                active.ownerId(), active.turnId(), active.handle(), 5, CURRENT_REVISION);
+
+        assertThat(history).isEmpty();
+    }
+
+    @Test
+    void historyFromAnOlderAuthorizationRevisionIsExcludedBeforeItReachesTheModel() {
+        PersistedTurn prior = persistedTurn("owner-a", TurnState.COMPLETED, 1);
+        visible(prior, "USER", "safe under old revision", 1, STALE_REVISION);
+        visible(prior, "ASSISTANT", "private answer under old revision", 2, STALE_REVISION);
+        PersistedTurn active = persistedTurn("owner-a", TurnState.PREPARED, 3);
+        visible(active, "USER", "current question", 3);
+
+        List<VisibleMessage> history = adapter.findCompletedVisibleHistory(
+                active.ownerId(), active.turnId(), active.handle(), 10, CURRENT_REVISION);
 
         assertThat(history).isEmpty();
     }
@@ -131,9 +158,9 @@ class AgentTurnCompletionPersistenceAdapterTest {
         visible(prepared, "USER", "question", 1);
 
         String completed = adapter.completePreparedTurn(
-                prepared.ownerId(), prepared.turnId(), prepared.handle(), "first assistant answer");
+                prepared.ownerId(), prepared.turnId(), prepared.handle(), CURRENT_REVISION, "first assistant answer");
         String retried = adapter.completePreparedTurn(
-                prepared.ownerId(), prepared.turnId(), prepared.handle(), "ignored retry answer");
+                prepared.ownerId(), prepared.turnId(), prepared.handle(), CURRENT_REVISION, "ignored retry answer");
 
         assertThat(completed).isEqualTo("first assistant answer");
         assertThat(retried).isEqualTo("first assistant answer");
@@ -143,6 +170,21 @@ class AgentTurnCompletionPersistenceAdapterTest {
                 .filteredOn(history -> history.getRole().equals("ASSISTANT"))
                 .extracting(AgentVisibleHistoryEntity::getContent)
                 .containsExactly("first assistant answer");
+        assertThat(historyRepository.findAll())
+                .allSatisfy(history -> assertThat(history.getAuthorizationRevision()).isEqualTo(CURRENT_REVISION));
+    }
+
+    @Test
+    void completedTurnWithoutOutputForCurrentRevisionFailsClosedOnRetry() {
+        PersistedTurn completed = persistedTurn("owner-a", TurnState.COMPLETED, 1);
+        visible(completed, "USER", "old user content", 1, STALE_REVISION);
+        visible(completed, "ASSISTANT", "old permission answer", 2, STALE_REVISION);
+
+        assertThatThrownBy(() -> adapter.completePreparedTurn(
+                completed.ownerId(), completed.turnId(), completed.handle(), CURRENT_REVISION, "must not persist"))
+                .isInstanceOf(AgentContextRevisionMismatchException.class);
+        assertThat(historyRepository.findAll())
+                .noneMatch(history -> "must not persist".equals(history.getContent()));
     }
 
     @Test
@@ -150,7 +192,7 @@ class AgentTurnCompletionPersistenceAdapterTest {
         PersistedTurn prepared = persistedTurn("owner-a", TurnState.PREPARED, 1);
 
         assertThatThrownBy(() -> adapter.completePreparedTurn(
-                prepared.ownerId(), prepared.turnId(), prepared.handle(), null))
+                prepared.ownerId(), prepared.turnId(), prepared.handle(), CURRENT_REVISION, null))
                 .isInstanceOf(RuntimeException.class);
 
         assertThat(turnRepository.findById(prepared.turnId().value().toString()).orElseThrow().getState())
@@ -174,8 +216,13 @@ class AgentTurnCompletionPersistenceAdapterTest {
     }
 
     private void visible(PersistedTurn turn, String role, String content, int minute) {
+        visible(turn, role, content, minute, CURRENT_REVISION);
+    }
+
+    private void visible(PersistedTurn turn, String role, String content, int minute, String authorizationRevision) {
         historyRepository.saveAndFlush(new AgentVisibleHistoryEntity(
-                UUID.randomUUID().toString(), turn.conversation(), turn.entity(), role, content, timestamp(minute)));
+                UUID.randomUUID().toString(), turn.conversation(), turn.entity(), role, content,
+                authorizationRevision, timestamp(minute)));
     }
 
     private LocalDateTime timestamp(int minute) {

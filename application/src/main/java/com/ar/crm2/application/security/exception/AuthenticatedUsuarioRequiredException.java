@@ -8,7 +8,7 @@ public class AuthenticatedUsuarioRequiredException extends RuntimeException {
 
     public static AuthenticatedUsuarioRequiredException forMissingUsuarioId() {
         return new AuthenticatedUsuarioRequiredException(
-                "usuarioId not found in actor context — ensure the JWT contains the usuario_id claim");
+                "No active local CRM user is linked to the authenticated JWT subject");
     }
 
     public static AuthenticatedUsuarioRequiredException forMissingActorContext() {

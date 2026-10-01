@@ -2,7 +2,12 @@ package com.ar.crm2.adapter.out.persistence.repository;
 
 import com.ar.crm2.adapter.out.persistence.entity.RolEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+import jakarta.persistence.LockModeType;
+
+import java.util.List;
 
 /**
  * JPA repository for RolEntity persistence operations.
@@ -19,4 +24,9 @@ import org.springframework.stereotype.Repository;
  */
 @Repository
 public interface RolRepository extends JpaRepository<RolEntity, String> {
+
+    /** Locks every role row in one write transaction to serialize admin-role changes and assignments. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM RolEntity r ORDER BY r.id")
+    List<RolEntity> findAllForAuthorizationUpdate();
 }

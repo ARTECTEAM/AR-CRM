@@ -8,5 +8,6 @@ import java.util.Optional;
 /** Finds the canonical assistant content already completed for an owner-bound turn. */
 public interface FindCompletedAssistantContentPort {
 
-    Optional<String> findCompletedAssistantContent(AgentOwnerId ownerId, TurnId turnId, String opaqueHandle);
+    Optional<String> findCompletedAssistantContent(
+            AgentOwnerId ownerId, TurnId turnId, String opaqueHandle, String authorizationRevision);
 }

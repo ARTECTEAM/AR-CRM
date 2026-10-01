@@ -26,25 +26,30 @@ public class DurableMemoryPersistenceAdapter implements SaveDurableMemoryPort, F
 
     @Override
     @Transactional
-    public DurableMemory save(DurableMemory memory) {
-        return DurableMemoryPersistenceMapper.toDomain(repository.save(DurableMemoryPersistenceMapper.toEntity(memory)));
+    public DurableMemory save(DurableMemory memory, String authorizationRevision) {
+        return DurableMemoryPersistenceMapper.toDomain(repository.save(
+                DurableMemoryPersistenceMapper.toEntity(memory, authorizationRevision)));
     }
 
     @Override
     @Transactional
-    public DurableMemory replace(AgentOwnerId ownerId, MemoryId targetId, DurableMemory replacement) {
-        DurableMemory original = findRequiredByOwnerAndId(ownerId, targetId);
+    public DurableMemory replace(
+            AgentOwnerId ownerId, MemoryId targetId, DurableMemory replacement, String authorizationRevision) {
+        DurableMemoryEntity originalEntity = findRequiredEntityByOwnerAndId(ownerId, targetId);
+        DurableMemory original = DurableMemoryPersistenceMapper.toDomain(originalEntity);
         DurableMemory superseded = original.supersedeWith(replacement, ownerId, targetId);
-        repository.save(DurableMemoryPersistenceMapper.toEntity(replacement));
-        repository.save(DurableMemoryPersistenceMapper.toEntity(superseded));
+        repository.save(DurableMemoryPersistenceMapper.toEntity(replacement, authorizationRevision));
+        repository.save(DurableMemoryPersistenceMapper.toEntity(superseded, originalEntity.getAuthorizationRevision()));
         return replacement;
     }
 
     @Override
     @Transactional
     public void delete(AgentOwnerId ownerId, MemoryId targetId) {
-        DurableMemory original = findRequiredByOwnerAndId(ownerId, targetId);
-        repository.save(DurableMemoryPersistenceMapper.toEntity(original.delete(ownerId, targetId)));
+        DurableMemoryEntity originalEntity = findRequiredEntityByOwnerAndId(ownerId, targetId);
+        DurableMemory original = DurableMemoryPersistenceMapper.toDomain(originalEntity);
+        repository.save(DurableMemoryPersistenceMapper.toEntity(
+                original.delete(ownerId, targetId), originalEntity.getAuthorizationRevision()));
     }
 
     @Override
@@ -56,13 +61,13 @@ public class DurableMemoryPersistenceAdapter implements SaveDurableMemoryPort, F
 
     @Override
     @Transactional(readOnly = true)
-    public List<DurableMemory> findEligible(AgentOwnerId ownerId) {
+    public List<DurableMemory> findEligible(AgentOwnerId ownerId, String authorizationRevision) {
         LocalDateTime now = LocalDateTime.now();
         List<DurableMemoryEntity> memories = new ArrayList<>();
-        memories.addAll(repository.findByOwnerIdAndStatusAndExpiresAtIsNullOrderByCreatedAtAscIdAsc(
-                ownerId.value(), DurableMemoryStatus.ACTIVE));
-        memories.addAll(repository.findByOwnerIdAndStatusAndExpiresAtAfterOrderByCreatedAtAscIdAsc(
-                ownerId.value(), DurableMemoryStatus.ACTIVE, now));
+        memories.addAll(repository.findByOwnerIdAndAuthorizationRevisionAndStatusAndExpiresAtIsNullOrderByCreatedAtAscIdAsc(
+                ownerId.value(), authorizationRevision, DurableMemoryStatus.ACTIVE));
+        memories.addAll(repository.findByOwnerIdAndAuthorizationRevisionAndStatusAndExpiresAtAfterOrderByCreatedAtAscIdAsc(
+                ownerId.value(), authorizationRevision, DurableMemoryStatus.ACTIVE, now));
         return memories.stream()
                 .sorted(java.util.Comparator.comparing(DurableMemoryEntity::getCreatedAt).thenComparing(DurableMemoryEntity::getId))
                 .map(DurableMemoryPersistenceMapper::toDomain)
@@ -71,8 +76,8 @@ public class DurableMemoryPersistenceAdapter implements SaveDurableMemoryPort, F
 
     @Override
     @Transactional(readOnly = true)
-    public List<String> findEligibleDurableMemories(AgentOwnerId ownerId) {
-        return findEligible(ownerId).stream().map(DurableMemory::getContent).toList();
+    public List<String> findEligibleDurableMemories(AgentOwnerId ownerId, String authorizationRevision) {
+        return findEligible(ownerId, authorizationRevision).stream().map(DurableMemory::getContent).toList();
     }
 
     @Override
@@ -81,9 +86,8 @@ public class DurableMemoryPersistenceAdapter implements SaveDurableMemoryPort, F
         repository.deleteExpiredAndDeletedBefore(retentionBoundary, DurableMemoryStatus.ACTIVE, DurableMemoryStatus.DELETED);
     }
 
-    private DurableMemory findRequiredByOwnerAndId(AgentOwnerId ownerId, MemoryId targetId) {
+    private DurableMemoryEntity findRequiredEntityByOwnerAndId(AgentOwnerId ownerId, MemoryId targetId) {
         return repository.findByOwnerIdAndIdForUpdate(ownerId.value(), targetId.value().toString())
-                .map(DurableMemoryPersistenceMapper::toDomain)
                 .orElseThrow();
     }
 }

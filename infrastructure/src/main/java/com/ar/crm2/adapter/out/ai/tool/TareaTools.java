@@ -79,13 +79,9 @@ public class TareaTools {
         String resolvedTitulo = CrmToolMapper.requireNonBlank(titulo, "edit_tarea requires titulo");
         TipoTarea resolvedTipo = CrmToolMapper.requireEnum(tipo, "tipo");
         PrioridadTarea resolvedPrioridad = CrmToolMapper.requireEnum(prioridad, "prioridad");
-        var current = getTareaByIdUseCase.getById(new GetTareaByIdCommand(id));
-        if (current == null) {
-            throw new SafeToolValidationException("edit_tarea requires an existing task");
-        }
         var updated = editTareaUseCase.edit(new EditTareaCommand(id, responsableId,
                 resolvedTitulo,
-                descripcion != null ? descripcion : current.getDescripcion(),
+                descripcion,
                 resolvedTipo, resolvedPrioridad,
                 fechaLimite));
         return CrmToolMapper.toTaskOutput(updated);

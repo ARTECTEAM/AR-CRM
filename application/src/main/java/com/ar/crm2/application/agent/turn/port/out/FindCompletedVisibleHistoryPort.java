@@ -17,6 +17,7 @@ public interface FindCompletedVisibleHistoryPort {
             AgentOwnerId ownerId,
             TurnId turnId,
             String opaqueHandle,
-            int maximumMessages
+            int maximumMessages,
+            String authorizationRevision
     );
 }

@@ -13,6 +13,8 @@ import com.ar.crm2.adapter.out.ai.tool.dto.output.FichaOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.FichasOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.TableroOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.TablerosOutput;
+import com.ar.crm2.adapter.in.rest.projection.CrmSensitiveFieldProjector;
+import com.ar.crm2.application.security.ResourceReadPolicy;
 import com.ar.crm2.application.contacto.command.CreateContactoCommand;
 import com.ar.crm2.application.contacto.command.EditContactoCommand;
 import com.ar.crm2.application.contacto.command.GetAllContactosCommand;
@@ -46,6 +48,7 @@ import com.ar.crm2.model.enums.TipoTablero;
 import com.ar.crm2.model.vo.ColumnaId;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.enums.TipoContrato;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -99,6 +102,14 @@ public final class CrmToolMapper {
     public static final int NESTED_MAX_RESULTS = 25;
 
     private CrmToolMapper() {
+    }
+
+    /**
+     * Applies the shared field-group mask to typed tool outputs before Spring AI serializes them.
+     * The projected record preserves the tool contract; denied fields are null, never zero-filled.
+     */
+    public static <T> T projectSensitiveFields(T output, RecursoCrm resource, ResourceReadPolicy policy) {
+        return CrmSensitiveFieldProjector.project(output, resource, policy);
     }
 
     public static GetTableroByIdCommand toGetTableroByIdCommand(UUID id) {

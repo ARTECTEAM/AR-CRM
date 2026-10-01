@@ -5,6 +5,7 @@ import com.ar.crm2.adapter.out.ai.tool.dto.output.TableroOutput;
 import com.ar.crm2.adapter.out.ai.tool.dto.output.TablerosOutput;
 import com.ar.crm2.application.tablero.command.DeleteTableroCommand;
 import com.ar.crm2.application.tablero.command.EliminarColumnaDelTableroCommand;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase;
 import com.ar.crm2.application.tablero.port.in.CreateTableroUseCase;
 import com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase;
@@ -14,6 +15,7 @@ import com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase;
 import com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase;
 import com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase;
 import com.ar.crm2.model.enums.TipoTablero;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
@@ -35,17 +37,22 @@ public class TableroTools {
     private final EliminarColumnaDelTableroUseCase eliminarColumnaDelTableroUseCase;
     private final AsignarColumnaTableroUseCase asignarColumnaTableroUseCase;
     private final ReordenarColumnasUseCase reordenarColumnasUseCase;
+    private final CrmAuthorization crmAuthorization;
 
     @Tool(name = "list_tableros", description = "List CRM boards in stable ID order with bounded output. Actor context is implicit.")
     public TablerosOutput listTableros(ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toTablerosOutput(getAllTablerosUseCase.getAll());
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toTablerosOutput(getAllTablerosUseCase.getAll()),
+                RecursoCrm.TABLERO, crmAuthorization.readPolicy(RecursoCrm.TABLERO));
     }
 
     @Tool(name = "get_tablero", description = "Get a CRM board by ID. Actor context is implicit.")
     public TableroOutput getTablero(@ToolParam(description = "Board UUID.") UUID id, ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toTableroOutput(getTableroByIdUseCase.getById(CrmToolMapper.toGetTableroByIdCommand(id)));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toTableroOutput(getTableroByIdUseCase.getById(CrmToolMapper.toGetTableroByIdCommand(id))),
+                RecursoCrm.TABLERO, crmAuthorization.readPolicy(RecursoCrm.TABLERO));
     }
 
     @Tool(name = "create_tablero", description = "Create a CRM board; ask for missing description/type or for permission to choose them. Do not invent required inputs. The board type is TAREAS or TRATOS; never silently default. Actor identity is trusted and is not a model argument.")
@@ -55,8 +62,10 @@ public class TableroTools {
             @ToolParam(description = "Board type selected by the owner or with permission (TAREAS or TRATOS). Never silently default.") TipoTablero tipoTablero,
             ToolContext toolContext) {
         UUID actor = ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toTableroOutput(createTableroUseCase.create(
-                CrmToolMapper.toCreateTableroCommand(nombre, descripcion, tipoTablero, actor)));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toTableroOutput(createTableroUseCase.create(
+                        CrmToolMapper.toCreateTableroCommand(nombre, descripcion, tipoTablero, actor))),
+                RecursoCrm.TABLERO, crmAuthorization.fieldPolicy(RecursoCrm.TABLERO));
     }
 
     @Tool(name = "edit_tablero", description = "Edit a CRM board name and description. Actor context is implicit.")
@@ -66,8 +75,10 @@ public class TableroTools {
             @ToolParam(description = "Board description.") String descripcion,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toTableroOutput(editTableroUseCase.edit(
-                CrmToolMapper.toEditTableroCommand(id, nombre, descripcion)));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toTableroOutput(editTableroUseCase.edit(
+                        CrmToolMapper.toEditTableroCommand(id, nombre, descripcion))),
+                RecursoCrm.TABLERO, crmAuthorization.fieldPolicy(RecursoCrm.TABLERO));
     }
 
     @Tool(name = "delete_tablero", description = "Delete a CRM board. This is destructive; call only when the user clearly requested the deletion. Actor context is implicit.")
@@ -99,8 +110,10 @@ public class TableroTools {
             @ToolParam(description = "Initial estimated total supplied by the user.") BigDecimal totalValorEstimado,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toTableroOutput(asignarColumnaTableroUseCase.asignarColumna(
-                CrmToolMapper.toAsignarColumnaTableroCommand(tableroId, columnaId, limiteWip, nota, totalValorEstimado)));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toTableroOutput(asignarColumnaTableroUseCase.asignarColumna(
+                        CrmToolMapper.toAsignarColumnaTableroCommand(tableroId, columnaId, limiteWip, nota, totalValorEstimado))),
+                RecursoCrm.TABLERO, crmAuthorization.fieldPolicy(RecursoCrm.TABLERO));
     }
 
     @Tool(name = "reorder_tablero_columns", description = "Replace the complete board-column order. Preserve existing columns unless the owner explicitly requests otherwise; clarify an incomplete order instead of inventing or silently changing it. Actor context is implicit.")
@@ -109,7 +122,9 @@ public class TableroTools {
             @ToolParam(description = "Complete ordered list of the board's column UUIDs in the requested final order.") List<UUID> nuevoOrden,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toTableroOutput(reordenarColumnasUseCase.reordenar(
-                CrmToolMapper.toReordenarColumnasCommand(tableroId, nuevoOrden)));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toTableroOutput(reordenarColumnasUseCase.reordenar(
+                        CrmToolMapper.toReordenarColumnasCommand(tableroId, nuevoOrden))),
+                RecursoCrm.TABLERO, crmAuthorization.fieldPolicy(RecursoCrm.TABLERO));
     }
 }

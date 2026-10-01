@@ -21,11 +21,11 @@ public interface DurableMemoryRepository extends JpaRepository<DurableMemoryEnti
             @Param("ownerId") String ownerId,
             @Param("id") String id);
 
-    List<DurableMemoryEntity> findByOwnerIdAndStatusAndExpiresAtAfterOrderByCreatedAtAscIdAsc(
-            String ownerId, DurableMemoryStatus status, LocalDateTime now);
+    List<DurableMemoryEntity> findByOwnerIdAndAuthorizationRevisionAndStatusAndExpiresAtAfterOrderByCreatedAtAscIdAsc(
+            String ownerId, String authorizationRevision, DurableMemoryStatus status, LocalDateTime now);
 
-    List<DurableMemoryEntity> findByOwnerIdAndStatusAndExpiresAtIsNullOrderByCreatedAtAscIdAsc(
-            String ownerId, DurableMemoryStatus status);
+    List<DurableMemoryEntity> findByOwnerIdAndAuthorizationRevisionAndStatusAndExpiresAtIsNullOrderByCreatedAtAscIdAsc(
+            String ownerId, String authorizationRevision, DurableMemoryStatus status);
 
     @Modifying
     @Query("delete from DurableMemoryEntity memory where "

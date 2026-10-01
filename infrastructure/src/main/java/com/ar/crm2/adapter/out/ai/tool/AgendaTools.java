@@ -92,30 +92,16 @@ public class AgendaTools {
         }
         TipoAgenda resolvedTipo = CrmToolMapper.requireEnum(tipo, "tipo");
         String resolvedAsunto = CrmToolMapper.requireNonBlank(asunto, "edit_agenda requires asunto");
-        var current = getAgendaByIdUseCase.getById(new GetAgendaByIdCommand(id));
-        if (current == null) {
-            throw new SafeToolValidationException("edit_agenda requires an existing agenda entry");
-        }
-        boolean resolvedRecordatorio = recordatorioHabilitado != null
-                ? recordatorioHabilitado : current.isRecordatorioHabilitado();
-        Integer resolvedMinutosAntes = minutosAntes != null
-                ? minutosAntes : (resolvedRecordatorio ? current.getMinutosAntes() : null);
-        if (resolvedRecordatorio && (resolvedMinutosAntes == null || resolvedMinutosAntes <= 0)) {
-            throw new SafeToolValidationException("edit_agenda requires a positive minutosAntes when reminders are enabled");
-        }
-        if (recordatorioHabilitado == null && minutosAntes != null && !resolvedRecordatorio) {
-            throw new SafeToolValidationException("edit_agenda requires recordatorioHabilitado=true when setting minutosAntes on an entry without reminders");
-        }
         var updated = editAgendaUseCase.edit(new EditAgendaCommand(
                 id, resolvedTipo, resolvedAsunto,
-                descripcion != null ? descripcion : current.getDescripcion(),
+                descripcion,
                 fecha, horaInicio,
-                horaFin != null ? horaFin : current.getHoraFin(),
-                tareaId != null ? tareaId : current.getTareaId() == null ? null : current.getTareaId().value(),
-                tratoId != null ? tratoId : current.getTratoId() == null ? null : current.getTratoId().value(),
-                ubicacion != null ? ubicacion : current.getUbicacion(),
-                linkVideollamada != null ? linkVideollamada : current.getLinkVideollamada(),
-                resolvedRecordatorio, resolvedMinutosAntes));
+                horaFin,
+                tareaId,
+                tratoId,
+                ubicacion,
+                linkVideollamada,
+                recordatorioHabilitado, minutosAntes));
         return CrmToolMapper.toAgendaItemOutput(updated);
     }
 

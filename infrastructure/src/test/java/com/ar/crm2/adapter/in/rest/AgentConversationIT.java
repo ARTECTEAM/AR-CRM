@@ -16,6 +16,10 @@ import com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContent
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPort;
 import com.ar.crm2.application.agent.turn.service.CompleteUserTurnService;
 import com.ar.crm2.application.agent.turn.service.CreateUserTurnService;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.CurrentActor;
+import com.ar.crm2.application.security.ResourceReadPolicy;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
@@ -27,6 +31,8 @@ import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
 import com.ar.crm2.model.agent.vo.VisibleMessage;
+import com.ar.crm2.model.autorizacion.AlcanceCrm;
+import com.ar.crm2.model.autorizacion.GrupoCampoSensible;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.vo.EmpresaId;
 import com.ar.crm2.model.vo.UsuarioId;
@@ -62,6 +68,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -212,10 +219,10 @@ class AgentConversationIT {
             return new StubChatCompletionPort(tools);
         }
         @Bean FindEligibleDurableMemoriesPort findEligibleDurableMemoriesPort() {
-            return ownerId -> List.of("Treat customer X carefully");
+            return (ownerId, authorizationRevision) -> List.of("Treat customer X carefully");
         }
         @Bean SearchContactosPort searchContactosPort() {
-            return (u, s, e, emp, r, c, m) -> List.of();
+            return (u, s, e, emp, r, c, m, includePrivateFields) -> List.of();
         }
         @Bean GetAllContactosUseCase getAllContactosUseCase() { return cmd -> List.of(); }
         @Bean CreateContactoUseCase createContactoUseCase() { return cmd -> null; }
@@ -232,8 +239,9 @@ class AgentConversationIT {
                 EditContactoUseCase editContacto,
                 com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase getById,
                 com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase delete,
-                com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase changeState) {
-            return new ContactoTools(get, create, editContacto, getById, delete, changeState);
+                com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase changeState,
+                CrmAuthorization authorization) {
+            return new ContactoTools(get, create, editContacto, getById, delete, changeState, authorization);
         }
         @Bean com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase getContactoByIdUseCase() {
             return org.mockito.Mockito.mock(com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase.class);
@@ -245,11 +253,27 @@ class AgentConversationIT {
             return org.mockito.Mockito.mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class);
         }
         @Bean ObjectMapper objectMapper() { return new ObjectMapper(); }
-        @Bean CreateUserTurnService createUserTurnService(CreateUserTurnPort p) { return new CreateUserTurnService(p); }
+        @Bean CrmAuthorization crmAuthorization() {
+            CrmAuthorization authorization = org.mockito.Mockito.mock(CrmAuthorization.class);
+            org.mockito.Mockito.when(authorization.revision()).thenReturn("revision-it");
+            org.mockito.Mockito.when(authorization.fieldPolicy(org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(new ResourceReadPolicy(AlcanceCrm.TODO_COMPARTIDO,
+                            Set.of(GrupoCampoSensible.values()), Set.of(), Set.of(GrupoCampoSensible.values())));
+            return authorization;
+        }
+        @Bean CurrentActorPort currentActorPort() {
+            return () -> Optional.of(new CurrentActor(
+                    UUID.fromString("aaaaaaaa-1111-2222-3333-444444444444"),
+                    UUID.fromString("bbbbbbbb-1111-2222-3333-444444444444"), false));
+        }
+        @Bean CreateUserTurnService createUserTurnService(CreateUserTurnPort p, CrmAuthorization authorization) {
+            return new CreateUserTurnService(p, authorization);
+        }
         @Bean CompleteUserTurnService completeUserTurnService(FindCompletedAssistantContentPort fa,
                 FindCompletedVisibleHistoryPort fh, FindEligibleDurableMemoriesPort fm,
-                CompletePreparedTurnPort cp, ChatCompletionPort cc) {
-            return new CompleteUserTurnService(fa, fh, fm, cp, cc);
+                CompletePreparedTurnPort cp, ChatCompletionPort cc, CrmAuthorization authorization,
+                CurrentActorPort currentActorPort) {
+            return new CompleteUserTurnService(fa, fh, fm, cp, cc, authorization, currentActorPort);
         }
         @Bean JwtDecoder jwtDecoder() {
             return token -> {

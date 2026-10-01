@@ -12,6 +12,7 @@ public interface CreateRegenerationPort {
             AgentOwnerId ownerId,
             TurnId turnId,
             String opaqueHandle,
-            String idempotencyKey
+            String idempotencyKey,
+            String authorizationRevision
     );
 }

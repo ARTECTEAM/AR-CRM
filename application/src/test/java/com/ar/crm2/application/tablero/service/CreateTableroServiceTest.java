@@ -1,5 +1,8 @@
 package com.ar.crm2.application.tablero.service;
 
+import com.ar.crm2.application.security.AllowAllCrmAuthorization;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.ResourceScopeCandidate;
 import com.ar.crm2.application.columna.command.CreateColumnaCommand;
 import com.ar.crm2.application.columna.port.in.CreateColumnaUseCase;
 import com.ar.crm2.application.columna.port.out.FindAllColumnasPort;
@@ -7,6 +10,8 @@ import com.ar.crm2.application.tablero.command.CreateTableroCommand;
 import com.ar.crm2.application.tablero.port.out.SaveTableroPort;
 import com.ar.crm2.model.entity.Columna;
 import com.ar.crm2.model.entity.Tablero;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.enums.TipoColumna;
 import com.ar.crm2.model.enums.TipoTablero;
 import com.ar.crm2.model.vo.SuperUsuarioId;
@@ -19,13 +24,52 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class CreateTableroServiceTest {
 
     @Test
+    void create_deniesScopedBoardCandidateBeforeCatalogAccess() {
+        CrmAuthorization authorization = mock(CrmAuthorization.class);
+        SaveTableroPort savePort = mock(SaveTableroPort.class);
+        FindAllColumnasPort findPort = mock(FindAllColumnasPort.class);
+        CreateColumnaUseCase createColumn = mock(CreateColumnaUseCase.class);
+        ResourceScopeCandidate candidate = new ResourceScopeCandidate(null, null, null, null);
+        doThrow(new com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException("Denied"))
+            .when(authorization).requireCandidate(RecursoCrm.TABLERO, AccionCrm.CREAR, candidate);
+        CreateTableroService service = new CreateTableroService(authorization, savePort, findPort, createColumn);
+
+        assertThrows(com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException.class,
+            () -> service.create(command(TipoTablero.TAREAS)));
+        verifyNoInteractions(findPort, createColumn, savePort);
+    }
+
+    @Test
+    void create_deniesScopedDefaultColumnCandidateBeforeCatalogAccess() {
+        CrmAuthorization authorization = mock(CrmAuthorization.class);
+        SaveTableroPort savePort = mock(SaveTableroPort.class);
+        FindAllColumnasPort findPort = mock(FindAllColumnasPort.class);
+        CreateColumnaUseCase createColumn = mock(CreateColumnaUseCase.class);
+        ResourceScopeCandidate candidate = new ResourceScopeCandidate(null, null, null, null);
+        doNothing().when(authorization)
+            .requireCandidate(RecursoCrm.TABLERO, AccionCrm.CREAR, candidate);
+        doThrow(new com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException("Denied"))
+            .when(authorization).requireCandidate(RecursoCrm.COLUMNA, AccionCrm.CREAR, candidate);
+        CreateTableroService service = new CreateTableroService(authorization, savePort, findPort, createColumn);
+
+        assertThrows(com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException.class,
+            () -> service.create(command(TipoTablero.TAREAS)));
+        verifyNoInteractions(findPort, createColumn, savePort);
+    }
+
+    @Test
     void create_reusesExistingDefaultCatalogColumnsAcrossBoards() {
         InMemoryColumnaCatalog catalog = new InMemoryColumnaCatalog();
-        CreateTableroService service = new CreateTableroService(new PassThroughSaveTableroPort(), catalog, catalog);
+        CreateTableroService service = new CreateTableroService(new AllowAllCrmAuthorization(), new PassThroughSaveTableroPort(), catalog, catalog);
 
         CreateTableroCommand firstCommand = command(TipoTablero.TAREAS);
         CreateTableroCommand secondCommand = command(TipoTablero.TAREAS);
@@ -47,7 +91,7 @@ class CreateTableroServiceTest {
         catalog.seedDefault(TipoTablero.TRATOS, "Abierto");
         catalog.seedDefault(TipoTablero.TRATOS, "Ganado");
 
-        CreateTableroService service = new CreateTableroService(new PassThroughSaveTableroPort(), catalog, catalog);
+        CreateTableroService service = new CreateTableroService(new AllowAllCrmAuthorization(), new PassThroughSaveTableroPort(), catalog, catalog);
 
         Tablero board = service.create(command(TipoTablero.TRATOS));
 

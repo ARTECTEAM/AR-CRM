@@ -10,6 +10,7 @@ import com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRequestRepository;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentVisibleHistoryRepository;
 import com.ar.crm2.application.agent.turn.exception.IdempotencyKeyReusedException;
+import com.ar.crm2.application.agent.turn.exception.AgentContextRevisionMismatchException;
 import com.ar.crm2.application.agent.turn.port.out.CompletePreparedTurnPort;
 import com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort;
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContentPort;
@@ -55,7 +56,8 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
             String idempotencyKey,
             String originalUserContent,
             String payloadFingerprint,
-            String opaqueHandle
+            String opaqueHandle,
+            String authorizationRevision
     ) {
         return requestRepository.findByOwnerIdAndIdempotencyKey(ownerId.value(), idempotencyKey)
                 .map(request -> canonicalReceipt(request, payloadFingerprint))
@@ -66,7 +68,8 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
                         idempotencyKey,
                         originalUserContent,
                         payloadFingerprint,
-                        opaqueHandle
+                        opaqueHandle,
+                        authorizationRevision
                 ));
     }
 
@@ -75,11 +78,12 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
     public Optional<String> findCompletedAssistantContent(
             AgentOwnerId ownerId,
             TurnId turnId,
-            String opaqueHandle
+            String opaqueHandle,
+            String authorizationRevision
     ) {
         return findRequest(ownerId, turnId, opaqueHandle)
                 .filter(request -> request.getTurn().getState() == TurnState.COMPLETED)
-                .flatMap(request -> findAssistantContent(request.getTurn().getId()));
+                .flatMap(request -> findAssistantContent(request.getTurn().getId(), authorizationRevision));
     }
 
     @Override
@@ -88,16 +92,18 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
             AgentOwnerId ownerId,
             TurnId turnId,
             String opaqueHandle,
-            int maximumMessages
+            int maximumMessages,
+            String authorizationRevision
     ) {
         if (maximumMessages <= 0 || findRequest(ownerId, turnId, opaqueHandle).isEmpty()) {
             return List.of();
         }
         List<AgentVisibleHistoryEntity> newestFirst = historyRepository
-                .findByConversationOwnerIdAndTurnStateAndTurnIdNotOrderByVisibleAtDesc(
+                .findByConversationOwnerIdAndTurnStateAndTurnIdNotAndAuthorizationRevisionOrderByVisibleAtDesc(
                         ownerId.value(),
                         TurnState.COMPLETED,
                         turnId.value().toString(),
+                        authorizationRevision,
                         PageRequest.of(0, maximumMessages)
                 );
         List<VisibleMessage> oldestFirst = new ArrayList<>(newestFirst.size());
@@ -117,6 +123,7 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
             AgentOwnerId ownerId,
             TurnId turnId,
             String opaqueHandle,
+            String authorizationRevision,
             String assistantContent
     ) {
         AgentTurnRequestEntity request = findRequest(ownerId, turnId, opaqueHandle).orElseThrow();
@@ -124,14 +131,21 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
         int updatedRows = turnRepository.transitionPreparedToCompleted(
                 turnId.value().toString(), ownerId.value(), TurnState.PREPARED, TurnState.COMPLETED, now);
         if (updatedRows == 0) {
-            return findAssistantContent(turnId.value().toString()).orElseThrow();
+            return findAssistantContent(turnId.value().toString(), authorizationRevision)
+                    .orElseThrow(AgentContextRevisionMismatchException::new);
         }
+        historyRepository.findFirstByTurnIdAndRoleOrderByVisibleAtDesc(turnId.value().toString(), USER_ROLE)
+                .ifPresent(userMessage -> {
+                    userMessage.setAuthorizationRevision(authorizationRevision);
+                    historyRepository.save(userMessage);
+                });
         historyRepository.saveAndFlush(new AgentVisibleHistoryEntity(
                 UUID.randomUUID().toString(),
                 request.getTurn().getConversation(),
                 request.getTurn(),
                 ASSISTANT_ROLE,
                 assistantContent,
+                authorizationRevision,
                 now
         ));
         return assistantContent;
@@ -153,8 +167,9 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
                 ownerId.value(), turnId.value().toString(), opaqueHandle);
     }
 
-    private Optional<String> findAssistantContent(String turnId) {
-        return historyRepository.findFirstByTurnIdAndRoleOrderByVisibleAtDesc(turnId, ASSISTANT_ROLE)
+    private Optional<String> findAssistantContent(String turnId, String authorizationRevision) {
+        return historyRepository.findFirstByTurnIdAndRoleAndAuthorizationRevisionOrderByVisibleAtDesc(
+                        turnId, ASSISTANT_ROLE, authorizationRevision)
                 .map(AgentVisibleHistoryEntity::getContent);
     }
 
@@ -165,7 +180,8 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
             String idempotencyKey,
             String originalUserContent,
             String payloadFingerprint,
-            String opaqueHandle
+            String opaqueHandle,
+            String authorizationRevision
     ) {
         LocalDateTime now = LocalDateTime.now();
         AgentConversationEntity conversation = conversationRepository.findByOwnerId(ownerId.value())
@@ -187,6 +203,7 @@ public class AgentTurnAdapter implements CreateUserTurnPort,
                 turn,
                 USER_ROLE,
                 originalUserContent,
+                authorizationRevision,
                 now
         ));
         return new AcceptedUserTurn(AgentTurnMapper.toDomain(turn), opaqueHandle);

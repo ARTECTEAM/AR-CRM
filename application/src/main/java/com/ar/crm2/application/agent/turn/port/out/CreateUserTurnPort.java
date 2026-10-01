@@ -15,6 +15,7 @@ public interface CreateUserTurnPort {
             String idempotencyKey,
             String originalUserContent,
             String payloadFingerprint,
-            String opaqueHandle
+            String opaqueHandle,
+            String authorizationRevision
     );
 }

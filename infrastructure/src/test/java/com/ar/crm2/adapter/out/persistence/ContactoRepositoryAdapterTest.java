@@ -2,6 +2,7 @@ package com.ar.crm2.adapter.out.persistence;
 
 import com.ar.crm2.adapter.out.persistence.entity.ContactoEntity;
 import com.ar.crm2.adapter.out.persistence.repository.ContactoRepository;
+import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.vo.EmpresaId;
 import com.ar.crm2.model.vo.UsuarioId;
@@ -130,6 +131,20 @@ class ContactoRepositoryAdapterTest {
         return uuid.toString();
     }
 
+    private List<Contacto> search(UsuarioId actorUsuarioId, String search, EstadoRelacion estadoRelacion,
+                                  EmpresaId empresaId, UsuarioId responsableId, String comoNosConocio,
+                                  Integer maxResults) {
+        return search(actorUsuarioId, search, estadoRelacion, empresaId, responsableId,
+                comoNosConocio, maxResults, true);
+    }
+
+    private List<Contacto> search(UsuarioId actorUsuarioId, String search, EstadoRelacion estadoRelacion,
+                                  EmpresaId empresaId, UsuarioId responsableId, String comoNosConocio,
+                                  Integer maxResults, boolean includePrivateFields) {
+        return adapter.search(actorUsuarioId, search, estadoRelacion, empresaId, responsableId,
+                comoNosConocio, maxResults, includePrivateFields);
+    }
+
     // ── Visibility scope (creator OR responsable) ──────────────────
 
     @Test
@@ -154,7 +169,7 @@ class ContactoRepositoryAdapterTest {
                 "Eve", null, null, null, null,
                 EstadoRelacion.ACTIVO, EMPRESA_E1, t);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 null, null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -182,7 +197,7 @@ class ContactoRepositoryAdapterTest {
                 "Carol1", null, null, null, null,
                 EstadoRelacion.ACTIVO, EMPRESA_E1, t);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 null, null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -212,7 +227,7 @@ class ContactoRepositoryAdapterTest {
                 "BobInvisible", null, null, null, null,
                 EstadoRelacion.ACTIVO, EMPRESA_E1, t);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 null, null, null, UsuarioId.from(ACTOR_B), null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -242,7 +257,7 @@ class ContactoRepositoryAdapterTest {
                 null, null, null, null,
                 EstadoRelacion.PROSPECTO, EMPRESA_E1, t);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 null, EstadoRelacion.ACTIVO, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -266,22 +281,35 @@ class ContactoRepositoryAdapterTest {
                 EstadoRelacion.ACTIVO, EMPRESA_E1, t);
 
         // Lowercase query against uppercase-stored email
-        List<String> byEmail = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> byEmail = search(UsuarioId.from(ACTOR_A),
                 "ALICE@EXAMPLE.COM", null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
         assertEquals(List.of(idOf(ID_C1)), byEmail);
 
         // Partial token across multiple columns — telefono
-        List<String> byPhone = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> byPhone = search(UsuarioId.from(ACTOR_A),
                 "3333", null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
         assertEquals(List.of(idOf(ID_C3)), byPhone);
 
         // Token across cargo
-        List<String> byCargo = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> byCargo = search(UsuarioId.from(ACTOR_A),
                 "engineer", null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
         assertEquals(List.of(idOf(ID_C4)), byCargo);
+    }
+
+    @Test
+    void search_privateFieldsDoNotMatchWhenPolicyDisallowsThem() {
+        LocalDateTime t = LocalDateTime.of(2026, 7, 5, 0, 0);
+        saveContacto(ID_C1, ACTOR_A.toString(), null, "Alice",
+                "alice@example.com", "5551234", "Engineer", null,
+                EstadoRelacion.ACTIVO, EMPRESA_E1, t);
+
+        assertTrue(search(UsuarioId.from(ACTOR_A), "alice@example.com", null, null, null, null, null, false).isEmpty());
+        assertTrue(search(UsuarioId.from(ACTOR_A), "5551234", null, null, null, null, null, false).isEmpty());
+        assertEquals(List.of(idOf(ID_C1)), search(UsuarioId.from(ACTOR_A), "engineer", null, null, null, null, null, false)
+                .stream().map(c -> c.getId().value().toString()).toList());
     }
 
     @Test
@@ -297,7 +325,7 @@ class ContactoRepositoryAdapterTest {
                 null, null, null, null,
                 EstadoRelacion.ACTIVO, EMPRESA_E1, t);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 "%", null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -317,7 +345,7 @@ class ContactoRepositoryAdapterTest {
                 null, null, null, null,
                 EstadoRelacion.ACTIVO, EMPRESA_E1, t);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 "_", null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -337,7 +365,7 @@ class ContactoRepositoryAdapterTest {
                 null, null, null, "LinkedIn",
                 EstadoRelacion.ACTIVO, EMPRESA_E1, t);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 null, null, null, null, "LinkedIn", null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -357,7 +385,7 @@ class ContactoRepositoryAdapterTest {
                 null, null, null, "linkedin",
                 EstadoRelacion.ACTIVO, EMPRESA_E2, t);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 null, null,
                 EmpresaId.from(EMPRESA_E1),
                 null, "linkedin", null)
@@ -380,7 +408,7 @@ class ContactoRepositoryAdapterTest {
                 null, null, null, "linkedin",
                 EstadoRelacion.ACTIVO, EMPRESA_E1, t);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 "ali", EstadoRelacion.ACTIVO, null, null, "linkedin", null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -399,10 +427,10 @@ class ContactoRepositoryAdapterTest {
 
         int before = (int) repository.count();
 
-        List<String> first = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> first = search(UsuarioId.from(ACTOR_A),
                 null, null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
-        List<String> second = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> second = search(UsuarioId.from(ACTOR_A),
                 null, null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -429,7 +457,7 @@ class ContactoRepositoryAdapterTest {
                 null, null, null, null,
                 EstadoRelacion.ACTIVO, EMPRESA_E1, same);
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 null, null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -469,7 +497,7 @@ class ContactoRepositoryAdapterTest {
                 null, null, null, null,
                 EstadoRelacion.ACTIVO, EMPRESA_E1, base.plusSeconds(6));
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 null, null, null, null, null, 3)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -488,7 +516,7 @@ class ContactoRepositoryAdapterTest {
                 null, null, null, null,
                 EstadoRelacion.ACTIVO, EMPRESA_E1, base.plusSeconds(1));
 
-        List<String> ids = adapter.search(UsuarioId.from(ACTOR_A),
+        List<String> ids = search(UsuarioId.from(ACTOR_A),
                 null, null, null, null, null, null)
                 .stream().map(c -> c.getId().value().toString()).toList();
 
@@ -505,7 +533,7 @@ class ContactoRepositoryAdapterTest {
                 "Alice", "alice@example.com", "1111", "Dev", "linkedin",
                 EstadoRelacion.ACTIVO, EMPRESA_E1, t);
 
-        var result = adapter.search(UsuarioId.from(ACTOR_A),
+        var result = search(UsuarioId.from(ACTOR_A),
                 null, null, null, null, null, null);
 
         assertEquals(1, result.size());

@@ -13,6 +13,7 @@ import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
 import com.ar.crm2.application.trato.command.EditTratoCommand;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.application.tablero.command.CreateTableroCommand;
 import com.ar.crm2.application.tablero.port.in.CreateTableroUseCase;
 import com.ar.crm2.application.columna.command.CreateColumnaCommand;
@@ -184,7 +185,8 @@ class SpringAiCrmToolsTest {
                         mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                         mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                         mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                        mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class)),
+                        mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class),
+                        mock(CrmAuthorization.class)),
                 new ColumnaTools(mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
                         mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
                         mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
@@ -199,15 +201,18 @@ class SpringAiCrmToolsTest {
                 new ContactoTools(contactosUseCase, createUseCase, editContactoUseCase,
                         getContactoByIdUseCase,
                         mock(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class),
-                        mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class)),
+                        mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class),
+                        mock(CrmAuthorization.class)),
                 new EmpresaTools(createEmpresaUseCase,
                         getAllEmpresasUseCase,
                         editEmpresaUseCase, mock(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class),
-                        mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class)),
+                        mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class),
+                        mock(CrmAuthorization.class)),
                 new TratoTools(mock(com.ar.crm2.application.trato.port.in.CreateTratoUseCase.class),
                         mock(com.ar.crm2.application.trato.port.in.GetAllTratosUseCase.class),
                         getTratoByIdUseCase,
-                        editTratoUseCase, mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class)),
+                        editTratoUseCase, mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class),
+                        mock(CrmAuthorization.class)),
                 new TareaTools(mock(com.ar.crm2.application.tarea.port.in.CreateTareaUseCase.class),
                         mock(com.ar.crm2.application.tarea.port.in.GetAllTareasUseCase.class),
                         mock(com.ar.crm2.application.tarea.port.in.GetTareaByIdUseCase.class),
@@ -664,9 +669,9 @@ class SpringAiCrmToolsTest {
         assertThat(command.correo()).isEqualTo("renamed@example.com");
         assertThat(command.estadoRelacion()).isEqualTo(EstadoRelacion.ACTIVO);
         assertThat(command.responsableId()).isEqualTo(responsableId);
-        assertThat(command.telefono()).isEqualTo("existing phone");
-        assertThat(command.cargo()).isEqualTo("Existing title");
-        assertThat(command.comoNosConocio()).isEqualTo("Existing source");
+        assertThat(command.telefono()).as("omitted values stay absent in the patch; the canonical use case preserves them").isNull();
+        assertThat(command.cargo()).isNull();
+        assertThat(command.comoNosConocio()).isNull();
 
         JsonNode outputJson = MAPPER.readTree(output);
         assertThat(outputJson.get("id").asText()).isEqualTo(contactoId.toString());
@@ -869,10 +874,10 @@ class SpringAiCrmToolsTest {
         assertThat(command.nombre()).isEqualTo("Renamed Co");
         assertThat(command.estadoRelacion()).isEqualTo(EstadoRelacion.ACTIVO);
         assertThat(command.responsableId()).isEqualTo(responsableId);
-        assertThat(command.sector()).isEqualTo("Software");
-        assertThat(command.telefono()).isEqualTo("+525500000001");
-        assertThat(command.paginaWeb()).isEqualTo("https://renamed.example");
-        assertThat(command.notas()).isEqualTo("notes");
+        assertThat(command.sector()).as("omitted values stay absent in the patch; the canonical use case preserves them").isNull();
+        assertThat(command.telefono()).isNull();
+        assertThat(command.paginaWeb()).isNull();
+        assertThat(command.notas()).isNull();
 
         JsonNode outputJson = MAPPER.readTree(output);
         assertThat(outputJson.get("id").asText()).isEqualTo(companyId.toString());
@@ -966,9 +971,9 @@ class SpringAiCrmToolsTest {
         assertThat(command.id()).isEqualTo(tratoId);
         assertThat(command.responsableId()).isEqualTo(responsableId);
         assertThat(command.nombre()).isEqualTo("Renamed Deal");
-        assertThat(command.valorEstimado()).isEqualByComparingTo(new BigDecimal("3200.00"));
-        assertThat(command.probabilidad()).isEqualTo(60);
-        assertThat(command.fechaCierreEsperada()).isEqualTo(LocalDate.parse("2027-03-15"));
+        assertThat(command.valorEstimado()).as("omitted financial fields stay absent in the patch").isNull();
+        assertThat(command.probabilidad()).isNull();
+        assertThat(command.fechaCierreEsperada()).isNull();
         assertThat(command.tipoContrato()).isEqualTo(TipoContrato.SERVICIO);
 
         JsonNode outputJson = MAPPER.readTree(output);
@@ -1246,7 +1251,8 @@ class SpringAiCrmToolsTest {
         when(columnaById.getById(any())).thenReturn(existingColumna);
         TableroTools tableroTools = new TableroTools(tableros, tableroById, createTablero, editTablero,
                 mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class), assign, reorder);
+                mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class), assign, reorder,
+                mock(CrmAuthorization.class));
         ColumnaTools columnaTools = new ColumnaTools(createColumna, columnas, columnaById, editColumna,
                 mock(com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase.class));
         FichaTools fichaTools = new FichaTools(createFicha, fichas, fichaById, editFicha,
@@ -1409,7 +1415,8 @@ class SpringAiCrmToolsTest {
                 mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                 mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                 mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class));
+                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class),
+                mock(CrmAuthorization.class));
         return tools;
     }
 
@@ -1424,7 +1431,8 @@ class SpringAiCrmToolsTest {
                 mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                 mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                 mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class));
+                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class),
+                mock(CrmAuthorization.class));
         tools[1] = new ColumnaTools(createColumna, mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
                 mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
                 mock(com.ar.crm2.application.columna.port.in.EditColumnaUseCase.class),

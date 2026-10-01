@@ -1,6 +1,7 @@
 package com.ar.crm2.adapter.in.rest.dto.response;
 
 import com.ar.crm2.model.entity.SuperUsuario;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.time.LocalDateTime;
 
@@ -13,7 +14,7 @@ public record SuperUsuarioResponse(
     String correo,
     LocalDateTime creadoEn,
     boolean activo,
-    String keycloakId
+    @JsonIgnore String keycloakId
 ) {
 
     /**

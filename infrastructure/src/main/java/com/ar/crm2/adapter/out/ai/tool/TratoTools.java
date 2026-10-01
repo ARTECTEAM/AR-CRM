@@ -10,7 +10,9 @@ import com.ar.crm2.application.trato.port.in.DeleteTratoUseCase;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.application.trato.port.in.GetAllTratosUseCase;
 import com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.model.enums.TipoContrato;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
@@ -29,6 +31,7 @@ public class TratoTools {
     private final GetTratoByIdUseCase getTratoByIdUseCase;
     private final EditTratoUseCase editTratoUseCase;
     private final DeleteTratoUseCase deleteTratoUseCase;
+    private final CrmAuthorization crmAuthorization;
 
     @Tool(name = "create_trato", description = "Create a deal. Required contact, responsible-user, name, and contract-type choices must be supplied by the user; do not invent UUIDs or defaults. The canonical use case also creates its initial Ficha, so do not create a second card. Actor identity is trusted server context and is not a model argument.")
     public ResourceToolOutput.Deal createTrato(
@@ -44,13 +47,15 @@ public class TratoTools {
         var created = createTratoUseCase.create(new CreateTratoCommand(contactoId, responsableId,
                 CrmToolMapper.requireNonBlank(nombre, "create_trato requires nombre"), valorEstimado,
                 probabilidad, fechaCierreEsperada, CrmToolMapper.requireEnum(tipoContrato, "tipoContrato")));
-        return CrmToolMapper.toDealOutput(created);
+        return CrmToolMapper.projectSensitiveFields(CrmToolMapper.toDealOutput(created),
+                RecursoCrm.TRATO, crmAuthorization.fieldPolicy(RecursoCrm.TRATO));
     }
 
     @Tool(name = "list_tratos", description = "List CRM deals in stable ID order with bounded output. Actor context is implicit.")
     public ResourceToolOutput.Deals listTratos(ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toDealsOutput(getAllTratosUseCase.getAll());
+        return CrmToolMapper.projectSensitiveFields(CrmToolMapper.toDealsOutput(getAllTratosUseCase.getAll()),
+                RecursoCrm.TRATO, crmAuthorization.readPolicy(RecursoCrm.TRATO));
     }
 
     @Tool(name = "get_trato", description = "Get a CRM deal by UUID. Actor context is implicit.")
@@ -58,7 +63,9 @@ public class TratoTools {
             @ToolParam(description = "Deal UUID.") UUID id,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toDealOutput(getTratoByIdUseCase.getById(new GetTratoByIdCommand(id)));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toDealOutput(getTratoByIdUseCase.getById(new GetTratoByIdCommand(id))),
+                RecursoCrm.TRATO, crmAuthorization.readPolicy(RecursoCrm.TRATO));
     }
 
     @Tool(
@@ -84,17 +91,14 @@ public class TratoTools {
         }
         String resolvedNombre = CrmToolMapper.requireNonBlank(nombre, "edit_trato requires nombre");
         TipoContrato resolvedTipoContrato = CrmToolMapper.requireEnum(tipoContrato, "edit_trato tipoContrato");
-        var current = getTratoByIdUseCase.getById(new GetTratoByIdCommand(id));
-        if (current == null) {
-            throw new SafeToolValidationException("edit_trato requires an existing deal");
-        }
         var updated = editTratoUseCase.edit(CrmToolMapper.toEditTratoCommand(
                 id, responsableId, resolvedNombre,
-                valorEstimado != null ? valorEstimado : current.getValorEstimado(),
-                probabilidad != null ? probabilidad : current.getProbabilidad(),
-                fechaCierreEsperada != null ? fechaCierreEsperada : current.getFechaCierreEsperada(),
+                valorEstimado,
+                probabilidad,
+                fechaCierreEsperada,
                 resolvedTipoContrato));
-        return CrmToolMapper.toEditTratoOutput(updated);
+        return CrmToolMapper.projectSensitiveFields(CrmToolMapper.toEditTratoOutput(updated),
+                RecursoCrm.TRATO, crmAuthorization.fieldPolicy(RecursoCrm.TRATO));
     }
 
     @Tool(name = "delete_trato", description = "Delete a CRM deal. This is destructive; call only when the user clearly requested deletion. Actor context is implicit.")

@@ -10,9 +10,10 @@ import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.model.entity.Empresa;
 import com.ar.crm2.model.enums.EstadoRelacion;
-import com.ar.crm2.model.vo.EmpresaId;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
@@ -30,6 +31,7 @@ public class EmpresaTools {
     private final EditEmpresaUseCase editEmpresaUseCase;
     private final DeleteEmpresaUseCase deleteEmpresaUseCase;
     private final CambiarEstadoEmpresaUseCase cambiarEstadoEmpresaUseCase;
+    private final CrmAuthorization authorization;
 
     @Tool(name = "create_company", description = "Create a company. Required name must be supplied by the user; do not invent it. The actor identity is trusted server context and is not a model argument.")
     public CreateCompanyOutput createCompany(
@@ -48,13 +50,19 @@ public class EmpresaTools {
         Empresa created = createEmpresaUseCase.create(CrmToolMapper.toCreateEmpresaCommand(
                 nombre, sector, telefono, paginaWeb, facebook, instagram, twitter,
                 estadoRelacion, responsableId, notas, trustedActor));
-        return CrmToolMapper.toCreateCompanyOutput(created);
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toCreateCompanyOutput(created),
+                RecursoCrm.EMPRESA,
+                authorization.fieldPolicy(RecursoCrm.EMPRESA));
     }
 
     @Tool(name = "list_companies", description = "List CRM companies in stable ID order with bounded output. Actor context is implicit.")
     public ResourceToolOutput.Companies listCompanies(ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toCompaniesOutput(getAllEmpresasUseCase.getAll());
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toCompaniesOutput(getAllEmpresasUseCase.getAll()),
+                RecursoCrm.EMPRESA,
+                authorization.fieldPolicy(RecursoCrm.EMPRESA));
     }
 
     @Tool(name = "edit_company", description = "Edit an existing company's editable business fields. Its identity and original creator are not changed. responsableId is the business assignee, not the authenticated actor. Ask about missing required data; null/omitted optional values preserve their current values. Empty optional text clears that text; a nullable responsible-user ID cannot be cleared through this tool.")
@@ -76,26 +84,21 @@ public class EmpresaTools {
             throw new SafeToolValidationException("edit_company requires id");
         }
         String resolvedNombre = CrmToolMapper.requireNonBlank(nombre, "edit_company requires nombre");
-        List<Empresa> empresas = getAllEmpresasUseCase.getAll();
-        Empresa current = empresas == null ? null : empresas.stream()
-                .filter(empresa -> empresa != null && empresa.getId().equals(EmpresaId.from(id)))
-                .findFirst().orElse(null);
-        if (current == null) {
-            throw new SafeToolValidationException("edit_company requires an existing company");
-        }
         Empresa updated = editEmpresaUseCase.edit(CrmToolMapper.toEditEmpresaCommand(
                 id, resolvedNombre,
-                sector != null ? sector : current.getSector(),
-                telefono != null ? telefono : current.getTelefono(),
-                paginaWeb != null ? paginaWeb : current.getPaginaWeb(),
-                facebook != null ? facebook : current.getFacebook(),
-                instagram != null ? instagram : current.getInstagram(),
-                twitter != null ? twitter : current.getTwitter(),
-                estadoRelacion != null ? estadoRelacion : current.getEstadoRelacion(),
-                responsableId != null ? responsableId
-                        : current.getResponsableId() == null ? null : current.getResponsableId().value(),
-                notas != null ? notas : current.getNotas()));
-        return CrmToolMapper.toEditCompanyOutput(updated);
+                sector,
+                telefono,
+                paginaWeb,
+                facebook,
+                instagram,
+                twitter,
+                estadoRelacion,
+                responsableId,
+                notas));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toEditCompanyOutput(updated),
+                RecursoCrm.EMPRESA,
+                authorization.fieldPolicy(RecursoCrm.EMPRESA));
     }
 
     @Tool(name = "change_company_state", description = "Change a company's relationship state to the state explicitly selected by the user. Actor context is implicit.")
@@ -104,8 +107,11 @@ public class EmpresaTools {
             @ToolParam(description = "New relationship state.") EstadoRelacion nuevoEstado,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toCompanyOutput(cambiarEstadoEmpresaUseCase.cambiarEstado(
-                new CambiarEstadoEmpresaCommand(id, CrmToolMapper.requireEnum(nuevoEstado, "nuevoEstado"))));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toCompanyOutput(cambiarEstadoEmpresaUseCase.cambiarEstado(
+                        new CambiarEstadoEmpresaCommand(id, CrmToolMapper.requireEnum(nuevoEstado, "nuevoEstado")))),
+                RecursoCrm.EMPRESA,
+                authorization.fieldPolicy(RecursoCrm.EMPRESA));
     }
 
     @Tool(name = "delete_company", description = "Delete a company. This is destructive; call only when the user clearly requested deletion. Actor context is implicit.")

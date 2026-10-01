@@ -3,6 +3,7 @@ package com.ar.crm2.application.agent.turn.service;
 import com.ar.crm2.application.agent.turn.command.CreateUserTurnCommand;
 import com.ar.crm2.application.agent.turn.port.in.CreateUserTurnUseCase;
 import com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.model.agent.entity.AgentTurn;
 import com.ar.crm2.model.agent.entity.Conversation;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
@@ -20,10 +21,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public final class CreateUserTurnService implements CreateUserTurnUseCase {
     private final CreateUserTurnPort createUserTurnPort;
+    private final CrmAuthorization authorization;
 
     @Override
     public AcceptedUserTurn create(CreateUserTurnCommand command) {
         AgentOwnerId ownerId = AgentOwnerId.from(command.actorSubject());
+        String authorizationRevision = authorization.revision();
         Conversation conversation = Conversation.create(ownerId);
         AgentTurn turn = conversation.createTurn(TurnId.create());
         return createUserTurnPort.createOrGetUserTurn(
@@ -33,7 +36,8 @@ public final class CreateUserTurnService implements CreateUserTurnUseCase {
                 command.idempotencyKey(),
                 command.prompt(),
                 fingerprint(command.prompt()),
-                UUID.randomUUID().toString()
+                UUID.randomUUID().toString(),
+                authorizationRevision
         );
     }
 

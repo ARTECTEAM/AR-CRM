@@ -11,6 +11,8 @@ import java.util.List;
 public interface AgendaRepository extends JpaRepository<AgendaEntity, String> {
     List<AgendaEntity> findByCreadoPor(String creadoPor);
 
+    boolean existsByIdAndCreadoPor(String id, String creadoPor);
+
     @Query("SELECT a FROM AgendaEntity a WHERE a.recordatorioHabilitado = true " +
            "AND a.recordatorioEstado IN :estados")
     List<AgendaEntity> findRemindersWithStatus(@Param("estados") List<RecordatorioEstado> estados);

@@ -1,5 +1,7 @@
 package com.ar.crm2.application.tablero.service;
 
+import com.ar.crm2.application.security.CrmAuthorization;
+
 import com.ar.crm2.application.tablero.command.AsignarColumnaTableroCommand;
 import com.ar.crm2.application.tablero.exception.TableroNotFoundException;
 import com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase;
@@ -8,12 +10,17 @@ import com.ar.crm2.application.tablero.port.out.FindColumnaByIdPort;
 import com.ar.crm2.application.tablero.port.out.FindTableroByIdPort;
 import com.ar.crm2.application.tablero.port.out.SaveTableroPort;
 import com.ar.crm2.exception.ColumnaYaExisteEnTableroException;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.GrupoCampoSensible;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Columna;
 import com.ar.crm2.model.entity.ColumnaTablero;
 import com.ar.crm2.model.entity.Tablero;
 import com.ar.crm2.model.vo.ColumnaId;
 import com.ar.crm2.model.vo.TableroId;
 import lombok.RequiredArgsConstructor;
+
+import java.util.Set;
 
 /**
  * Application service implementing AsignarColumnaTableroUseCase.
@@ -31,6 +38,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class AsignarColumnaTableroService implements AsignarColumnaTableroUseCase {
 
+    private final CrmAuthorization crmAuthorization;
+
     private final FindTableroByIdPort findTableroPort;
     private final FindColumnaByIdPort findColumnaPort;
     private final ExistsColumnaEnTableroPort existsColumnaEnTableroPort;
@@ -40,10 +49,15 @@ public class AsignarColumnaTableroService implements AsignarColumnaTableroUseCas
     public Tablero asignarColumna(AsignarColumnaTableroCommand command) {
         TableroId tableroId = TableroId.from(command.tableroId());
         ColumnaId columnaId = ColumnaId.from(command.columnaId());
+        crmAuthorization.requireRecord(RecursoCrm.TABLERO, AccionCrm.ACTUALIZAR, command.tableroId());
+        crmAuthorization.requireRecord(RecursoCrm.COLUMNA, AccionCrm.LEER, command.columnaId());
 
         // Load Tablero
         Tablero existing = findTableroPort.findById(tableroId)
                 .orElseThrow(() -> TableroNotFoundException.forId(command.tableroId()));
+        if (existing.getTipoTablero() == com.ar.crm2.model.enums.TipoTablero.TRATOS) {
+            crmAuthorization.requireWritableGroups(RecursoCrm.TABLERO, Set.of(GrupoCampoSensible.FINANCIERO));
+        }
 
         // Load catalog Columna to get tipoTablero for ColumnaTablero factory
         Columna columna = findColumnaPort.findById(columnaId)

@@ -40,7 +40,7 @@ public class SecurityConfig {
     private static final RequestMatcher ACTUATOR_HEALTH = PathPatternRequestMatcher.pathPattern("/actuator/health");
     private static final RequestMatcher FORGOT_PASSWORD = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/usuarios/forgot-password");
     private static final RequestMatcher CORS_PREFLIGHT = PathPatternRequestMatcher.pathPattern(HttpMethod.OPTIONS, "/**");
-    private static final RequestMatcher SUPERUSUARIO_CREATE = PathPatternRequestMatcher.pathPattern(HttpMethod.POST, "/api/superusuarios/create");
+    private static final RequestMatcher SUPERUSUARIO_ENDPOINTS = PathPatternRequestMatcher.pathPattern("/api/superusuarios/**");
     private static final RequestMatcher API_ENDPOINTS = PathPatternRequestMatcher.pathPattern("/api/**");
 
     @Bean
@@ -60,9 +60,9 @@ public class SecurityConfig {
                 .requestMatchers(FORGOT_PASSWORD).permitAll()
                 // Preflight CORS
                 .requestMatchers(CORS_PREFLIGHT).permitAll()
-                // SuperUsuario bootstrap: requires authenticated + SUPER_USUARIO technical role.
-                // This is a technical guard only — CRM2 business authorization is separate.
-                .requestMatchers(SUPERUSUARIO_CREATE)
+                // Technical SuperUsuario administration requires the Keycloak role for every method.
+                // Preflight OPTIONS remains public above; CRM2 business authorization is separate.
+                .requestMatchers(SUPERUSUARIO_ENDPOINTS)
                     .hasRole("SUPER_USUARIO")
                 // All other API endpoints require authentication (no role restriction here)
                 .requestMatchers(API_ENDPOINTS).authenticated()

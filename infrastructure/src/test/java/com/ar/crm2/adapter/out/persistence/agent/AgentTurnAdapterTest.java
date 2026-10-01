@@ -75,6 +75,7 @@ class AgentTurnAdapterTest {
         AgentVisibleHistoryEntity history = historyRepository.findAll().getFirst();
         assertThat(history.getRole()).isEqualTo("USER");
         assertThat(history.getContent()).isEqualTo("Hello Pipely");
+        assertThat(history.getAuthorizationRevision()).isEqualTo("revision-a");
         assertThat(history.getTurn().getId()).isEqualTo(first.turn().getId().value().toString());
         assertThat(first.turn().getState()).isEqualTo(TurnState.PREPARED);
     }
@@ -117,7 +118,8 @@ class AgentTurnAdapterTest {
                 key,
                 content,
                 fingerprint,
-                UUID.randomUUID().toString()
+                UUID.randomUUID().toString(),
+                "revision-a"
         );
     }
 }

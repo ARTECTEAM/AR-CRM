@@ -45,6 +45,6 @@ public class UsuarioEntity {
     @Column(name = "activo", nullable = false)
     private boolean activo;
 
-    @Column(name = "keycloak_id", nullable = true, length = 255)
+    @Column(name = "keycloak_id", nullable = true, unique = true, length = 255)
     private String keycloakId;
 }

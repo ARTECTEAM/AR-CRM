@@ -5,6 +5,8 @@ import com.ar.crm2.application.agent.turn.command.CreateUserTurnCommand;
 import com.ar.crm2.application.agent.turn.exception.IdempotencyKeyReusedException;
 import com.ar.crm2.application.agent.turn.port.in.CompleteUserTurnUseCase;
 import com.ar.crm2.application.agent.turn.port.in.CreateUserTurnUseCase;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
 import com.ar.crm2.application.security.ActorContext;
 import com.ar.crm2.application.security.exception.AuthenticatedUsuarioRequiredException;
 import com.ar.crm2.model.agent.entity.AgentTurn;
@@ -68,6 +70,8 @@ class AgentControllerMvcTest {
     @Autowired private MockMvc mockMvc;
     @MockitoBean private CreateUserTurnUseCase createUserTurnUseCase;
     @MockitoBean private CompleteUserTurnUseCase completeUserTurnUseCase;
+    @MockitoBean private CurrentActorPort currentActorPort;
+    @MockitoBean private CrmAuthorization authorization;
 
     @Test
     void anonymousRequest_returns403() throws Exception {

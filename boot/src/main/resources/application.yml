@@ -86,3 +86,9 @@ crm2:
     # Comma-separated list of allowed frontend origins. In prod set
     # CRM2_CORS_ALLOWED_ORIGINS to your deployed frontend URL(s).
     allowed-origins: ${CRM2_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+
+crm:
+  authorization:
+    # Must identify one existing active CRM user by the validated Keycloak JWT `sub`.
+    # This operator can manage roles/users only; it does not imply CRM data access.
+    bootstrap-admin-subject: ${CRM_AUTHORIZATION_BOOTSTRAP_ADMIN_SUBJECT:}

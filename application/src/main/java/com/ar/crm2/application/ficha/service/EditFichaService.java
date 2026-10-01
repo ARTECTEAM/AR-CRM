@@ -1,11 +1,15 @@
 package com.ar.crm2.application.ficha.service;
 
+import com.ar.crm2.application.security.CrmAuthorization;
+
 import com.ar.crm2.application.etiqueta.port.out.FindEtiquetasByIdsPort;
 import com.ar.crm2.application.ficha.command.EditFichaCommand;
 import com.ar.crm2.application.ficha.exception.FichaNotFoundException;
 import com.ar.crm2.application.ficha.port.in.EditFichaUseCase;
 import com.ar.crm2.application.ficha.port.out.FindFichaByIdPort;
 import com.ar.crm2.application.ficha.port.out.SaveFichaPort;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Ficha;
 import com.ar.crm2.model.entity.FichaEtiqueta;
 import com.ar.crm2.model.enums.TipoEtiqueta;
@@ -31,6 +35,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class EditFichaService implements EditFichaUseCase {
 
+    private final CrmAuthorization crmAuthorization;
+
     private final FindFichaByIdPort findPort;
     private final SaveFichaPort savePort;
     private final FindEtiquetasByIdsPort findEtiquetasPort;
@@ -38,9 +44,23 @@ public class EditFichaService implements EditFichaUseCase {
     @Override
     public Ficha edit(EditFichaCommand command) {
         FichaId fichaId = FichaId.from(command.id());
+        FichaAccessPolicy.requireDestinationCandidate(crmAuthorization, AccionCrm.ACTUALIZAR, command.columnaId());
+        crmAuthorization.requireRecord(RecursoCrm.FICHA, AccionCrm.ACTUALIZAR, command.id());
 
         Ficha existing = findPort.findById(fichaId)
             .orElseThrow(() -> FichaNotFoundException.forId(command.id()));
+        FichaAccessPolicy.requireLinkedRecords(crmAuthorization, existing);
+
+        Ficha updated = Ficha.reconstitute(
+            existing.getId(),
+            ColumnaId.from(command.columnaId()),
+            command.tipoFicha(),
+            command.tratoId() != null ? TratoId.from(command.tratoId()) : null,
+            command.tareaId() != null ? TareaId.from(command.tareaId()) : null,
+            Instant.now(),
+            List.of()
+        );
+        FichaAccessPolicy.requireWriteTargets(crmAuthorization, updated, command.etiquetaIds());
 
         List<FichaEtiqueta> relations = command.etiquetaIds() == null
             ? List.of()
@@ -50,16 +70,6 @@ public class EditFichaService implements EditFichaUseCase {
                 TipoEtiqueta.fromFicha(command.tipoFicha())
             );
 
-        Ficha updated = Ficha.reconstitute(
-            existing.getId(),
-            ColumnaId.from(command.columnaId()),
-            command.tipoFicha(),
-            command.tratoId() != null ? TratoId.from(command.tratoId()) : null,
-            command.tareaId() != null ? TareaId.from(command.tareaId()) : null,
-            Instant.now(),
-            relations
-        );
-
-        return savePort.save(updated);
+        return savePort.save(updated.withEtiquetas(relations));
     }
 }

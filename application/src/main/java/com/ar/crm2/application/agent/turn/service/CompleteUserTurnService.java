@@ -7,6 +7,10 @@ import com.ar.crm2.application.agent.turn.port.out.CompletePreparedTurnPort;
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContentPort;
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPort;
 import com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.CurrentActor;
+import com.ar.crm2.application.security.exception.CrmActorUnavailableException;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
 import com.ar.crm2.model.agent.vo.VisibleMessage;
@@ -32,24 +36,43 @@ public class CompleteUserTurnService implements CompleteUserTurnUseCase {
     private final FindEligibleDurableMemoriesPort findEligibleDurableMemoriesPort;
     private final CompletePreparedTurnPort completePreparedTurnPort;
     private final ChatCompletionPort chatCompletionPort;
+    private final CrmAuthorization authorization;
+    private final CurrentActorPort currentActorPort;
 
     @Override
     public String complete(CompleteUserTurnCommand command) {
         AgentOwnerId ownerId = AgentOwnerId.from(command.actorSubject());
-        UUID actorUsuarioId = command.actorUsuarioId();
+        String authorizationRevision = authorization.revision();
+        CurrentActor actor = currentActorPort.currentActor()
+                .orElseThrow(() -> new CrmActorUnavailableException("Authenticated CRM user is not active"));
+        UUID actorUsuarioId = actor.usuarioId();
         TurnId turnId = TurnId.from(command.turnId());
         Optional<String> completedContent = findCompletedAssistantContentPort.findCompletedAssistantContent(
-                ownerId, turnId, command.opaqueHandle());
+                ownerId, turnId, command.opaqueHandle(), authorizationRevision);
         if (completedContent.isPresent()) {
+            requireAuthorizationRevision(authorizationRevision,
+                    "CRM permissions changed during agent completion; start a new turn");
             return completedContent.get();
         }
         List<VisibleMessage> visibleHistory = findCompletedVisibleHistoryPort.findCompletedVisibleHistory(
-                ownerId, turnId, command.opaqueHandle(), command.visibleHistoryLimit());
-        List<String> durableMemories = findEligibleDurableMemoriesPort.findEligibleDurableMemories(ownerId);
+                ownerId, turnId, command.opaqueHandle(), command.visibleHistoryLimit(), authorizationRevision);
+        List<String> durableMemories = findEligibleDurableMemoriesPort.findEligibleDurableMemories(
+                ownerId, authorizationRevision);
+        requireAuthorizationRevision(authorizationRevision,
+                "CRM permissions changed while preparing agent context; start a new turn");
         String assistantContent = chatCompletionPort.complete(
                 ownerId, actorUsuarioId, command.actorSuperUsuarioId(), turnId,
                 visibleHistory, durableMemories, command.prompt());
-        return completePreparedTurnPort.completePreparedTurn(ownerId, turnId, command.opaqueHandle(), assistantContent);
+        requireAuthorizationRevision(authorizationRevision,
+                "CRM permissions changed during agent completion; start a new turn");
+        return completePreparedTurnPort.completePreparedTurn(
+                ownerId, turnId, command.opaqueHandle(), authorizationRevision, assistantContent);
+    }
+
+    private void requireAuthorizationRevision(String expected, String message) {
+        if (!expected.equals(authorization.revision())) {
+            throw new CrmActorUnavailableException(message);
+        }
     }
 
 }

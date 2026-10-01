@@ -11,11 +11,19 @@ import com.ar.crm2.application.usuario.port.in.ForgotPasswordUseCase;
 import com.ar.crm2.application.usuario.port.in.GetAllUsuariosUseCase;
 import com.ar.crm2.application.usuario.port.in.GetUsuarioByIdUseCase;
 import com.ar.crm2.application.usuario.port.in.RequestPasswordChangeUseCase;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.CurrentActor;
+import com.ar.crm2.application.security.ResourceReadPolicy;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
+import com.ar.crm2.model.autorizacion.AlcanceCrm;
+import com.ar.crm2.model.autorizacion.GrupoCampoSensible;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Usuario;
 import com.ar.crm2.model.vo.RolId;
 import com.ar.crm2.model.vo.UsuarioId;
 import com.ar.crm2.security.KeycloakJwtActorContextMapper;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,6 +36,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.hamcrest.Matchers.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -74,6 +84,23 @@ class UsuarioControllerMvcTest {
 
     @MockitoBean
     private KeycloakJwtActorContextMapper actorContextMapper;
+
+    @MockitoBean
+    private CurrentActorPort currentActorPort;
+
+    @MockitoBean
+    private CrmAuthorization authorization;
+
+    @BeforeEach
+    void allowExpectedSensitiveFieldsInResponseFixtures() {
+        when(currentActorPort.currentActor()).thenReturn(Optional.of(
+                new CurrentActor(UUID.randomUUID(), UUID.randomUUID(), false)));
+        when(authorization.fieldPolicy(RecursoCrm.USUARIO)).thenReturn(new ResourceReadPolicy(
+                AlcanceCrm.TODO_COMPARTIDO,
+                Set.of(GrupoCampoSensible.CONTACTO_PRIVADO),
+                Set.of(),
+                Set.of()));
+    }
 
     // ── Helpers ─────────────────────────────────────────────────────
 
@@ -129,7 +156,7 @@ class UsuarioControllerMvcTest {
                     .andExpect(jsonPath("$.correo").value(CORREO))
                     .andExpect(jsonPath("$.rolId").value(ROL_ID.toString()))
                     .andExpect(jsonPath("$.activo").value(true))
-                    .andExpect(jsonPath("$.keycloakId").value(KEYCLOAK_ID))
+                    .andExpect(jsonPath("$.keycloakId").value(nullValue()))
                     .andExpect(jsonPath("$.initialPassword").doesNotExist())
                     .andExpect(jsonPath("$.password").doesNotExist());
 
@@ -259,7 +286,7 @@ class UsuarioControllerMvcTest {
                     .andExpect(jsonPath("$.id").value(USUARIO_ID.toString()))
                     .andExpect(jsonPath("$.nombre").value(NOMBRE))
                     .andExpect(jsonPath("$.correo").value(CORREO))
-                    .andExpect(jsonPath("$.keycloakId").value(KEYCLOAK_ID));
+                    .andExpect(jsonPath("$.keycloakId").value(nullValue()));
 
             verify(editUseCase).edit(any(EditUsuarioCommand.class));
         }

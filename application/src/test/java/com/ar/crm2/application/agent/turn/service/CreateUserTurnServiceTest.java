@@ -3,6 +3,7 @@ package com.ar.crm2.application.agent.turn.service;
 import com.ar.crm2.application.agent.turn.command.CreateUserTurnCommand;
 import com.ar.crm2.application.agent.turn.exception.IdempotencyKeyReusedException;
 import com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort;
+import com.ar.crm2.application.support.TestCrmAuthorization;
 import com.ar.crm2.model.agent.entity.AgentTurn;
 import com.ar.crm2.model.agent.entity.Conversation;
 import com.ar.crm2.model.agent.enums.TurnState;
@@ -22,7 +23,7 @@ class CreateUserTurnServiceTest {
     @Test
     void createsDomainCandidatesFromSimpleCommandInputsAndDelegatesThemAtomically() {
         CapturingCreateUserTurnPort port = new CapturingCreateUserTurnPort();
-        CreateUserTurnService service = new CreateUserTurnService(port);
+        CreateUserTurnService service = new CreateUserTurnService(port, new TestCrmAuthorization());
 
         AcceptedUserTurn acceptedTurn = service.create(new CreateUserTurnCommand(" actor-a ", " key-1 ", "  Hello Pipely  "));
 
@@ -34,13 +35,14 @@ class CreateUserTurnServiceTest {
         assertEquals("key-1", port.idempotencyKey);
         assertEquals("Hello Pipely", port.originalUserContent);
         assertEquals("a5008e1d8f2bbf5381a880e532c8810f01eb8c99593df4979fa6047d917640bf", port.payloadFingerprint);
+        assertEquals("test-authorization-revision", port.authorizationRevision);
         assertNotNull(port.opaqueHandle);
     }
 
     @Test
     void delegatesFreshCandidatesWhileAllowingAtomicPortConvergenceAndConflictPropagation() {
         ConvergingCreateUserTurnPort port = new ConvergingCreateUserTurnPort();
-        CreateUserTurnService service = new CreateUserTurnService(port);
+        CreateUserTurnService service = new CreateUserTurnService(port, new TestCrmAuthorization());
 
         AcceptedUserTurn first = service.create(new CreateUserTurnCommand("actor-a", "key-1", "prompt"));
         AcceptedUserTurn retried = service.create(new CreateUserTurnCommand("actor-a", "key-1", "prompt"));
@@ -48,13 +50,13 @@ class CreateUserTurnServiceTest {
         assertSame(first, retried);
         assertNotEquals(port.firstCandidate, port.secondCandidate);
         assertNotEquals(port.firstConversation, port.secondConversation);
-        assertThrows(IdempotencyKeyReusedException.class, () -> new CreateUserTurnService(new ConflictingCreateUserTurnPort())
+        assertThrows(IdempotencyKeyReusedException.class, () -> new CreateUserTurnService(new ConflictingCreateUserTurnPort(), new TestCrmAuthorization())
                 .create(new CreateUserTurnCommand("actor-a", "key-1", "changed prompt")));
     }
 
     @Test
     void constructorAllowsNullPortBecauseDependencyValidationIsNotAnApplicationFlowGuard() {
-        assertDoesNotThrow(() -> new CreateUserTurnService(null));
+        assertDoesNotThrow(() -> new CreateUserTurnService(null, null));
     }
 
     private static final class CapturingCreateUserTurnPort implements CreateUserTurnPort {
@@ -65,6 +67,7 @@ class CreateUserTurnServiceTest {
         private String originalUserContent;
         private String payloadFingerprint;
         private String opaqueHandle;
+        private String authorizationRevision;
         private AcceptedUserTurn returnedReceipt;
 
         @Override
@@ -75,7 +78,8 @@ class CreateUserTurnServiceTest {
                 String idempotencyKey,
                 String originalUserContent,
                 String payloadFingerprint,
-                String opaqueHandle
+                String opaqueHandle,
+                String authorizationRevision
         ) {
             this.conversation = conversation;
             this.turn = turn;
@@ -84,6 +88,7 @@ class CreateUserTurnServiceTest {
             this.originalUserContent = originalUserContent;
             this.payloadFingerprint = payloadFingerprint;
             this.opaqueHandle = opaqueHandle;
+            this.authorizationRevision = authorizationRevision;
             returnedReceipt = new AcceptedUserTurn(turn, opaqueHandle);
             return returnedReceipt;
         }
@@ -104,7 +109,8 @@ class CreateUserTurnServiceTest {
                 String idempotencyKey,
                 String originalUserContent,
                 String payloadFingerprint,
-                String opaqueHandle
+                String opaqueHandle,
+                String authorizationRevision
         ) {
             if (canonicalReceipt == null) {
                 firstCandidate = turn;
@@ -127,7 +133,8 @@ class CreateUserTurnServiceTest {
                 String idempotencyKey,
                 String originalUserContent,
                 String payloadFingerprint,
-                String opaqueHandle
+                String opaqueHandle,
+                String authorizationRevision
         ) {
             throw new IdempotencyKeyReusedException();
         }

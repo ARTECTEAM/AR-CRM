@@ -5,5 +5,5 @@ import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.MemoryId;
 
 public interface ReplaceDurableMemoryPort {
-    DurableMemory replace(AgentOwnerId ownerId, MemoryId targetId, DurableMemory replacement);
+    DurableMemory replace(AgentOwnerId ownerId, MemoryId targetId, DurableMemory replacement, String authorizationRevision);
 }

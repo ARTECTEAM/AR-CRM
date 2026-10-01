@@ -52,7 +52,7 @@ public final class AgendaCommandMapper {
             request.tratoId(),
             request.ubicacion(),
             request.linkVideollamada(),
-            request.recordatorioHabilitado() != null ? request.recordatorioHabilitado() : false,
+            request.recordatorioHabilitado(),
             request.minutosAntes()
         );
     }

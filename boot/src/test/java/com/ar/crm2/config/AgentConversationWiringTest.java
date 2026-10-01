@@ -9,6 +9,7 @@ import com.ar.crm2.adapter.out.persistence.agent.repository.AgentVisibleHistoryR
 import com.ar.crm2.adapter.out.persistence.agent.memory.DurableMemoryRepository;
 import com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionPersistenceAdapter;
 import com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionRepository;
+import com.ar.crm2.adapter.out.persistence.RoleManagerGovernance;
 import com.ar.crm2.application.agent.memory.port.in.DeleteDurableMemoryUseCase;
 import com.ar.crm2.application.agent.memory.port.in.PurgeDurableMemoriesUseCase;
 import com.ar.crm2.application.agent.memory.port.in.RecallDurableMemoriesUseCase;
@@ -31,6 +32,7 @@ import com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContent
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPort;
 import com.ar.crm2.application.agent.turn.service.CompleteUserTurnService;
 import com.ar.crm2.application.agent.turn.service.CreateUserTurnService;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -425,6 +427,16 @@ class AgentConversationWiringTest {
      */
     @TestConfiguration
     static class AgentWiringHarness {
+
+        @Bean
+        CurrentActorPort currentActorPort() {
+            return mock(CurrentActorPort.class);
+        }
+
+        @Bean
+        RoleManagerGovernance roleManagerGovernance() {
+            return mock(RoleManagerGovernance.class);
+        }
 
         // ── ChatClient seam consumed by the chat-completion adapter ──
 

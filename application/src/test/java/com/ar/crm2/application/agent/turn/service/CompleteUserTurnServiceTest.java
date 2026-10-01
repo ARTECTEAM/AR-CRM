@@ -6,6 +6,10 @@ import com.ar.crm2.application.agent.turn.port.out.CompletePreparedTurnPort;
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContentPort;
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPort;
 import com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.exception.CrmActorUnavailableException;
+import com.ar.crm2.application.support.TestCrmAuthorization;
+import com.ar.crm2.application.support.TestCurrentActorPort;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
 import com.ar.crm2.model.agent.vo.VisibleMessage;
@@ -15,10 +19,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class CompleteUserTurnServiceTest {
 
@@ -29,7 +36,7 @@ class CompleteUserTurnServiceTest {
 
     @Test
     void allowsDirectConstructionWithoutDependencyNullValidation() {
-        assertDoesNotThrow(() -> new CompleteUserTurnService(null, null, null, null, null));
+        assertDoesNotThrow(() -> new CompleteUserTurnService(null, null, null, null, null, null, null));
     }
 
     @Test
@@ -46,7 +53,9 @@ class CompleteUserTurnServiceTest {
                 historyPort,
                 memoryPort,
                 completionPort,
-                chatCompletionPort
+                chatCompletionPort,
+                new TestCrmAuthorization(),
+                new TestCurrentActorPort(ACTOR_USUARIO_ID)
         );
 
         String content = service.complete(new CompleteUserTurnCommand(
@@ -57,6 +66,7 @@ class CompleteUserTurnServiceTest {
         assertEquals(AgentOwnerId.from("owner-a"), completedContentPort.ownerId);
         assertEquals(TurnId.from(turnId), completedContentPort.turnId);
         assertEquals("handle-a", completedContentPort.opaqueHandle);
+        assertEquals("test-authorization-revision", completedContentPort.authorizationRevision);
         assertEquals(0, historyPort.calls);
         assertEquals(0, memoryPort.calls);
         assertEquals(0, chatCompletionPort.calls);
@@ -80,7 +90,9 @@ class CompleteUserTurnServiceTest {
                 historyPort,
                 memoryPort,
                 completionPort,
-                chatCompletionPort
+                chatCompletionPort,
+                new TestCrmAuthorization(),
+                new TestCurrentActorPort(ACTOR_USUARIO_ID)
         );
 
         String content = service.complete(new CompleteUserTurnCommand(
@@ -101,11 +113,14 @@ class CompleteUserTurnServiceTest {
         assertEquals("handle-a", historyPort.opaqueHandle);
         assertEquals(7, historyPort.maximumMessages);
         assertEquals(AgentOwnerId.from("owner-a"), memoryPort.ownerId);
+        assertEquals("test-authorization-revision", historyPort.authorizationRevision);
+        assertEquals("test-authorization-revision", memoryPort.authorizationRevision);
         assertEquals(1, completionPort.calls);
         assertEquals("provider output", completionPort.assistantContent);
         assertEquals(AgentOwnerId.from("owner-a"), completionPort.ownerId);
         assertEquals(TurnId.from(turnId), completionPort.turnId);
         assertEquals("handle-a", completionPort.opaqueHandle);
+        assertEquals("test-authorization-revision", completionPort.authorizationRevision);
     }
 
     @Test
@@ -119,11 +134,13 @@ class CompleteUserTurnServiceTest {
         CapturingHistoryPort historyPort = new CapturingHistoryPort(orderedHistory);
         CapturingChatCompletionPort chatCompletionPort = new CapturingChatCompletionPort("provider output");
         CompleteUserTurnService service = new CompleteUserTurnService(
-                (ownerId, turn, handle) -> Optional.empty(),
+                (ownerId, turn, handle, revision) -> Optional.empty(),
                 historyPort,
-                ownerId -> List.of(),
-                (owner, turn, handle, content) -> content,
-                chatCompletionPort
+                (ownerId, revision) -> List.of(),
+                (owner, turn, handle, revision, content) -> content,
+                chatCompletionPort,
+                new TestCrmAuthorization(),
+                new TestCurrentActorPort(ACTOR_USUARIO_ID)
         );
 
         service.complete(new CompleteUserTurnCommand(
@@ -148,11 +165,13 @@ class CompleteUserTurnServiceTest {
         CapturingChatCompletionPort chatCompletionPort = new CapturingChatCompletionPort("provider output");
         CapturingMemoryPort memoryPort = new CapturingMemoryPort(List.of());
         CompleteUserTurnService service = new CompleteUserTurnService(
-                (ownerId, turn, handle) -> Optional.empty(),
+                (ownerId, turn, handle, revision) -> Optional.empty(),
                 historyPort,
                 memoryPort,
-                (owner, turn, handle, content) -> content,
-                chatCompletionPort
+                (owner, turn, handle, revision, content) -> content,
+                chatCompletionPort,
+                new TestCrmAuthorization(),
+                new TestCurrentActorPort(ACTOR_USUARIO_ID)
         );
 
         service.complete(new CompleteUserTurnCommand(
@@ -168,13 +187,15 @@ class CompleteUserTurnServiceTest {
     void doesNotAttemptCompletionPersistenceWhenTheModelFails() {
         CapturingCompletionPort completionPort = new CapturingCompletionPort("unused");
         CompleteUserTurnService service = new CompleteUserTurnService(
-                (ownerId, turnId, opaqueHandle) -> Optional.empty(),
-                (ownerId, turnId, opaqueHandle, maximumMessages) -> List.of(VisibleMessage.user("history")),
-                ownerId -> List.of("memory"),
+                (ownerId, turnId, opaqueHandle, revision) -> Optional.empty(),
+                (ownerId, turnId, opaqueHandle, maximumMessages, revision) -> List.of(VisibleMessage.user("history")),
+                (ownerId, revision) -> List.of("memory"),
                 completionPort,
                 (ownerId, actorUsuarioId, actorSuperUsuarioId, turnId, visibleHistory, durableMemories, prompt) -> {
                     throw new IllegalStateException("provider failed");
-                }
+                },
+                new TestCrmAuthorization(),
+                new TestCurrentActorPort(ACTOR_USUARIO_ID)
         );
 
         IllegalStateException failure = assertThrows(IllegalStateException.class, () -> service.complete(
@@ -192,18 +213,21 @@ class CompleteUserTurnServiceTest {
                 UUID.fromString("99999999-8888-7777-6666-555555555555");
         CapturingChatCompletionPort chatCompletionPort = new CapturingChatCompletionPort("provider output");
         CompleteUserTurnService service = new CompleteUserTurnService(
-                (ownerId, turn, handle) -> Optional.empty(),
-                (ownerId, turn, handle, max) -> List.of(),
-                ownerId -> List.of(),
-                (owner, turn, handle, content) -> content,
-                chatCompletionPort
+                (ownerId, turn, handle, revision) -> Optional.empty(),
+                (ownerId, turn, handle, max, revision) -> List.of(),
+                (ownerId, revision) -> List.of(),
+                (owner, turn, handle, revision, content) -> content,
+                chatCompletionPort,
+                new TestCrmAuthorization(),
+                new TestCurrentActorPort(ACTOR_USUARIO_ID)
         );
 
         service.complete(new CompleteUserTurnCommand(
                 "owner-subject-not-crm-id", distinctActorUsuarioId, turnId, "handle-a", "prompt", 5));
 
         assertEquals(AgentOwnerId.from("owner-subject-not-crm-id"), chatCompletionPort.ownerId);
-        assertEquals(distinctActorUsuarioId, chatCompletionPort.actorUsuarioId);
+        assertEquals(ACTOR_USUARIO_ID, chatCompletionPort.actorUsuarioId,
+                "The active CRM actor must override a command-supplied actor UUID");
         assertEquals("owner-subject-not-crm-id", AgentOwnerId.from("owner-subject-not-crm-id").value());
     }
 
@@ -214,18 +238,103 @@ class CompleteUserTurnServiceTest {
                 UUID.fromString("cafebabe-0000-0000-0000-000000000000");
         CapturingChatCompletionPort chatCompletionPort = new CapturingChatCompletionPort("provider output");
         CompleteUserTurnService service = new CompleteUserTurnService(
-                (ownerId, turn, handle) -> Optional.empty(),
-                (ownerId, turn, handle, max) -> List.of(),
-                ownerId -> List.of(),
-                (owner, turn, handle, content) -> content,
-                chatCompletionPort
+                (ownerId, turn, handle, revision) -> Optional.empty(),
+                (ownerId, turn, handle, max, revision) -> List.of(),
+                (ownerId, revision) -> List.of(),
+                (owner, turn, handle, revision, content) -> content,
+                chatCompletionPort,
+                new TestCrmAuthorization(),
+                new TestCurrentActorPort(ACTOR_USUARIO_ID)
         );
 
         service.complete(new CompleteUserTurnCommand(
                 "different-owner", repeatedActor, turnId, "handle", "prompt", 5));
 
-        assertEquals(repeatedActor, chatCompletionPort.actorUsuarioId);
+        assertEquals(ACTOR_USUARIO_ID, chatCompletionPort.actorUsuarioId,
+                "The active CRM actor must override a command-supplied actor UUID");
         assertEquals(AgentOwnerId.from("different-owner"), chatCompletionPort.ownerId);
+    }
+
+    @Test
+    void dropsCompletionWhenAuthorizationRevisionChangesDuringModelCall() {
+        AtomicReference<String> revisionState = new AtomicReference<>("revision-before-model");
+        TestCrmAuthorization changingAuthorization = new TestCrmAuthorization() {
+            @Override
+            public String revision() {
+                return revisionState.get();
+            }
+        };
+        CapturingCompletionPort completionPort = new CapturingCompletionPort("unused");
+        CompleteUserTurnService service = new CompleteUserTurnService(
+                (owner, turn, handle, revision) -> Optional.empty(),
+                (owner, turn, handle, maximum, revision) -> List.of(),
+                (owner, revision) -> List.of(),
+                completionPort,
+                (owner, actor, superActor, turn, history, memories, prompt) -> {
+                    revisionState.set("revision-after-model");
+                    return "model output";
+                },
+                changingAuthorization,
+                new TestCurrentActorPort(ACTOR_USUARIO_ID)
+        );
+
+        assertThrows(CrmActorUnavailableException.class, () -> service.complete(new CompleteUserTurnCommand(
+                "owner-a", UUID.randomUUID(), UUID.randomUUID(), "handle", "prompt", 5)));
+        assertEquals(0, completionPort.calls,
+                "A response generated under a stale authorization revision must not be persisted");
+    }
+
+    @Test
+    void doesNotCallProviderWhenAuthorizationChangesWhileLoadingHistory() {
+        AtomicReference<String> revision = new AtomicReference<>("revision-before-context");
+        CrmAuthorization authorization = new TestCrmAuthorization() {
+            @Override
+            public String revision() {
+                return revision.get();
+            }
+        };
+        ChatCompletionPort provider = mock(ChatCompletionPort.class);
+        CapturingCompletionPort completionPort = new CapturingCompletionPort("unused");
+        CompleteUserTurnService service = new CompleteUserTurnService(
+                (owner, turn, handle, authorizationRevision) -> Optional.empty(),
+                (owner, turn, handle, maximum, authorizationRevision) -> {
+                    revision.set("revision-after-context");
+                    return List.of(VisibleMessage.user("history"));
+                },
+                (owner, authorizationRevision) -> List.of("memory"),
+                completionPort,
+                provider,
+                authorization,
+                new TestCurrentActorPort(ACTOR_USUARIO_ID)
+        );
+
+        assertThrows(CrmActorUnavailableException.class, () -> service.complete(new CompleteUserTurnCommand(
+                "owner-a", ACTOR_USUARIO_ID, UUID.randomUUID(), "handle", "prompt", 5)));
+        verifyNoInteractions(provider);
+        assertEquals(0, completionPort.calls);
+    }
+
+    @Test
+    void rejectsCanonicalRetryWhenAuthorizationChangesDuringLookup() {
+        AtomicReference<String> revision = new AtomicReference<>("revision-before-lookup");
+        CrmAuthorization authorization = new TestCrmAuthorization() {
+            @Override
+            public String revision() {
+                return revision.get();
+            }
+        };
+        ChatCompletionPort provider = mock(ChatCompletionPort.class);
+        CompleteUserTurnService service = new CompleteUserTurnService(
+                (owner, turn, handle, authorizationRevision) -> {
+                    revision.set("revision-after-lookup");
+                    return Optional.of("stale cached output");
+                },
+                null, null, null, provider, authorization,
+                new TestCurrentActorPort(ACTOR_USUARIO_ID));
+
+        assertThrows(CrmActorUnavailableException.class, () -> service.complete(new CompleteUserTurnCommand(
+                "owner-a", ACTOR_USUARIO_ID, UUID.randomUUID(), "handle", "prompt", 5)));
+        verifyNoInteractions(provider);
     }
 
     private static final class CapturingHistoryPort implements FindCompletedVisibleHistoryPort {
@@ -235,6 +344,7 @@ class CompleteUserTurnServiceTest {
         private TurnId turnId;
         private String opaqueHandle;
         private int maximumMessages;
+        private String authorizationRevision;
 
         private CapturingHistoryPort(List<VisibleMessage> history) {
             this.history = history;
@@ -245,13 +355,15 @@ class CompleteUserTurnServiceTest {
                 AgentOwnerId ownerId,
                 TurnId turnId,
                 String opaqueHandle,
-                int maximumMessages
+                int maximumMessages,
+                String authorizationRevision
         ) {
             calls++;
             this.ownerId = ownerId;
             this.turnId = turnId;
             this.opaqueHandle = opaqueHandle;
             this.maximumMessages = maximumMessages;
+            this.authorizationRevision = authorizationRevision;
             return history;
         }
     }
@@ -260,15 +372,17 @@ class CompleteUserTurnServiceTest {
         private final List<String> memories;
         private int calls;
         private AgentOwnerId ownerId;
+        private String authorizationRevision;
 
         private CapturingMemoryPort(List<String> memories) {
             this.memories = memories;
         }
 
         @Override
-        public List<String> findEligibleDurableMemories(AgentOwnerId ownerId) {
+        public List<String> findEligibleDurableMemories(AgentOwnerId ownerId, String authorizationRevision) {
             calls++;
             this.ownerId = ownerId;
+            this.authorizationRevision = authorizationRevision;
             return memories;
         }
     }
@@ -279,6 +393,7 @@ class CompleteUserTurnServiceTest {
         private AgentOwnerId ownerId;
         private TurnId turnId;
         private String opaqueHandle;
+        private String authorizationRevision;
 
         private CapturingCompletedContentPort(Optional<String> content) {
             this.content = content;
@@ -288,12 +403,14 @@ class CompleteUserTurnServiceTest {
         public Optional<String> findCompletedAssistantContent(
                 AgentOwnerId ownerId,
                 TurnId turnId,
-                String opaqueHandle
+                String opaqueHandle,
+                String authorizationRevision
         ) {
             calls++;
             this.ownerId = ownerId;
             this.turnId = turnId;
             this.opaqueHandle = opaqueHandle;
+            this.authorizationRevision = authorizationRevision;
             return content;
         }
     }
@@ -305,6 +422,7 @@ class CompleteUserTurnServiceTest {
         private TurnId turnId;
         private String opaqueHandle;
         private String assistantContent;
+        private String authorizationRevision;
 
         private CapturingCompletionPort(String canonicalContent) {
             this.canonicalContent = canonicalContent;
@@ -315,12 +433,14 @@ class CompleteUserTurnServiceTest {
                 AgentOwnerId ownerId,
                 TurnId turnId,
                 String opaqueHandle,
+                String authorizationRevision,
                 String assistantContent
         ) {
             calls++;
             this.ownerId = ownerId;
             this.turnId = turnId;
             this.opaqueHandle = opaqueHandle;
+            this.authorizationRevision = authorizationRevision;
             this.assistantContent = assistantContent;
             return canonicalContent;
         }

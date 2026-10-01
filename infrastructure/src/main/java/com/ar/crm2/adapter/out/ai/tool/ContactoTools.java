@@ -13,8 +13,10 @@ import com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.enums.EstadoRelacion;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.annotation.Tool;
@@ -33,6 +35,7 @@ public class ContactoTools {
     private final GetContactoByIdUseCase getContactoByIdUseCase;
     private final DeleteContactoUseCase deleteContactoUseCase;
     private final CambiarEstadoContactoUseCase cambiarEstadoContactoUseCase;
+    private final CrmAuthorization authorization;
 
     @Tool(name = "find_contacts", description = "Search contacts using optional filters. The current actor is supplied by trusted server context and is not a model-visible argument. Results are capped at 20.")
     public FindContactsOutput findContacts(
@@ -45,7 +48,10 @@ public class ContactoTools {
         UUID trustedActor = ToolContextSupport.requireActor(toolContext);
         List<Contacto> contacts = getAllContactosUseCase.getAll(CrmToolMapper.toGetAllContactosCommand(
                 search, estadoRelacion, empresaId, responsableId, comoNosConocio, trustedActor));
-        return CrmToolMapper.toFindContactsOutput(contacts);
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toFindContactsOutput(contacts),
+                RecursoCrm.CONTACTO,
+                authorization.fieldPolicy(RecursoCrm.CONTACTO));
     }
 
     @Tool(name = "create_contact", description = "Create a contact. Required fields must be supplied by the user; ask about missing required data. The actor identity is trusted server context and is not a model argument.")
@@ -63,7 +69,10 @@ public class ContactoTools {
         Contacto created = createContactoUseCase.create(CrmToolMapper.toCreateContactoCommand(
                 empresaId, nombre, correo, estadoRelacion, responsableId, telefono, cargo,
                 comoNosConocio, trustedActor));
-        return CrmToolMapper.toCreateContactOutput(created);
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toCreateContactOutput(created),
+                RecursoCrm.CONTACTO,
+                authorization.fieldPolicy(RecursoCrm.CONTACTO));
     }
 
     @Tool(name = "get_contact", description = "Get a contact by UUID. Actor context is implicit.")
@@ -71,7 +80,10 @@ public class ContactoTools {
             @ToolParam(description = "Contact UUID.") UUID id,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toContactOutput(getContactoByIdUseCase.getById(new GetContactoByIdCommand(id)));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toContactOutput(getContactoByIdUseCase.getById(new GetContactoByIdCommand(id))),
+                RecursoCrm.CONTACTO,
+                authorization.fieldPolicy(RecursoCrm.CONTACTO));
     }
 
     @Tool(name = "edit_contact", description = "Edit an existing contact's editable business fields. Its identity, company, and original creator are not changed. responsableId is the business assignee, not the authenticated actor. Ask instead of inventing required values; null/omitted optional values preserve their current values. Empty optional text clears that text; a nullable responsible-user ID cannot be cleared through this tool.")
@@ -91,20 +103,18 @@ public class ContactoTools {
         }
         String resolvedNombre = CrmToolMapper.requireNonBlank(nombre, "edit_contact requires nombre");
         EstadoRelacion resolvedEstado = CrmToolMapper.requireEnum(estadoRelacion, "edit_contact estadoRelacion");
-        Contacto current = getContactoByIdUseCase.getById(new GetContactoByIdCommand(id));
-        if (current == null) {
-            throw new SafeToolValidationException("edit_contact requires an existing contact");
-        }
         Contacto updated = editContactoUseCase.edit(CrmToolMapper.toEditContactoCommand(
                 id, resolvedNombre,
-                correo != null ? correo : current.getCorreo(),
+                correo,
                 resolvedEstado,
-                responsableId != null ? responsableId
-                        : current.getResponsableId() == null ? null : current.getResponsableId().value(),
-                telefono != null ? telefono : current.getTelefono(),
-                cargo != null ? cargo : current.getCargo(),
-                comoNosConocio != null ? comoNosConocio : current.getComoNosConocio()));
-        return CrmToolMapper.toEditContactOutput(updated);
+                responsableId,
+                telefono,
+                cargo,
+                comoNosConocio));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toEditContactOutput(updated),
+                RecursoCrm.CONTACTO,
+                authorization.fieldPolicy(RecursoCrm.CONTACTO));
     }
 
     @Tool(name = "change_contact_state", description = "Change a contact's relationship state to the state explicitly selected by the user. Actor context is implicit.")
@@ -113,8 +123,11 @@ public class ContactoTools {
             @ToolParam(description = "New relationship state.") EstadoRelacion nuevoEstado,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toContactOutput(cambiarEstadoContactoUseCase.cambiarEstado(
-                new CambiarEstadoContactoCommand(id, CrmToolMapper.requireEnum(nuevoEstado, "nuevoEstado"))));
+        return CrmToolMapper.projectSensitiveFields(
+                CrmToolMapper.toContactOutput(cambiarEstadoContactoUseCase.cambiarEstado(
+                        new CambiarEstadoContactoCommand(id, CrmToolMapper.requireEnum(nuevoEstado, "nuevoEstado")))),
+                RecursoCrm.CONTACTO,
+                authorization.fieldPolicy(RecursoCrm.CONTACTO));
     }
 
     @Tool(name = "delete_contact", description = "Delete a contact. This is destructive; call only when the user clearly requested deletion. Existing CRM checks apply. Actor context is implicit.")

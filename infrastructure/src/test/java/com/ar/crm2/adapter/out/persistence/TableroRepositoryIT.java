@@ -235,6 +235,35 @@ class TableroRepositoryIT {
         assertTrue(repository.existsByColumnasTableroColumnaId(columnaId));
     }
 
+    @Test
+    void findBoardIdsByColumnasTableroColumnaId_returnsEveryReferencingBoardOnly() {
+        String sharedColumnId = UUID.randomUUID().toString();
+        String unrelatedColumnId = UUID.randomUUID().toString();
+        String firstBoardId = UUID.randomUUID().toString();
+        String secondBoardId = UUID.randomUUID().toString();
+        String unrelatedBoardId = UUID.randomUUID().toString();
+
+        TableroEntity firstBoard = buildTableroEntity(firstBoardId, "First board");
+        firstBoard.getColumnasTablero().add(buildColumnaTableroEntity(
+            UUID.randomUUID().toString(), firstBoard, sharedColumnId, 5, 0));
+        TableroEntity secondBoard = buildTableroEntity(secondBoardId, "Second board");
+        secondBoard.getColumnasTablero().add(buildColumnaTableroEntity(
+            UUID.randomUUID().toString(), secondBoard, sharedColumnId, 5, 0));
+        TableroEntity unrelatedBoard = buildTableroEntity(unrelatedBoardId, "Unrelated board");
+        unrelatedBoard.getColumnasTablero().add(buildColumnaTableroEntity(
+            UUID.randomUUID().toString(), unrelatedBoard, unrelatedColumnId, 5, 0));
+        repository.saveAndFlush(firstBoard);
+        repository.saveAndFlush(secondBoard);
+        repository.saveAndFlush(unrelatedBoard);
+
+        var boardIds = repository.findBoardIdsByColumnasTableroColumnaId(sharedColumnId);
+
+        assertEquals(2, boardIds.size());
+        assertTrue(boardIds.contains(firstBoardId));
+        assertTrue(boardIds.contains(secondBoardId));
+        assertFalse(boardIds.contains(unrelatedBoardId));
+    }
+
     // ── uniqueness constraint ───────────────────────────────────────
 
     @Test

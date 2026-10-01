@@ -11,6 +11,7 @@ public interface CompleteRegeneratedTurnPort {
             TurnId turnId,
             String opaqueHandle,
             String idempotencyKey,
+            String authorizationRevision,
             String assistantContent
     );
 }

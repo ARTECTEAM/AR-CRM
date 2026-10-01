@@ -7,5 +7,5 @@ import java.util.List;
 /** Finds all eligible durable-memory context values in stable order for one owner. */
 public interface FindEligibleDurableMemoriesPort {
 
-    List<String> findEligibleDurableMemories(AgentOwnerId ownerId);
+    List<String> findEligibleDurableMemories(AgentOwnerId ownerId, String authorizationRevision);
 }

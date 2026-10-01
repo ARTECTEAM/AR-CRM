@@ -2,6 +2,8 @@ package com.ar.crm2.adapter.in.rest;
 
 import com.ar.crm2.application.agenda.exception.AgendaNotFoundException;
 import com.ar.crm2.application.agent.turn.exception.IdempotencyKeyReusedException;
+import com.ar.crm2.adapter.out.persistence.exception.LastActiveRoleManagerRequiredException;
+import com.ar.crm2.adapter.out.persistence.exception.BootstrapPromotionUnavailableException;
 import com.ar.crm2.application.columna.exception.ColumnaHasAssociatedFichasException;
 import com.ar.crm2.application.columna.exception.ColumnaNotFoundException;
 import com.ar.crm2.application.contacto.exception.ContactoHasAssociatedTratosException;
@@ -15,6 +17,8 @@ import com.ar.crm2.application.identity.model.IdentityProvisioningException;
 import com.ar.crm2.application.rol.exception.RolHasAssociatedUsuariosException;
 import com.ar.crm2.application.rol.exception.RolNotFoundException;
 import com.ar.crm2.application.security.exception.AuthenticatedUsuarioRequiredException;
+import com.ar.crm2.application.security.exception.CrmActorUnavailableException;
+import com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException;
 import com.ar.crm2.application.superusuario.exception.SuperUsuarioNotFoundException;
 import com.ar.crm2.application.tablero.exception.TableroNotFoundException;
 import com.ar.crm2.application.tarea.exception.TareaNotFoundException;
@@ -77,6 +81,19 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(RolHasAssociatedUsuariosException.class)
     public ResponseEntity<Map<String, String>> handleRolHasAssociatedUsuariosException(RolHasAssociatedUsuariosException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(LastActiveRoleManagerRequiredException.class)
+    public ResponseEntity<Map<String, String>> handleLastActiveRoleManagerRequired(LastActiveRoleManagerRequiredException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler(BootstrapPromotionUnavailableException.class)
+    public ResponseEntity<Map<String, String>> handleBootstrapPromotionUnavailable(
+            BootstrapPromotionUnavailableException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(Map.of("error", ex.getMessage()));
     }
@@ -262,6 +279,12 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(AuthenticatedUsuarioRequiredException.class)
     public ResponseEntity<Map<String, String>> handleAuthenticatedUsuarioRequiredException(AuthenticatedUsuarioRequiredException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler({CrmActorUnavailableException.class, CrmAuthorizationDeniedException.class})
+    public ResponseEntity<Map<String, String>> handleCrmAuthorization(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
             .body(Map.of("error", ex.getMessage()));
     }

@@ -11,9 +11,14 @@ public final class DurableMemoryPersistenceMapper {
     }
 
     public static DurableMemoryEntity toEntity(DurableMemory memory) {
+        return toEntity(memory, null);
+    }
+
+    public static DurableMemoryEntity toEntity(DurableMemory memory, String authorizationRevision) {
         return DurableMemoryEntity.builder()
                 .id(memory.getId().value().toString())
                 .ownerId(memory.getOwnerId().value())
+                .authorizationRevision(authorizationRevision)
                 .content(memory.getContent())
                 .status(memory.getStatus())
                 .createdAt(memory.getCreatedAt())

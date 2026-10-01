@@ -10,6 +10,7 @@ import com.ar.crm2.application.agent.memory.port.out.FindEligibleDurableMemories
 import com.ar.crm2.application.agent.memory.port.out.PurgeDurableMemoriesPort;
 import com.ar.crm2.application.agent.memory.port.out.ReplaceDurableMemoryPort;
 import com.ar.crm2.application.agent.memory.port.out.SaveDurableMemoryPort;
+import com.ar.crm2.application.support.TestCrmAuthorization;
 import com.ar.crm2.model.agent.entity.DurableMemory;
 import com.ar.crm2.model.agent.policy.MemorySafetyContext;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
@@ -27,7 +28,7 @@ class DurableMemoryServiceTest {
     @Test
     void remembersOnlyAnExplicitSafeMemoryForItsOwner() {
         CapturingSavePort savePort = new CapturingSavePort();
-        RememberDurableMemoryService service = new RememberDurableMemoryService(savePort);
+        RememberDurableMemoryService service = new RememberDurableMemoryService(savePort, new TestCrmAuthorization());
 
         DurableMemory remembered = service.remember(new RememberDurableMemoryCommand(
                 "owner-a", "Use Spanish", MemorySafetyContext.explicitSafe()));
@@ -35,12 +36,13 @@ class DurableMemoryServiceTest {
         assertEquals(AgentOwnerId.from("owner-a"), remembered.getOwnerId());
         assertEquals("Use Spanish", remembered.getContent());
         assertEquals(List.of(remembered), savePort.saved);
+        assertEquals("test-authorization-revision", savePort.authorizationRevision);
     }
 
     @Test
     void rejectsUnsafeMemoryWithoutPersistingIt() {
         CapturingSavePort savePort = new CapturingSavePort();
-        RememberDurableMemoryService service = new RememberDurableMemoryService(savePort);
+        RememberDurableMemoryService service = new RememberDurableMemoryService(savePort, new TestCrmAuthorization());
 
         assertThrows(RuntimeException.class, () -> service.remember(new RememberDurableMemoryCommand(
                 "owner-a", "secret", MemorySafetyContext.secret())));
@@ -51,7 +53,7 @@ class DurableMemoryServiceTest {
     @Test
     void replacesOnlyTheExplicitOwnerBoundMemoryThroughTheAtomicPort() {
         CapturingReplacePort replacePort = new CapturingReplacePort();
-        ReplaceDurableMemoryService service = new ReplaceDurableMemoryService(replacePort);
+        ReplaceDurableMemoryService service = new ReplaceDurableMemoryService(replacePort, new TestCrmAuthorization());
         MemoryId targetId = MemoryId.create();
 
         DurableMemory replacement = service.replace(new ReplaceDurableMemoryCommand(
@@ -61,12 +63,13 @@ class DurableMemoryServiceTest {
         assertEquals(targetId, replacePort.targetId);
         assertEquals(replacement, replacePort.replacement);
         assertEquals("Use English", replacement.getContent());
+        assertEquals("test-authorization-revision", replacePort.authorizationRevision);
     }
 
     @Test
     void deletesOnlyTheExplicitOwnerBoundMemoryThroughTheAtomicPort() {
         CapturingDeletePort deletePort = new CapturingDeletePort();
-        DeleteDurableMemoryService service = new DeleteDurableMemoryService(deletePort);
+        DeleteDurableMemoryService service = new DeleteDurableMemoryService(deletePort, new TestCrmAuthorization());
         MemoryId targetId = MemoryId.create();
 
         service.delete(new DeleteDurableMemoryCommand("owner-a", targetId.value()));
@@ -78,7 +81,7 @@ class DurableMemoryServiceTest {
     @Test
     void recallsEligibleMemoriesInThePortProvidedOwnerScopedOrder() {
         CapturingEligiblePort findEligiblePort = new CapturingEligiblePort();
-        RecallDurableMemoriesService service = new RecallDurableMemoriesService(findEligiblePort);
+        RecallDurableMemoriesService service = new RecallDurableMemoriesService(findEligiblePort, new TestCrmAuthorization());
         AgentOwnerId ownerId = AgentOwnerId.from("owner-a");
         DurableMemory first = DurableMemory.create(ownerId, "First", MemorySafetyContext.explicitSafe());
         DurableMemory second = DurableMemory.create(ownerId, "Second", MemorySafetyContext.explicitSafe());
@@ -87,6 +90,7 @@ class DurableMemoryServiceTest {
         List<DurableMemory> recalled = service.recall(new RecallDurableMemoriesCommand("owner-a"));
 
         assertEquals(ownerId, findEligiblePort.requestedOwnerId);
+        assertEquals("test-authorization-revision", findEligiblePort.authorizationRevision);
         assertEquals(List.of(first, second), recalled);
     }
 
@@ -103,10 +107,12 @@ class DurableMemoryServiceTest {
 
     private static final class CapturingSavePort implements SaveDurableMemoryPort {
         private final java.util.ArrayList<DurableMemory> saved = new java.util.ArrayList<>();
+        private String authorizationRevision;
 
         @Override
-        public DurableMemory save(DurableMemory memory) {
+        public DurableMemory save(DurableMemory memory, String authorizationRevision) {
             saved.add(memory);
+            this.authorizationRevision = authorizationRevision;
             return memory;
         }
     }
@@ -115,12 +121,15 @@ class DurableMemoryServiceTest {
         private AgentOwnerId ownerId;
         private MemoryId targetId;
         private DurableMemory replacement;
+        private String authorizationRevision;
 
         @Override
-        public DurableMemory replace(AgentOwnerId ownerId, MemoryId targetId, DurableMemory replacement) {
+        public DurableMemory replace(AgentOwnerId ownerId, MemoryId targetId, DurableMemory replacement,
+                                     String authorizationRevision) {
             this.ownerId = ownerId;
             this.targetId = targetId;
             this.replacement = replacement;
+            this.authorizationRevision = authorizationRevision;
             return replacement;
         }
     }
@@ -138,11 +147,13 @@ class DurableMemoryServiceTest {
 
     private static final class CapturingEligiblePort implements FindEligibleDurableMemoriesPort {
         private AgentOwnerId requestedOwnerId;
+        private String authorizationRevision;
         private List<DurableMemory> eligible = List.of();
 
         @Override
-        public List<DurableMemory> findEligible(AgentOwnerId ownerId) {
+        public List<DurableMemory> findEligible(AgentOwnerId ownerId, String authorizationRevision) {
             requestedOwnerId = ownerId;
+            this.authorizationRevision = authorizationRevision;
             return eligible;
         }
     }

@@ -10,6 +10,7 @@ import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import java.time.LocalDateTime;
 
@@ -37,6 +38,10 @@ public class AgentVisibleHistoryEntity {
 
     @Column(name = "content", length = 4096, nullable = false)
     private String content;
+
+    @Column(name = "authorization_revision", length = 64)
+    @Setter
+    private String authorizationRevision;
 
     @Column(name = "visible_at", nullable = false)
     private LocalDateTime visibleAt;

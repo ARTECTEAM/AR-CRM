@@ -31,12 +31,13 @@ public interface ContactoRepository extends JpaRepository<ContactoEntity, String
      * One atomic actor-scoped, optionally filtered, deterministically
      * ordered search.
      *
-     * <p>The {@code actor} predicate is the mandatory security scope:
-     * every returned row must satisfy
-     * {@code (creadoPor = actor OR responsableId = actor)}. The
+     * <p>The {@code actor} predicate is the database row scope for
+     * {@code PROPIOS_O_ASIGNADOS}; a null actor is only used when the
+     * current role explicitly allows the shared resource. The
+     * {@code includePrivateFields} parameter controls whether email
+     * and phone participate in free-text matching. The
      * remaining parameters are OPTIONAL filters and intersect the
-     * scope (an optional {@code responsableId} narrows the visible
-     * set but never replaces actor scope).
+     * scope (an optional {@code responsableId} narrows the visible set).
      *
      * <p>Order is fixed in JPQL ({@code creadoEn DESC, id ASC}) so the
      * deterministic order is enforced even when the caller passes an
@@ -47,11 +48,11 @@ public interface ContactoRepository extends JpaRepository<ContactoEntity, String
      */
     @Query("""
         SELECT c FROM ContactoEntity c
-        WHERE (c.creadoPor = :actor OR c.responsableId = :actor)
+        WHERE (:actor IS NULL OR c.creadoPor = :actor OR c.responsableId = :actor)
           AND (:search IS NULL
                OR LOWER(c.nombre) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!'
-               OR LOWER(c.correo) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!'
-               OR LOWER(c.telefono) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!'
+               OR (:includePrivateFields = true AND LOWER(c.correo) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!')
+               OR (:includePrivateFields = true AND LOWER(c.telefono) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!')
                OR LOWER(c.cargo) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!')
           AND (:estadoRelacion IS NULL OR c.estadoRelacion = :estadoRelacion)
           AND (:empresaId IS NULL OR c.empresaId = :empresaId)
@@ -67,6 +68,18 @@ public interface ContactoRepository extends JpaRepository<ContactoEntity, String
             @Param("empresaId") String empresaId,
             @Param("responsableId") String responsableId,
             @Param("comoNosConocio") String comoNosConocio,
+            @Param("includePrivateFields") boolean includePrivateFields,
             Pageable pageable
+    );
+
+    @Query("""
+        SELECT COUNT(c) > 0
+        FROM ContactoEntity c
+        WHERE c.id = :contactoId
+          AND (c.creadoPor = :actor OR c.responsableId = :actor)
+        """)
+    boolean isVisibleToActor(
+            @Param("contactoId") String contactoId,
+            @Param("actor") String actor
     );
 }

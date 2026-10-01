@@ -132,7 +132,7 @@ class AgentTurnPersistenceModelTest {
         AgentConversationEntity conversation = conversationRepository.saveAndFlush(conversation("owner-a", createdAt));
         AgentTurnEntity persistedTurn = turnRepository.saveAndFlush(turn(conversation, TurnState.COMPLETED, createdAt, updatedAt));
         historyRepository.saveAndFlush(new AgentVisibleHistoryEntity(
-            UUID.randomUUID().toString(), conversation, persistedTurn, "ASSISTANT", "completed response", updatedAt));
+            UUID.randomUUID().toString(), conversation, persistedTurn, "ASSISTANT", "completed response", "revision-a", updatedAt));
         turnRepository.flush();
         conversationRepository.flush();
 
@@ -149,6 +149,7 @@ class AgentTurnPersistenceModelTest {
         assertEquals(ConversationId.from(UUID.fromString(reloadedTurn.getConversation().getId())), reconstitutedConversation.getId());
         assertEquals(TurnId.from(UUID.fromString(reloadedTurn.getId())), reconstitutedTurn.getId());
         assertEquals(1, historyRepository.count());
+        assertEquals("revision-a", historyRepository.findAll().getFirst().getAuthorizationRevision());
     }
 
     private AgentConversationEntity conversation(String ownerId, LocalDateTime createdAt) {

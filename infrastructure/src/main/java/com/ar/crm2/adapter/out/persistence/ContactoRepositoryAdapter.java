@@ -40,7 +40,8 @@ public class ContactoRepositoryAdapter implements SaveContactoPort, SearchContac
             EmpresaId empresaId,
             UsuarioId responsableId,
             String comoNosConocio,
-            Integer maxResults
+            Integer maxResults,
+            boolean includePrivateFields
     ) {
         // The deterministic order (creadoEn DESC, id ASC) is fixed in the
         // repository @Query; the Pageable here only contributes the
@@ -51,12 +52,13 @@ public class ContactoRepositoryAdapter implements SaveContactoPort, SearchContac
                 : PageRequest.ofSize(maxResults);
 
         List<ContactoEntity> entities = repository.searchScoped(
-                actorUsuarioId.value().toString(),
+                actorUsuarioId != null ? actorUsuarioId.value().toString() : null,
                 escapeLikePattern(search),
                 estadoRelacion,
                 empresaId != null ? empresaId.value().toString() : null,
                 responsableId != null ? responsableId.value().toString() : null,
                 comoNosConocio,
+                includePrivateFields,
                 pageable
         );
 

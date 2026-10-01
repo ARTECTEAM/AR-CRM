@@ -29,6 +29,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class DurableMemoryPersistenceAdapterTest {
 
+    private static final String CURRENT_REVISION = "revision-current";
+    private static final String STALE_REVISION = "revision-stale";
+
     @Autowired
     private DurableMemoryPersistenceAdapter adapter;
 
@@ -48,16 +51,33 @@ class DurableMemoryPersistenceAdapterTest {
         DurableMemory second = memory(owner, "Second", createdAt, UUID.fromString("00000000-0000-0000-0000-000000000002"), null, DurableMemoryStatus.ACTIVE, null);
         DurableMemory expired = memory(owner, "Expired", createdAt.minusDays(2), UUID.randomUUID(), createdAt.minusDays(1), DurableMemoryStatus.ACTIVE, null);
         DurableMemory otherOwner = memory(AgentOwnerId.from("owner-b"), "Other", createdAt, UUID.randomUUID(), null, DurableMemoryStatus.ACTIVE, null);
-        adapter.save(second);
-        adapter.save(expired);
-        adapter.save(otherOwner);
-        adapter.save(first);
+        save(second);
+        save(expired);
+        save(otherOwner);
+        save(first);
 
-        List<DurableMemory> recalled = adapter.findEligible(owner);
+        List<DurableMemory> recalled = findEligible(owner);
 
         assertThat(recalled).extracting(DurableMemory::getContent).containsExactly("First", "Second");
         assertThat(recalled.getFirst().getId()).isEqualTo(first.getId());
         assertThat(recalled.getFirst().getCreatedAt()).isEqualTo(createdAt);
+    }
+
+    @Test
+    void excludesMemoriesCreatedUnderDifferentOrLegacyAuthorizationRevisions() {
+        AgentOwnerId owner = AgentOwnerId.from("owner-a");
+        LocalDateTime createdAt = LocalDateTime.of(2026, 7, 20, 10, 0);
+        DurableMemory current = memory(owner, "current policy memory", createdAt, UUID.randomUUID(), null,
+                DurableMemoryStatus.ACTIVE, null);
+        DurableMemory stale = memory(owner, "stale policy memory", createdAt, UUID.randomUUID(), null,
+                DurableMemoryStatus.ACTIVE, null);
+        DurableMemory legacy = memory(owner, "legacy memory without revision", createdAt, UUID.randomUUID(), null,
+                DurableMemoryStatus.ACTIVE, null);
+        adapter.save(current, CURRENT_REVISION);
+        adapter.save(stale, STALE_REVISION);
+        repository.saveAndFlush(DurableMemoryPersistenceMapper.toEntity(legacy));
+
+        assertThat(adapter.findEligible(owner, CURRENT_REVISION)).containsExactly(current);
     }
 
     @Test
@@ -69,16 +89,16 @@ class DurableMemoryPersistenceAdapterTest {
         DurableMemory ownerBMemory = memory(ownerB, "B", old, UUID.randomUUID(), null, DurableMemoryStatus.ACTIVE, null);
         DurableMemory deleted = DurableMemory.reconstitute(MemoryId.from(UUID.randomUUID()), ownerA, "Deleted",
                 DurableMemoryStatus.DELETED, old, old, null, null, null, old);
-        adapter.save(ownerAMemory);
-        adapter.save(ownerBMemory);
-        adapter.save(deleted);
+        save(ownerAMemory);
+        save(ownerBMemory);
+        save(deleted);
 
         assertThat(adapter.findByOwnerAndId(ownerB, ownerAMemory.getId())).isEmpty();
-        adapter.save(ownerAMemory.delete(ownerA, ownerAMemory.getId()));
+        save(ownerAMemory.delete(ownerA, ownerAMemory.getId()));
         adapter.purgeExpiredAndDeletedBefore(old.plusDays(1));
 
-        assertThat(adapter.findEligible(ownerA)).isEmpty();
-        assertThat(adapter.findEligible(ownerB)).containsExactly(ownerBMemory);
+        assertThat(findEligible(ownerA)).isEmpty();
+        assertThat(findEligible(ownerB)).containsExactly(ownerBMemory);
         assertThat(repository.count()).isEqualTo(2);
     }
 
@@ -90,10 +110,10 @@ class DurableMemoryPersistenceAdapterTest {
         DurableMemory original = memory(ownerA, "Original", createdAt, UUID.randomUUID(), null, DurableMemoryStatus.ACTIVE, null);
         DurableMemory otherOwner = memory(ownerB, "Other", createdAt, UUID.randomUUID(), null, DurableMemoryStatus.ACTIVE, null);
         DurableMemory replacement = DurableMemory.create(ownerA, "Replacement", MemorySafetyContext.explicitSafe());
-        adapter.save(original);
-        adapter.save(otherOwner);
+        save(original);
+        save(otherOwner);
 
-        DurableMemory savedReplacement = adapter.replace(ownerA, original.getId(), replacement);
+        DurableMemory savedReplacement = replace(ownerA, original.getId(), replacement);
 
         assertThat(savedReplacement).isEqualTo(replacement);
         assertThat(adapter.findByOwnerAndId(ownerA, original.getId()))
@@ -101,8 +121,8 @@ class DurableMemoryPersistenceAdapterTest {
                     assertThat(memory.getStatus()).isEqualTo(DurableMemoryStatus.SUPERSEDED);
                     assertThat(memory.getSupersededById()).isEqualTo(replacement.getId());
                 });
-        assertThat(adapter.findEligible(ownerA)).containsExactly(replacement);
-        assertThat(adapter.findEligible(ownerB)).containsExactly(otherOwner);
+        assertThat(findEligible(ownerA)).containsExactly(replacement);
+        assertThat(findEligible(ownerB)).containsExactly(otherOwner);
     }
 
     @Test
@@ -112,8 +132,8 @@ class DurableMemoryPersistenceAdapterTest {
         LocalDateTime createdAt = LocalDateTime.of(2026, 7, 20, 10, 0);
         DurableMemory ownerAMemory = memory(ownerA, "A", createdAt, UUID.randomUUID(), null, DurableMemoryStatus.ACTIVE, null);
         DurableMemory ownerBMemory = memory(ownerB, "B", createdAt, UUID.randomUUID(), null, DurableMemoryStatus.ACTIVE, null);
-        adapter.save(ownerAMemory);
-        adapter.save(ownerBMemory);
+        save(ownerAMemory);
+        save(ownerBMemory);
 
         adapter.delete(ownerA, ownerAMemory.getId());
 
@@ -122,8 +142,8 @@ class DurableMemoryPersistenceAdapterTest {
                     assertThat(memory.getStatus()).isEqualTo(DurableMemoryStatus.DELETED);
                     assertThat(memory.getDeletedAt()).isNotNull();
                 });
-        assertThat(adapter.findEligible(ownerA)).isEmpty();
-        assertThat(adapter.findEligible(ownerB)).containsExactly(ownerBMemory);
+        assertThat(findEligible(ownerA)).isEmpty();
+        assertThat(findEligible(ownerB)).containsExactly(ownerBMemory);
     }
 
     @Test
@@ -136,9 +156,9 @@ class DurableMemoryPersistenceAdapterTest {
                 boundary.plusSeconds(1), DurableMemoryStatus.ACTIVE, null);
         DurableMemory deletedAtBoundary = memory(owner, "Deleted", boundary.minusDays(1), UUID.randomUUID(),
                 null, DurableMemoryStatus.DELETED, boundary);
-        adapter.save(expiredAtBoundary);
-        adapter.save(unexpired);
-        adapter.save(deletedAtBoundary);
+        save(expiredAtBoundary);
+        save(unexpired);
+        save(deletedAtBoundary);
 
         adapter.purgeExpiredAndDeletedBefore(boundary);
 
@@ -152,7 +172,7 @@ class DurableMemoryPersistenceAdapterTest {
     void locksTheExplicitOwnerBoundTargetForAnAtomicLifecycleWrite() {
         AgentOwnerId owner = AgentOwnerId.from("owner-a");
         DurableMemory memory = DurableMemory.create(owner, "Memory", MemorySafetyContext.explicitSafe());
-        adapter.save(memory);
+        save(memory);
 
         assertThat(repository.findByOwnerIdAndIdForUpdate(owner.value(), memory.getId().value().toString()))
                 .isPresent();
@@ -162,5 +182,17 @@ class DurableMemoryPersistenceAdapterTest {
                                  LocalDateTime expiresAt, DurableMemoryStatus status, LocalDateTime deletedAt) {
         return DurableMemory.reconstitute(MemoryId.from(id), owner, content, status, createdAt, createdAt,
                 expiresAt, null, null, deletedAt);
+    }
+
+    private void save(DurableMemory memory) {
+        adapter.save(memory, CURRENT_REVISION);
+    }
+
+    private List<DurableMemory> findEligible(AgentOwnerId owner) {
+        return adapter.findEligible(owner, CURRENT_REVISION);
+    }
+
+    private DurableMemory replace(AgentOwnerId owner, MemoryId targetId, DurableMemory replacement) {
+        return adapter.replace(owner, targetId, replacement, CURRENT_REVISION);
     }
 }

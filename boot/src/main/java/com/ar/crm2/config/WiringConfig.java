@@ -1,6 +1,7 @@
 package com.ar.crm2.config;
 
 import com.ar.crm2.adapter.out.persistence.ColumnaRepositoryAdapter;
+import com.ar.crm2.adapter.out.persistence.AuthorizationMutationAdapter;
 import com.ar.crm2.adapter.out.persistence.repository.ColumnaRepository;
 import com.ar.crm2.adapter.out.persistence.repository.ContactoRepository;
 import com.ar.crm2.adapter.out.persistence.ContactoRepositoryAdapter;
@@ -10,6 +11,7 @@ import com.ar.crm2.adapter.out.persistence.repository.FichaRepository;
 import com.ar.crm2.adapter.out.persistence.FichaRepositoryAdapter;
 import com.ar.crm2.adapter.out.persistence.repository.RolRepository;
 import com.ar.crm2.adapter.out.persistence.RolRepositoryAdapter;
+import com.ar.crm2.adapter.out.persistence.RoleManagerGovernance;
 import com.ar.crm2.adapter.out.persistence.repository.SuperUsuarioRepository;
 import com.ar.crm2.adapter.out.persistence.SuperUsuarioRepositoryAdapter;
 import com.ar.crm2.adapter.out.persistence.repository.TableroRepository;
@@ -73,6 +75,11 @@ import com.ar.crm2.application.rol.service.DeleteRolService;
 import com.ar.crm2.application.rol.service.EditRolService;
 import com.ar.crm2.application.rol.service.GetAllRolesService;
 import com.ar.crm2.application.rol.service.GetRolByIdService;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.port.out.AuthorizationMutationPort;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
+import com.ar.crm2.application.security.port.out.ResourceScopePort;
+import com.ar.crm2.application.security.service.DefaultCrmAuthorization;
 import com.ar.crm2.application.usuario.port.in.CreateUsuarioUseCase;
 import com.ar.crm2.application.usuario.port.in.DeleteUsuarioUseCase;
 import com.ar.crm2.application.usuario.port.in.EditUsuarioUseCase;
@@ -86,6 +93,7 @@ import com.ar.crm2.application.usuario.port.out.FindUsuarioByCorreoPort;
 import com.ar.crm2.application.usuario.port.out.FindUsuarioByIdPort;
 import com.ar.crm2.application.usuario.port.out.FindUsuarioByKeycloakIdPort;
 import com.ar.crm2.application.usuario.port.out.SaveUsuarioPort;
+import com.ar.crm2.application.usuario.port.out.PromoteBootstrapAdministratorPort;
 import com.ar.crm2.application.usuario.service.CreateUsuarioService;
 import com.ar.crm2.application.usuario.service.DeleteUsuarioService;
 import com.ar.crm2.application.usuario.service.EditUsuarioService;
@@ -213,6 +221,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.beans.factory.annotation.Qualifier;
 
+import java.util.List;
+
 /**
  * Application wiring configuration.
  * Wires application UseCases with infrastructure adapters without touching application/domain classes.
@@ -223,6 +233,18 @@ import org.springframework.beans.factory.annotation.Qualifier;
  */
 @Configuration
 public class WiringConfig {
+
+    @Bean
+    public CrmAuthorization crmAuthorization(CurrentActorPort currentActorPort,
+                                             FindRolByIdPort findRolByIdPort,
+                                             List<ResourceScopePort> resourceScopePorts) {
+        return new DefaultCrmAuthorization(currentActorPort, findRolByIdPort, resourceScopePorts);
+    }
+
+    @Bean
+    public AuthorizationMutationPort authorizationMutationPort(RoleManagerGovernance roleManagerGovernance) {
+        return new AuthorizationMutationAdapter(roleManagerGovernance);
+    }
 
     @Bean
     public ObjectMapper objectMapper() {
@@ -271,8 +293,8 @@ public class WiringConfig {
     }
 
     @Bean
-    public RolRepositoryAdapter rolRepositoryAdapter(RolRepository repository) {
-        return new RolRepositoryAdapter(repository);
+    public RolRepositoryAdapter rolRepositoryAdapter(RolRepository repository, RoleManagerGovernance governance) {
+        return new RolRepositoryAdapter(repository, governance);
     }
 
     @Bean
@@ -281,8 +303,8 @@ public class WiringConfig {
     }
 
     @Bean
-    public UsuarioRepositoryAdapter usuarioRepositoryAdapter(UsuarioRepository repository) {
-        return new UsuarioRepositoryAdapter(repository);
+    public UsuarioRepositoryAdapter usuarioRepositoryAdapter(UsuarioRepository repository, RoleManagerGovernance governance) {
+        return new UsuarioRepositoryAdapter(repository, governance);
     }
 
     @Bean
@@ -298,36 +320,40 @@ public class WiringConfig {
     // ── Empresa UseCase Beans ──
 
     @Bean
-    public CreateEmpresaUseCase createEmpresaUseCase(EmpresaRepositoryAdapter adapter) {
-        return new CreateEmpresaService(adapter);
+    public CreateEmpresaUseCase createEmpresaUseCase(EmpresaRepositoryAdapter adapter, CrmAuthorization authorization,
+                                                     CurrentActorPort currentActorPort) {
+        return new CreateEmpresaService(adapter, authorization, currentActorPort);
     }
 
     @Bean
-    public GetAllEmpresasUseCase getAllEmpresasUseCase(EmpresaRepositoryAdapter adapter) {
-        return new GetAllEmpresasService(adapter);
+    public GetAllEmpresasUseCase getAllEmpresasUseCase(EmpresaRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetAllEmpresasService(adapter, authorization);
     }
 
     @Bean
-    public EditEmpresaUseCase editEmpresaUseCase(EmpresaRepositoryAdapter findPort, EmpresaRepositoryAdapter savePort) {
-        return new EditEmpresaService(findPort, savePort);
+    public EditEmpresaUseCase editEmpresaUseCase(EmpresaRepositoryAdapter findPort, EmpresaRepositoryAdapter savePort,
+                                                CrmAuthorization authorization) {
+        return new EditEmpresaService(findPort, savePort, authorization);
     }
 
     @Bean
     public DeleteEmpresaUseCase deleteEmpresaUseCase(
             EmpresaRepositoryAdapter findPort,
             EmpresaRepositoryAdapter existsTratosPort,
-            EmpresaRepositoryAdapter deletePort
+            EmpresaRepositoryAdapter deletePort,
+            CrmAuthorization authorization
     ) {
-        return new DeleteEmpresaService(findPort, existsTratosPort, deletePort);
+        return new DeleteEmpresaService(findPort, existsTratosPort, deletePort, authorization);
     }
 
     @Bean
     public CambiarEstadoEmpresaUseCase cambiarEstadoEmpresaUseCase(
             EmpresaRepositoryAdapter findPort,
             EmpresaRepositoryAdapter savePort,
-            EmpresaRepositoryAdapter existsTratosPort
+            EmpresaRepositoryAdapter existsTratosPort,
+            CrmAuthorization authorization
     ) {
-        return new CambiarEstadoEmpresaService(findPort, savePort, existsTratosPort);
+        return new CambiarEstadoEmpresaService(findPort, savePort, existsTratosPort, authorization);
     }
 
 
@@ -335,41 +361,47 @@ public class WiringConfig {
     // ── Contacto UseCase Beans ──
 
     @Bean
-    public CreateContactoUseCase createContactoUseCase(ContactoRepositoryAdapter adapter) {
-        return new CreateContactoService(adapter);
+    public CreateContactoUseCase createContactoUseCase(ContactoRepositoryAdapter adapter, CrmAuthorization authorization,
+                                                       CurrentActorPort currentActorPort) {
+        return new CreateContactoService(adapter, authorization, currentActorPort);
     }
 
     @Bean
-    public GetAllContactosUseCase getAllContactosUseCase(ContactoRepositoryAdapter adapter) {
-        return new GetAllContactosService(adapter);
+    public GetAllContactosUseCase getAllContactosUseCase(ContactoRepositoryAdapter adapter, CrmAuthorization authorization,
+                                                        CurrentActorPort currentActorPort) {
+        return new GetAllContactosService(adapter, authorization, currentActorPort);
     }
 
     @Bean
-    public com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase getContactoByIdUseCase(ContactoRepositoryAdapter adapter) {
-        return new GetContactoByIdService(adapter);
+    public com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase getContactoByIdUseCase(
+            ContactoRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetContactoByIdService(adapter, authorization);
     }
 
     @Bean
-    public EditContactoUseCase editContactoUseCase(ContactoRepositoryAdapter findPort, ContactoRepositoryAdapter savePort) {
-        return new EditContactoService(findPort, savePort);
+    public EditContactoUseCase editContactoUseCase(ContactoRepositoryAdapter findPort, ContactoRepositoryAdapter savePort,
+                                                  CrmAuthorization authorization) {
+        return new EditContactoService(findPort, savePort, authorization);
     }
 
     @Bean
     public DeleteContactoUseCase deleteContactoUseCase(
             ContactoRepositoryAdapter findPort,
             ContactoRepositoryAdapter existsTratosPort,
-            ContactoRepositoryAdapter deletePort
+            ContactoRepositoryAdapter deletePort,
+            CrmAuthorization authorization
     ) {
-        return new DeleteContactoService(findPort, existsTratosPort, deletePort);
+        return new DeleteContactoService(findPort, existsTratosPort, deletePort, authorization);
     }
 
     @Bean
     public com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase cambiarEstadoContactoUseCase(
             ContactoRepositoryAdapter findPort,
             ContactoRepositoryAdapter savePort,
-            ContactoRepositoryAdapter existsTratosPort
+            ContactoRepositoryAdapter existsTratosPort,
+            CrmAuthorization authorization
     ) {
-        return new CambiarEstadoContactoService(findPort, savePort, existsTratosPort);
+        return new CambiarEstadoContactoService(findPort, savePort, existsTratosPort, authorization);
     }
 
 
@@ -402,32 +434,35 @@ public class WiringConfig {
     public CreateTableroUseCase createTableroUseCase(
             TableroRepositoryAdapter adapter,
             ColumnaRepositoryAdapter findAllColumnasPort,
-            CreateColumnaUseCase createColumnaUseCase
+            CreateColumnaUseCase createColumnaUseCase,
+            CrmAuthorization authorization
     ) {
-        return new CreateTableroService(adapter, findAllColumnasPort, createColumnaUseCase);
+        return new CreateTableroService(authorization, adapter, findAllColumnasPort, createColumnaUseCase);
     }
 
     @Bean
-    public GetAllTablerosUseCase getAllTablerosUseCase(TableroRepositoryAdapter adapter) {
-        return new GetAllTablerosService(adapter);
+    public GetAllTablerosUseCase getAllTablerosUseCase(TableroRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetAllTablerosService(authorization, adapter);
     }
 
     @Bean
-    public GetTableroByIdUseCase getTableroByIdUseCase(TableroRepositoryAdapter adapter) {
-        return new GetTableroByIdService(adapter);
+    public GetTableroByIdUseCase getTableroByIdUseCase(TableroRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetTableroByIdService(authorization, adapter);
     }
 
     @Bean
-    public EditTableroUseCase editTableroUseCase(TableroRepositoryAdapter findPort, TableroRepositoryAdapter savePort) {
-        return new EditTableroService(findPort, savePort);
+    public EditTableroUseCase editTableroUseCase(TableroRepositoryAdapter findPort, TableroRepositoryAdapter savePort,
+                                                CrmAuthorization authorization) {
+        return new EditTableroService(authorization, findPort, savePort);
     }
 
     @Bean
     public DeleteTableroUseCase deleteTableroUseCase(
             TableroRepositoryAdapter findPort,
-            TableroRepositoryAdapter deletePort
+            TableroRepositoryAdapter deletePort,
+            CrmAuthorization authorization
     ) {
-        return new DeleteTableroService(findPort, deletePort);
+        return new DeleteTableroService(authorization, findPort, deletePort);
     }
 
     @Bean
@@ -435,26 +470,29 @@ public class WiringConfig {
             TableroRepositoryAdapter findTableroPort,
             TableroRepositoryAdapter findColumnaPort,
             TableroRepositoryAdapter existsColumnaEnTableroPort,
-            TableroRepositoryAdapter savePort
+            TableroRepositoryAdapter savePort,
+            CrmAuthorization authorization
     ) {
-        return new AsignarColumnaTableroService(findTableroPort, findColumnaPort, existsColumnaEnTableroPort, savePort);
+        return new AsignarColumnaTableroService(authorization, findTableroPort, findColumnaPort, existsColumnaEnTableroPort, savePort);
     }
 
     @Bean
     public EliminarColumnaDelTableroUseCase eliminarColumnaDelTableroUseCase(
             TableroRepositoryAdapter findPort,
             FichaRepositoryAdapter existsFichasPort,
-            TableroRepositoryAdapter savePort
+            TableroRepositoryAdapter savePort,
+            CrmAuthorization authorization
     ) {
-        return new EliminarColumnaDelTableroService(findPort, existsFichasPort, savePort);
+        return new EliminarColumnaDelTableroService(authorization, findPort, existsFichasPort, savePort);
     }
 
     @Bean
     public ReordenarColumnasUseCase reordenarColumnasUseCase(
             TableroRepositoryAdapter findPort,
-            TableroRepositoryAdapter savePort
+            TableroRepositoryAdapter savePort,
+            CrmAuthorization authorization
     ) {
-        return new ReordenarColumnasService(findPort, savePort);
+        return new ReordenarColumnasService(authorization, findPort, savePort);
     }
 
 
@@ -465,32 +503,35 @@ public class WiringConfig {
     public CreateTratoUseCase createTratoUseCase(
             TratoRepositoryAdapter saveTratoPort,
             FichaRepositoryAdapter saveFichaPort,
-            TableroRepositoryAdapter findInitialColumnPort
+            TableroRepositoryAdapter findInitialColumnPort,
+            CrmAuthorization authorization
     ) {
-        return new CreateTratoService(saveTratoPort, saveFichaPort, findInitialColumnPort);
+        return new CreateTratoService(authorization, saveTratoPort, saveFichaPort, findInitialColumnPort);
     }
 
     @Bean
-    public GetAllTratosUseCase getAllTratosUseCase(TratoRepositoryAdapter adapter) {
-        return new GetAllTratosService(adapter);
+    public GetAllTratosUseCase getAllTratosUseCase(TratoRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetAllTratosService(authorization, adapter);
     }
 
     @Bean
-    public GetTratoByIdUseCase getTratoByIdUseCase(TratoRepositoryAdapter adapter) {
-        return new GetTratoByIdService(adapter);
+    public GetTratoByIdUseCase getTratoByIdUseCase(TratoRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetTratoByIdService(authorization, adapter);
     }
 
     @Bean
-    public EditTratoUseCase editTratoUseCase(TratoRepositoryAdapter findPort, TratoRepositoryAdapter savePort) {
-        return new EditTratoService(findPort, savePort);
+    public EditTratoUseCase editTratoUseCase(TratoRepositoryAdapter findPort, TratoRepositoryAdapter savePort,
+                                             CrmAuthorization authorization) {
+        return new EditTratoService(authorization, findPort, savePort);
     }
 
     @Bean
     public DeleteTratoUseCase deleteTratoUseCase(
             TratoRepositoryAdapter findPort,
-            TratoRepositoryAdapter deletePort
+            TratoRepositoryAdapter deletePort,
+            CrmAuthorization authorization
     ) {
-        return new DeleteTratoService(findPort, deletePort);
+        return new DeleteTratoService(authorization, findPort, deletePort);
     }
 
 
@@ -501,32 +542,35 @@ public class WiringConfig {
     public CreateTareaUseCase createTareaUseCase(
             TareaRepositoryAdapter saveTareaPort,
             FichaRepositoryAdapter saveFichaPort,
-            TableroRepositoryAdapter findInitialColumnPort
+            TableroRepositoryAdapter findInitialColumnPort,
+            CrmAuthorization authorization
     ) {
-        return new CreateTareaService(saveTareaPort, saveFichaPort, findInitialColumnPort);
+        return new CreateTareaService(authorization, saveTareaPort, saveFichaPort, findInitialColumnPort);
     }
 
     @Bean
-    public GetAllTareasUseCase getAllTareasUseCase(TareaRepositoryAdapter adapter) {
-        return new GetAllTareasService(adapter);
+    public GetAllTareasUseCase getAllTareasUseCase(TareaRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetAllTareasService(authorization, adapter);
     }
 
     @Bean
-    public GetTareaByIdUseCase getTareaByIdUseCase(TareaRepositoryAdapter adapter) {
-        return new GetTareaByIdService(adapter);
+    public GetTareaByIdUseCase getTareaByIdUseCase(TareaRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetTareaByIdService(authorization, adapter);
     }
 
     @Bean
-    public EditTareaUseCase editTareaUseCase(TareaRepositoryAdapter findPort, TareaRepositoryAdapter savePort) {
-        return new EditTareaService(findPort, savePort);
+    public EditTareaUseCase editTareaUseCase(TareaRepositoryAdapter findPort, TareaRepositoryAdapter savePort,
+                                             CrmAuthorization authorization) {
+        return new EditTareaService(authorization, findPort, savePort);
     }
 
     @Bean
     public DeleteTareaUseCase deleteTareaUseCase(
             TareaRepositoryAdapter findPort,
-            TareaRepositoryAdapter deletePort
+            TareaRepositoryAdapter deletePort,
+            CrmAuthorization authorization
     ) {
-        return new DeleteTareaService(findPort, deletePort);
+        return new DeleteTareaService(authorization, findPort, deletePort);
     }
 
     // ── Agenda UseCase Beans ──
@@ -542,19 +586,23 @@ public class WiringConfig {
             TareaRepositoryAdapter findTareaPort,
             TratoRepositoryAdapter findTratoPort,
             UsuarioRepositoryAdapter findUsuarioPort,
-            com.ar.crm2.adapter.out.email.AgendaEmailAdapter agendaEmailAdapter
+            com.ar.crm2.adapter.out.email.AgendaEmailAdapter agendaEmailAdapter,
+            CrmAuthorization authorization,
+            CurrentActorPort currentActorPort
     ) {
-        return new CreateAgendaService(savePort, findTareaPort, findTratoPort, findUsuarioPort, agendaEmailAdapter);
+        return new CreateAgendaService(savePort, findTareaPort, findTratoPort, findUsuarioPort, agendaEmailAdapter,
+                authorization, currentActorPort);
     }
 
     @Bean
-    public GetAgendasByUserUseCase getAgendasByUserUseCase(AgendaRepositoryAdapter adapter) {
-        return new GetAgendasByUserService(adapter);
+    public GetAgendasByUserUseCase getAgendasByUserUseCase(AgendaRepositoryAdapter adapter, CrmAuthorization authorization,
+                                                           CurrentActorPort currentActorPort) {
+        return new GetAgendasByUserService(adapter, authorization, currentActorPort);
     }
 
     @Bean
-    public GetAgendaByIdUseCase getAgendaByIdUseCase(AgendaRepositoryAdapter adapter) {
-        return new GetAgendaByIdService(adapter);
+    public GetAgendaByIdUseCase getAgendaByIdUseCase(AgendaRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetAgendaByIdService(adapter, authorization);
     }
 
     @Bean
@@ -562,17 +610,19 @@ public class WiringConfig {
             AgendaRepositoryAdapter findPort,
             AgendaRepositoryAdapter savePort,
             TareaRepositoryAdapter findTareaPort,
-            TratoRepositoryAdapter findTratoPort
+            TratoRepositoryAdapter findTratoPort,
+            CrmAuthorization authorization
     ) {
-        return new EditAgendaService(findPort, savePort, findTareaPort, findTratoPort);
+        return new EditAgendaService(findPort, savePort, findTareaPort, findTratoPort, authorization);
     }
 
     @Bean
     public DeleteAgendaUseCase deleteAgendaUseCase(
             AgendaRepositoryAdapter findPort,
-            AgendaRepositoryAdapter deletePort
+            AgendaRepositoryAdapter deletePort,
+            CrmAuthorization authorization
     ) {
-        return new DeleteAgendaService(findPort, deletePort);
+        return new DeleteAgendaService(findPort, deletePort, authorization);
     }
 
     // ── Agenda Reminder Email Adapter ──
@@ -608,44 +658,48 @@ public class WiringConfig {
     @Bean
     public CreateFichaUseCase createFichaUseCase(
             FichaRepositoryAdapter savePort,
-            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter findEtiquetasPort
+            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter findEtiquetasPort,
+            CrmAuthorization authorization
     ) {
-        return new CreateFichaService(savePort, findEtiquetasPort);
+        return new CreateFichaService(authorization, savePort, findEtiquetasPort);
     }
 
     @Bean
-    public GetAllFichasUseCase getAllFichasUseCase(FichaRepositoryAdapter adapter) {
-        return new GetAllFichasService(adapter);
+    public GetAllFichasUseCase getAllFichasUseCase(FichaRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetAllFichasService(authorization, adapter);
     }
 
     @Bean
-    public GetFichaByIdUseCase getFichaByIdUseCase(FichaRepositoryAdapter adapter) {
-        return new GetFichaByIdService(adapter);
+    public GetFichaByIdUseCase getFichaByIdUseCase(FichaRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetFichaByIdService(authorization, adapter);
     }
 
     @Bean
     public EditFichaUseCase editFichaUseCase(
             FichaRepositoryAdapter findPort,
             FichaRepositoryAdapter savePort,
-            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter findEtiquetasPort
+            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter findEtiquetasPort,
+            CrmAuthorization authorization
     ) {
-        return new EditFichaService(findPort, savePort, findEtiquetasPort);
+        return new EditFichaService(authorization, findPort, savePort, findEtiquetasPort);
     }
 
     @Bean
     public DeleteFichaUseCase deleteFichaUseCase(
             FichaRepositoryAdapter findPort,
-            FichaRepositoryAdapter deletePort
+            FichaRepositoryAdapter deletePort,
+            CrmAuthorization authorization
     ) {
-        return new DeleteFichaService(findPort, deletePort);
+        return new DeleteFichaService(authorization, findPort, deletePort);
     }
 
     @Bean
     public MoverColumnaFichaUseCase moverColumnaFichaUseCase(
             FichaRepositoryAdapter findPort,
-            FichaRepositoryAdapter savePort
+            FichaRepositoryAdapter savePort,
+            CrmAuthorization authorization
     ) {
-        return new MoverColumnaFichaService(findPort, savePort);
+        return new MoverColumnaFichaService(authorization, findPort, savePort);
     }
 
 
@@ -657,19 +711,24 @@ public class WiringConfig {
             UsuarioRepositoryAdapter adapter,
             ProvisionIdentityPort provisionPort,
             DeleteIdentityPort deleteIdentityPort,
-            SetIdentityAttributesPort setAttributesPort
+            SetIdentityAttributesPort setAttributesPort,
+            CrmAuthorization authorization,
+            CurrentActorPort currentActorPort,
+            FindRolByIdPort findRolByIdPort,
+            AuthorizationMutationPort mutationPort
     ) {
-        return new CreateUsuarioService(adapter, provisionPort, deleteIdentityPort, setAttributesPort);
+        return new CreateUsuarioService(adapter, provisionPort, deleteIdentityPort, setAttributesPort,
+                authorization, currentActorPort, findRolByIdPort, mutationPort);
     }
 
     @Bean
-    public GetAllUsuariosUseCase getAllUsuariosUseCase(UsuarioRepositoryAdapter adapter) {
-        return new GetAllUsuariosService(adapter);
+    public GetAllUsuariosUseCase getAllUsuariosUseCase(UsuarioRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetAllUsuariosService(adapter, authorization);
     }
 
     @Bean
-    public GetUsuarioByIdUseCase getUsuarioByIdUseCase(UsuarioRepositoryAdapter adapter) {
-        return new GetUsuarioByIdService(adapter);
+    public GetUsuarioByIdUseCase getUsuarioByIdUseCase(UsuarioRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetUsuarioByIdService(adapter, authorization);
     }
 
     @Bean
@@ -677,18 +736,28 @@ public class WiringConfig {
             UsuarioRepositoryAdapter findPort,
             UsuarioRepositoryAdapter savePort,
             SyncIdentityEmailPort syncEmailPort,
-            SetIdentityEnabledPort setEnabledPort
+            SetIdentityEnabledPort setEnabledPort,
+            CrmAuthorization authorization,
+            CurrentActorPort currentActorPort,
+            FindRolByIdPort findRolByIdPort,
+            PromoteBootstrapAdministratorPort promoteBootstrapAdministratorPort,
+            AuthorizationMutationPort mutationPort
     ) {
-        return new EditUsuarioService(findPort, savePort, syncEmailPort, setEnabledPort);
+        return new EditUsuarioService(findPort, savePort, syncEmailPort, setEnabledPort,
+                authorization, currentActorPort, findRolByIdPort, promoteBootstrapAdministratorPort, mutationPort);
     }
 
     @Bean
     public DeleteUsuarioUseCase deleteUsuarioUseCase(
             UsuarioRepositoryAdapter findPort,
             UsuarioRepositoryAdapter deletePort,
-            KeycloakUserProvisioningAdapter identityAdapter
+            KeycloakUserProvisioningAdapter identityAdapter,
+            CrmAuthorization authorization,
+            CurrentActorPort currentActorPort,
+            AuthorizationMutationPort mutationPort
     ) {
-        return new DeleteUsuarioService(findPort, deletePort, identityAdapter);
+        return new DeleteUsuarioService(findPort, deletePort, identityAdapter, authorization, currentActorPort,
+                mutationPort);
     }
 
     @Bean
@@ -712,32 +781,37 @@ public class WiringConfig {
     // ── Rol UseCase Beans ──
 
     @Bean
-    public CreateRolUseCase createRolUseCase(RolRepositoryAdapter adapter) {
-        return new CreateRolService(adapter);
+    public CreateRolUseCase createRolUseCase(RolRepositoryAdapter adapter, CrmAuthorization authorization,
+                                             AuthorizationMutationPort mutationPort) {
+        return new CreateRolService(adapter, authorization, mutationPort);
     }
 
     @Bean
-    public GetAllRolesUseCase getAllRolesUseCase(RolRepositoryAdapter adapter) {
-        return new GetAllRolesService(adapter);
+    public GetAllRolesUseCase getAllRolesUseCase(RolRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetAllRolesService(adapter, authorization);
     }
 
     @Bean
-    public GetRolByIdUseCase getRolByIdUseCase(RolRepositoryAdapter adapter) {
-        return new GetRolByIdService(adapter);
+    public GetRolByIdUseCase getRolByIdUseCase(RolRepositoryAdapter adapter, CrmAuthorization authorization) {
+        return new GetRolByIdService(adapter, authorization);
     }
 
     @Bean
-    public EditRolUseCase editRolUseCase(RolRepositoryAdapter findPort, RolRepositoryAdapter savePort) {
-        return new EditRolService(findPort, savePort);
+    public EditRolUseCase editRolUseCase(RolRepositoryAdapter findPort, RolRepositoryAdapter savePort,
+                                        CrmAuthorization authorization, CurrentActorPort currentActorPort,
+                                        AuthorizationMutationPort mutationPort) {
+        return new EditRolService(findPort, savePort, authorization, currentActorPort, mutationPort);
     }
 
     @Bean
     public DeleteRolUseCase deleteRolUseCase(
             RolRepositoryAdapter findPort,
             UsuarioRepositoryAdapter existsUsuariosPort,
-            RolRepositoryAdapter deletePort
+            RolRepositoryAdapter deletePort,
+            CrmAuthorization authorization,
+            AuthorizationMutationPort mutationPort
     ) {
-        return new DeleteRolService(findPort, existsUsuariosPort, deletePort);
+        return new DeleteRolService(findPort, existsUsuariosPort, deletePort, authorization, mutationPort);
     }
 
 
@@ -789,28 +863,30 @@ public class WiringConfig {
     @Bean
     public CreateColumnaUseCase createColumnaUseCase(
             ColumnaRepositoryAdapter savePort,
-            ColumnaRepositoryAdapter findAllPort
+            ColumnaRepositoryAdapter findAllPort,
+            CrmAuthorization authorization
     ) {
-        return new CreateColumnaService(savePort, findAllPort);
+        return new CreateColumnaService(authorization, savePort, findAllPort);
     }
 
     @Bean
-    public GetAllColumnasUseCase getAllColumnasUseCase(ColumnaRepositoryAdapter findAllPort) {
-        return new GetAllColumnasService(findAllPort);
+    public GetAllColumnasUseCase getAllColumnasUseCase(ColumnaRepositoryAdapter findAllPort, CrmAuthorization authorization) {
+        return new GetAllColumnasService(authorization, findAllPort);
     }
 
     @Bean
-    public GetColumnaByIdUseCase getColumnaByIdUseCase(ColumnaRepositoryAdapter findPort) {
-        return new GetColumnaByIdService(findPort);
+    public GetColumnaByIdUseCase getColumnaByIdUseCase(ColumnaRepositoryAdapter findPort, CrmAuthorization authorization) {
+        return new GetColumnaByIdService(authorization, findPort);
     }
 
     @Bean
     public EditColumnaUseCase editColumnaUseCase(
             ColumnaRepositoryAdapter findPort,
             ColumnaRepositoryAdapter findAllPort,
-            ColumnaRepositoryAdapter savePort
+            ColumnaRepositoryAdapter savePort,
+            CrmAuthorization authorization
     ) {
-        return new EditColumnaService(findPort, findAllPort, savePort);
+        return new EditColumnaService(authorization, findPort, findAllPort, savePort);
     }
 
     @Bean
@@ -818,9 +894,10 @@ public class WiringConfig {
             ColumnaRepositoryAdapter findPort,
             ColumnaRepositoryAdapter existsColumnaAsignadaPort,
             FichaRepositoryAdapter existsFichasByColumnaIdPort,
-            ColumnaRepositoryAdapter deletePort
+            ColumnaRepositoryAdapter deletePort,
+            CrmAuthorization authorization
     ) {
-        return new DeleteColumnaService(findPort, existsColumnaAsignadaPort, existsFichasByColumnaIdPort, deletePort);
+        return new DeleteColumnaService(authorization, findPort, existsColumnaAsignadaPort, existsFichasByColumnaIdPort, deletePort);
     }
 
 
@@ -847,37 +924,42 @@ public class WiringConfig {
 
     @Bean
     public CreateEtiquetaUseCase createEtiquetaUseCase(
-            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter
+            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter,
+            CrmAuthorization authorization
     ) {
-        return new CreateEtiquetaService(adapter, adapter);
+        return new CreateEtiquetaService(adapter, adapter, authorization);
     }
 
     @Bean
     public GetAllEtiquetasUseCase getAllEtiquetasUseCase(
-            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter
+            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter,
+            CrmAuthorization authorization
     ) {
-        return new GetAllEtiquetasService(adapter);
+        return new GetAllEtiquetasService(adapter, authorization);
     }
 
     @Bean
     public GetEtiquetaByIdUseCase getEtiquetaByIdUseCase(
-            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter
+            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter,
+            CrmAuthorization authorization
     ) {
-        return new GetEtiquetaByIdService(adapter);
+        return new GetEtiquetaByIdService(adapter, authorization);
     }
 
     @Bean
     public EditEtiquetaUseCase editEtiquetaUseCase(
-            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter
+            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter,
+            CrmAuthorization authorization
     ) {
-        return new EditEtiquetaService(adapter, adapter, adapter);
+        return new EditEtiquetaService(adapter, adapter, adapter, authorization);
     }
 
     @Bean
     public DeleteEtiquetaUseCase deleteEtiquetaUseCase(
-            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter
+            com.ar.crm2.adapter.out.persistence.EtiquetaRepositoryAdapter adapter,
+            CrmAuthorization authorization
     ) {
-        return new DeleteEtiquetaService(adapter, adapter, adapter, adapter);
+        return new DeleteEtiquetaService(adapter, adapter, adapter, adapter, adapter, authorization);
     }
 
 
@@ -897,9 +979,10 @@ public class WiringConfig {
             com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase delete,
             com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase eliminarColumna,
             com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase asignarColumna,
-            com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase reordenarColumnas) {
+            com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase reordenarColumnas,
+            CrmAuthorization authorization) {
         return new com.ar.crm2.adapter.out.ai.tool.TableroTools(
-                getAll, getById, create, edit, delete, eliminarColumna, asignarColumna, reordenarColumnas);
+                getAll, getById, create, edit, delete, eliminarColumna, asignarColumna, reordenarColumnas, authorization);
     }
 
     @Bean
@@ -930,8 +1013,9 @@ public class WiringConfig {
             EditContactoUseCase edit,
             com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase getById,
             com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase delete,
-            com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase cambiarEstado) {
-        return new com.ar.crm2.adapter.out.ai.tool.ContactoTools(getAll, create, edit, getById, delete, cambiarEstado);
+            com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase cambiarEstado,
+            CrmAuthorization authorization) {
+        return new com.ar.crm2.adapter.out.ai.tool.ContactoTools(getAll, create, edit, getById, delete, cambiarEstado, authorization);
     }
 
     @Bean
@@ -940,8 +1024,9 @@ public class WiringConfig {
             com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase getAll,
             com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase edit,
             com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase delete,
-            com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase cambiarEstado) {
-        return new com.ar.crm2.adapter.out.ai.tool.EmpresaTools(create, getAll, edit, delete, cambiarEstado);
+            com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase cambiarEstado,
+            CrmAuthorization authorization) {
+        return new com.ar.crm2.adapter.out.ai.tool.EmpresaTools(create, getAll, edit, delete, cambiarEstado, authorization);
     }
 
     @Bean
@@ -950,8 +1035,9 @@ public class WiringConfig {
             com.ar.crm2.application.trato.port.in.GetAllTratosUseCase getAll,
             com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase getById,
             com.ar.crm2.application.trato.port.in.EditTratoUseCase edit,
-            com.ar.crm2.application.trato.port.in.DeleteTratoUseCase delete) {
-        return new com.ar.crm2.adapter.out.ai.tool.TratoTools(create, getAll, getById, edit, delete);
+            com.ar.crm2.application.trato.port.in.DeleteTratoUseCase delete,
+            CrmAuthorization authorization) {
+        return new com.ar.crm2.adapter.out.ai.tool.TratoTools(create, getAll, getById, edit, delete, authorization);
     }
 
     @Bean
@@ -1090,9 +1176,10 @@ public class WiringConfig {
      */
     @Bean
     public com.ar.crm2.application.agent.turn.port.in.CreateUserTurnUseCase createUserTurnUseCase(
-            com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort createUserTurnPort
+            com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort createUserTurnPort,
+            CrmAuthorization authorization
     ) {
-        return new com.ar.crm2.application.agent.turn.service.CreateUserTurnService(createUserTurnPort);
+        return new com.ar.crm2.application.agent.turn.service.CreateUserTurnService(createUserTurnPort, authorization);
     }
 
     /**
@@ -1108,14 +1195,18 @@ public class WiringConfig {
             com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPort findCompletedVisibleHistoryPort,
             com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPort findEligibleDurableMemoriesPort,
             com.ar.crm2.application.agent.turn.port.out.CompletePreparedTurnPort completePreparedTurnPort,
-            com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort chatCompletionPortImpl
+            com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort chatCompletionPortImpl,
+            CrmAuthorization authorization,
+            CurrentActorPort currentActorPort
     ) {
         return new com.ar.crm2.application.agent.turn.service.CompleteUserTurnService(
                 findCompletedAssistantContentPort,
                 findCompletedVisibleHistoryPort,
                 findEligibleDurableMemoriesPort,
                 completePreparedTurnPort,
-                chatCompletionPortImpl);
+                chatCompletionPortImpl,
+                authorization,
+                currentActorPort);
     }
 
     /**
@@ -1125,9 +1216,10 @@ public class WiringConfig {
      */
     @Bean
     public com.ar.crm2.application.agent.memory.port.in.RecallDurableMemoriesUseCase recallDurableMemoriesUseCase(
-            com.ar.crm2.application.agent.memory.port.out.FindEligibleDurableMemoriesPort findEligiblePort
+            com.ar.crm2.application.agent.memory.port.out.FindEligibleDurableMemoriesPort findEligiblePort,
+            CrmAuthorization authorization
     ) {
-        return new com.ar.crm2.application.agent.memory.service.RecallDurableMemoriesService(findEligiblePort);
+        return new com.ar.crm2.application.agent.memory.service.RecallDurableMemoriesService(findEligiblePort, authorization);
     }
 
     /**
@@ -1135,9 +1227,10 @@ public class WiringConfig {
      */
     @Bean
     public com.ar.crm2.application.agent.memory.port.in.RememberDurableMemoryUseCase rememberDurableMemoryUseCase(
-            com.ar.crm2.application.agent.memory.port.out.SaveDurableMemoryPort savePort
+            com.ar.crm2.application.agent.memory.port.out.SaveDurableMemoryPort savePort,
+            CrmAuthorization authorization
     ) {
-        return new com.ar.crm2.application.agent.memory.service.RememberDurableMemoryService(savePort);
+        return new com.ar.crm2.application.agent.memory.service.RememberDurableMemoryService(savePort, authorization);
     }
 
     /**
@@ -1145,9 +1238,10 @@ public class WiringConfig {
      */
     @Bean
     public com.ar.crm2.application.agent.memory.port.in.ReplaceDurableMemoryUseCase replaceDurableMemoryUseCase(
-            com.ar.crm2.application.agent.memory.port.out.ReplaceDurableMemoryPort replacePort
+            com.ar.crm2.application.agent.memory.port.out.ReplaceDurableMemoryPort replacePort,
+            CrmAuthorization authorization
     ) {
-        return new com.ar.crm2.application.agent.memory.service.ReplaceDurableMemoryService(replacePort);
+        return new com.ar.crm2.application.agent.memory.service.ReplaceDurableMemoryService(replacePort, authorization);
     }
 
     /**
@@ -1155,9 +1249,10 @@ public class WiringConfig {
      */
     @Bean
     public com.ar.crm2.application.agent.memory.port.in.DeleteDurableMemoryUseCase deleteDurableMemoryUseCase(
-            com.ar.crm2.application.agent.memory.port.out.DeleteDurableMemoryPort deletePort
+            com.ar.crm2.application.agent.memory.port.out.DeleteDurableMemoryPort deletePort,
+            CrmAuthorization authorization
     ) {
-        return new com.ar.crm2.application.agent.memory.service.DeleteDurableMemoryService(deletePort);
+        return new com.ar.crm2.application.agent.memory.service.DeleteDurableMemoryService(deletePort, authorization);
     }
 
     /**

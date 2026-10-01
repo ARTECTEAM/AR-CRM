@@ -6,5 +6,5 @@ import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import java.util.List;
 
 public interface FindEligibleDurableMemoriesPort {
-    List<DurableMemory> findEligible(AgentOwnerId ownerId);
+    List<DurableMemory> findEligible(AgentOwnerId ownerId, String authorizationRevision);
 }

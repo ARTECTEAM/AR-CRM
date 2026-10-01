@@ -11,14 +11,17 @@ import java.util.List;
  * One dynamic search capability for Contactos, scoped to a trusted
  * actor.
  *
- * <p>The {@code actorUsuarioId} is the <strong>mandatory</strong>
- * security scope and is passed as a Domain {@link UsuarioId}, not a
- * raw {@link java.util.UUID}, so the adapter must apply it directly as
- * a scope predicate
- * {@code (creado_por = actor OR responsable_id = actor)} in the same
- * database-pushed query that handles the optional filters. Every
+ * <p>The {@code actorUsuarioId} is the row scope when the active role
+ * uses {@code PROPIOS_O_ASIGNADOS}; it is passed as a Domain
+ * {@link UsuarioId}, not a raw {@link java.util.UUID}, so the adapter
+ * applies {@code (creado_por = actor OR responsable_id = actor)} in
+ * the same database-pushed query. It is null only for an explicitly
+ * shared resource scope. Every
  * remaining argument is optional and exposed in Domain or JDK types
  * only; {@code null} means "no constraint on that dimension".
+ * {@code includePrivateFields} is derived from the current CONTACTO
+ * field policy; when false, email and phone never participate in the
+ * free-text predicate.
  * {@code maxResults}, when non-null, is a positive bound the adapter
  * applies as a database-level limit; the Application service does not
  * cap or truncate results. The port deliberately avoids a
@@ -34,6 +37,7 @@ public interface SearchContactosPort {
             EmpresaId empresaId,
             UsuarioId responsableId,
             String comoNosConocio,
-            Integer maxResults
+            Integer maxResults,
+            boolean includePrivateFields
     );
 }

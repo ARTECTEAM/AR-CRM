@@ -393,6 +393,54 @@ class SecurityConfigTest {
         }
     }
 
+    @Nested
+    @DisplayName("All /api/superusuarios/** routes require SUPER_USUARIO")
+    class SuperUsuarioTechnicalRoutes {
+
+        @Test
+        @DisplayName("authenticated users without SUPER_USUARIO cannot read, edit, or delete")
+        void nonSuperUsuario_cannotAccessReadOrMutationRoutes(@Autowired MockMvc mvc) throws Exception {
+            mvc.perform(get("/api/superusuarios/get-all")
+                            .header("Authorization", "Bearer valid-token"))
+                    .andExpect(status().isForbidden());
+
+            mvc.perform(put("/api/superusuarios/edit")
+                            .param("id", "super-usuario-id")
+                            .header("Authorization", "Bearer valid-token")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isForbidden());
+
+            mvc.perform(delete("/api/superusuarios/delete")
+                            .param("id", "super-usuario-id")
+                            .header("Authorization", "Bearer valid-token"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("SUPER_USUARIO can pass the technical route guard")
+        void superUsuarioRole_passesRouteGuard(@Autowired MockMvc mvc) throws Exception {
+            mvc.perform(get("/api/superusuarios/get-all")
+                            .with(SecurityMockMvcRequestPostProcessors.jwt()
+                                    .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                                            "ROLE_SUPER_USUARIO"))))
+                    .andExpect(result -> {
+                        int status = result.getResponse().getStatus();
+                        assertTrue(status != 401 && status != 403,
+                                "SUPER_USUARIO must pass the filter chain; got " + status);
+                    });
+        }
+
+        @Test
+        @DisplayName("OPTIONS preflight remains public for superusuario routes")
+        void optionsPreflight_noToken_remainsPermitted(@Autowired MockMvc mvc) throws Exception {
+            mvc.perform(options("/api/superusuarios/get-all")
+                            .header("Origin", "http://localhost:5173")
+                            .header("Access-Control-Request-Method", "GET"))
+                    .andExpect(status().isOk());
+        }
+    }
+
     // ------------------------------------------------------------------
     // Deny-all fallback — unmatched paths
     // Note: /unknown and /internal/** are NOT matched by any permitAll rule,

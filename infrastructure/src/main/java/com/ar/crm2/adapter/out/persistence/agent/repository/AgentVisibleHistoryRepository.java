@@ -11,10 +11,14 @@ public interface AgentVisibleHistoryRepository extends JpaRepository<AgentVisibl
 
     Optional<AgentVisibleHistoryEntity> findFirstByTurnIdAndRoleOrderByVisibleAtDesc(String turnId, String role);
 
-    List<AgentVisibleHistoryEntity> findByConversationOwnerIdAndTurnStateAndTurnIdNotOrderByVisibleAtDesc(
+    Optional<AgentVisibleHistoryEntity> findFirstByTurnIdAndRoleAndAuthorizationRevisionOrderByVisibleAtDesc(
+            String turnId, String role, String authorizationRevision);
+
+    List<AgentVisibleHistoryEntity> findByConversationOwnerIdAndTurnStateAndTurnIdNotAndAuthorizationRevisionOrderByVisibleAtDesc(
             String ownerId,
             com.ar.crm2.model.agent.enums.TurnState state,
             String excludedTurnId,
+            String authorizationRevision,
             Pageable pageable
     );
 }

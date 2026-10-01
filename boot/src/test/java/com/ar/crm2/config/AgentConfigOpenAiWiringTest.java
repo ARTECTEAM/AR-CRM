@@ -74,7 +74,8 @@ class AgentConfigOpenAiWiringTest {
                     mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                     mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                     mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                    mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class));
+                    mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class),
+                    mock(com.ar.crm2.application.security.CrmAuthorization.class));
         }
         @Bean ColumnaTools columnaTools() {
             return new ColumnaTools(mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
@@ -95,19 +96,22 @@ class AgentConfigOpenAiWiringTest {
             return new ContactoTools(mock(GetAllContactosUseCase.class), mock(CreateContactoUseCase.class),
                     mock(EditContactoUseCase.class), mock(com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase.class),
                     mock(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class),
-                    mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class));
+                    mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class),
+                    mock(com.ar.crm2.application.security.CrmAuthorization.class));
         }
         @Bean EmpresaTools empresaTools() {
             return new EmpresaTools(mock(CreateEmpresaUseCase.class),
                     mock(com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class),
                     mock(EditEmpresaUseCase.class), mock(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class),
-                    mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class));
+                    mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class),
+                    mock(com.ar.crm2.application.security.CrmAuthorization.class));
         }
         @Bean TratoTools tratoTools() {
             return new TratoTools(mock(com.ar.crm2.application.trato.port.in.CreateTratoUseCase.class),
                     mock(com.ar.crm2.application.trato.port.in.GetAllTratosUseCase.class),
                     mock(com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase.class),
-                    mock(EditTratoUseCase.class), mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class));
+                    mock(EditTratoUseCase.class), mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class),
+                    mock(com.ar.crm2.application.security.CrmAuthorization.class));
         }
         @Bean TareaTools tareaTools() {
             return new TareaTools(mock(com.ar.crm2.application.tarea.port.in.CreateTareaUseCase.class),

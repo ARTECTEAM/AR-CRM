@@ -3,7 +3,11 @@ package com.ar.crm2.adapter.out.persistence.repository;
 import com.ar.crm2.adapter.out.persistence.entity.TableroEntity;
 import com.ar.crm2.model.enums.TipoTablero;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import java.util.List;
 
 /**
  * Spring Data JPA repository for Tablero aggregate root persistence.
@@ -36,4 +40,13 @@ public interface TableroRepository extends JpaRepository<TableroEntity, String> 
      * @return true if the column is assigned to at least one board
      */
     boolean existsByColumnasTableroColumnaId(String columnaId);
+
+    /** Returns every board referencing a catalog column without loading lazy board collections. */
+    @Query("""
+        SELECT t.id
+        FROM TableroEntity t
+        JOIN t.columnasTablero ct
+        WHERE ct.columnaId = :columnaId
+        """)
+    List<String> findBoardIdsByColumnasTableroColumnaId(@Param("columnaId") String columnaId);
 }

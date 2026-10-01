@@ -47,6 +47,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringJUnitConfig(classes = WiringConfig.class)
 class FichaWiringTest {
 
+    @MockitoBean private com.ar.crm2.application.security.port.out.CurrentActorPort currentActorPort;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.RoleManagerGovernance roleManagerGovernance;
     @MockitoBean private ChatClient chatClient;
     @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.repository.AgentConversationRepository agentConversationRepository;
     @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository agentTurnRepository;

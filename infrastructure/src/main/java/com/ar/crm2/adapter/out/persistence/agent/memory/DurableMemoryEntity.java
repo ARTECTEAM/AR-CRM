@@ -32,6 +32,9 @@ public class DurableMemoryEntity {
     @Column(name = "owner_id", nullable = false)
     private String ownerId;
 
+    @Column(name = "authorization_revision", length = 64)
+    private String authorizationRevision;
+
     @Column(name = "content", nullable = false, length = 2000)
     private String content;
 
