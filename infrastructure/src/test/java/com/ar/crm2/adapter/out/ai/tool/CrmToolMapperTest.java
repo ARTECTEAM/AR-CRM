@@ -129,7 +129,7 @@ class CrmToolMapperTest {
     @Test
     void findContactsMapsAllOptionalFiltersAndPreservesTrustedActor() {
         GetAllContactosCommand command = CrmToolMapper.toGetAllContactosCommand(
-                "acme", "PROSPECTO",
+                "acme", EstadoRelacion.PROSPECTO,
                 UUID.fromString("11111111-1111-1111-1111-111111111111"),
                 UUID.fromString("22222222-2222-2222-2222-222222222222"),
                 "LinkedIn",
@@ -173,8 +173,7 @@ class CrmToolMapperTest {
         CreateContactoCommand command = CrmToolMapper.toCreateContactoCommand(
                 UUID.fromString("99999999-9999-9999-9999-999999999999"),
                 "Acme Inc",
-                "ops@acme.com",
-                "ACTIVO",
+                "ops@acme.com", EstadoRelacion.ACTIVO,
                 UUID.fromString("77777777-7777-7777-7777-777777777777"),
                 "+525500000000",
                 "Director",
@@ -195,34 +194,31 @@ class CrmToolMapperTest {
     }
 
     @Test
-    void createContactRejectsNullAndBlankRequiredInputsAndUnknownEstadoRelacion() {
+    void createContactRejectsNullAndBlankRequiredInputs() {
         UUID empresaId = UUID.randomUUID();
         assertThatThrownBy(() -> CrmToolMapper.toCreateContactoCommand(
-                empresaId, null, null, "ACTIVO", null, null, null, null, TRUSTED_ACTOR))
+                empresaId, null, null, EstadoRelacion.ACTIVO, null, null, null, null, TRUSTED_ACTOR))
                 .as("missing nombre")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toCreateContactoCommand(
-                empresaId, "   ", null, "ACTIVO", null, null, null, null, TRUSTED_ACTOR))
+                empresaId, "   ", null, EstadoRelacion.ACTIVO, null, null, null, null, TRUSTED_ACTOR))
                 .as("blank nombre")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toCreateContactoCommand(
                 empresaId, "Acme", null, null, null, null, null, null, TRUSTED_ACTOR))
                 .as("missing estadoRelacion")
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> CrmToolMapper.toCreateContactoCommand(
-                empresaId, "Acme", null, "NOT_A_STATE", null, null, null, null, TRUSTED_ACTOR))
-                .as("unknown estadoRelacion")
-                .isInstanceOf(IllegalArgumentException.class);
+
     }
 
     @Test
     void createContactRejectsMissingEmpresaIdOrMissingTrustedActor() {
         assertThatThrownBy(() -> CrmToolMapper.toCreateContactoCommand(
-                null, "Acme", null, "ACTIVO", null, null, null, null, TRUSTED_ACTOR))
+                null, "Acme", null, EstadoRelacion.ACTIVO, null, null, null, null, TRUSTED_ACTOR))
                 .as("missing empresaId")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toCreateContactoCommand(
-                UUID.randomUUID(), "Acme", null, "ACTIVO", null, null, null, null, null))
+                UUID.randomUUID(), "Acme", null, EstadoRelacion.ACTIVO, null, null, null, null, null))
                 .as("missing trusted actor")
                 .isInstanceOf(IllegalArgumentException.class);
     }
@@ -233,7 +229,7 @@ class CrmToolMapperTest {
         UUID responsableId = UUID.fromString("77777777-7777-7777-7777-777777777777");
         EditContactoCommand command = CrmToolMapper.toEditContactoCommand(
                 id, "Renamed Contact",
-                "renamed@example.com", "ACTIVO",
+                "renamed@example.com", EstadoRelacion.ACTIVO,
                 responsableId, "+525500000001", "VP Sales", "Referral");
 
         assertThat(command.id()).isEqualTo(id);
@@ -251,7 +247,7 @@ class CrmToolMapperTest {
         UUID id = UUID.fromString("99999999-9999-9999-9999-999999999999");
         EditContactoCommand command = CrmToolMapper.toEditContactoCommand(
                 id, "Contact",
-                null, "PROSPECTO", null, "", "", "");
+                null, EstadoRelacion.PROSPECTO, null, "", "", "");
 
         assertThat(command.correo()).isNull();
         assertThat(command.responsableId()).isNull();
@@ -264,15 +260,15 @@ class CrmToolMapperTest {
     void editContactRejectsMissingIdAndBlankNombreAndBlankEstadoRelacion() {
         UUID validId = UUID.fromString("99999999-9999-9999-9999-999999999999");
         assertThatThrownBy(() -> CrmToolMapper.toEditContactoCommand(
-                null, "Contact", null, "ACTIVO", null, null, null, null))
+                null, "Contact", null, EstadoRelacion.ACTIVO, null, null, null, null))
                 .as("missing id")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toEditContactoCommand(
-                validId, null, null, "ACTIVO", null, null, null, null))
+                validId, null, null, EstadoRelacion.ACTIVO, null, null, null, null))
                 .as("missing nombre")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toEditContactoCommand(
-                validId, "   ", null, "ACTIVO", null, null, null, null))
+                validId, "   ", null, EstadoRelacion.ACTIVO, null, null, null, null))
                 .as("blank nombre")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toEditContactoCommand(
@@ -280,13 +276,10 @@ class CrmToolMapperTest {
                 .as("missing estadoRelacion")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toEditContactoCommand(
-                validId, "Contact", null, "   ", null, null, null, null))
+                validId, "Contact", null, null, null, null, null, null))
                 .as("blank estadoRelacion")
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> CrmToolMapper.toEditContactoCommand(
-                validId, "Contact", null, "NOT_A_STATE", null, null, null, null))
-                .as("unknown estadoRelacion")
-                .isInstanceOf(IllegalArgumentException.class);
+
     }
 
     @Test
@@ -294,8 +287,7 @@ class CrmToolMapperTest {
         CreateEmpresaCommand command = CrmToolMapper.toCreateEmpresaCommand(
                 "Acme Inc", "Software", "+525500000000",
                 "https://acme.example", "https://facebook/acme",
-                "https://instagram/acme", "https://twitter/acme",
-                "ACTIVO",
+                "https://instagram/acme", "https://twitter/acme", EstadoRelacion.ACTIVO,
                 UUID.fromString("77777777-7777-7777-7777-777777777777"),
                 "Some notes", TRUSTED_ACTOR);
 
@@ -315,7 +307,7 @@ class CrmToolMapperTest {
     }
 
     @Test
-    void createCompanyRejectsNullAndBlankNombreAndUnknownEstadoRelacionAndMissingActor() {
+    void createCompanyRejectsNullAndBlankNombreAndMissingActor() {
         assertThatThrownBy(() -> CrmToolMapper.toCreateEmpresaCommand(
                 null, null, null, null, null, null, null, null, null, null, TRUSTED_ACTOR))
                 .as("missing nombre")
@@ -324,10 +316,7 @@ class CrmToolMapperTest {
                 "   ", null, null, null, null, null, null, null, null, null, TRUSTED_ACTOR))
                 .as("blank nombre")
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> CrmToolMapper.toCreateEmpresaCommand(
-                "Acme", null, null, null, null, null, null, "NOT_A_STATE", null, null, TRUSTED_ACTOR))
-                .as("unknown estadoRelacion")
-                .isInstanceOf(IllegalArgumentException.class);
+
         assertThatThrownBy(() -> CrmToolMapper.toCreateEmpresaCommand(
                 "Acme", null, null, null, null, null, null, null, null, null, null))
                 .as("missing trusted actor")
@@ -340,8 +329,7 @@ class CrmToolMapperTest {
         UUID responsableId = UUID.fromString("77777777-7777-7777-7777-777777777777");
         EditEmpresaCommand command = CrmToolMapper.toEditEmpresaCommand(
                 id, "Renamed Co", "Software", "+525500000001",
-                "https://renamed.example", null, null, null,
-                "ACTIVO", responsableId, "Updated notes");
+                "https://renamed.example", null, null, null, EstadoRelacion.ACTIVO, responsableId, "Updated notes");
 
         assertThat(command.id()).isEqualTo(id);
         assertThat(command.nombre()).isEqualTo("Renamed Co");
@@ -374,7 +362,7 @@ class CrmToolMapperTest {
     }
 
     @Test
-    void editCompanyRejectsMissingIdAndBlankNombreAndUnknownEstadoRelacion() {
+    void editCompanyRejectsMissingIdAndBlankNombre() {
         UUID validId = UUID.fromString("88888888-8888-8888-8888-888888888888");
         assertThatThrownBy(() -> CrmToolMapper.toEditEmpresaCommand(
                 null, "Co", null, null, null, null, null, null, null, null, null))
@@ -388,10 +376,7 @@ class CrmToolMapperTest {
                 validId, "   ", null, null, null, null, null, null, null, null, null))
                 .as("blank nombre")
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> CrmToolMapper.toEditEmpresaCommand(
-                validId, "Co", null, null, null, null, null, null, "NOT_A_STATE", null, null))
-                .as("unknown estadoRelacion")
-                .isInstanceOf(IllegalArgumentException.class);
+
     }
 
     @Test
@@ -401,7 +386,7 @@ class CrmToolMapperTest {
         EditTratoCommand command = CrmToolMapper.toEditTratoCommand(
                 id, responsableId, "Renamed Deal",
                 new BigDecimal("1500.00"), 75,
-                LocalDate.parse("2026-12-31"), "SERVICIO");
+                LocalDate.parse("2026-12-31"), TipoContrato.SERVICIO);
 
         assertThat(command.id()).isEqualTo(id);
         assertThat(command.responsableId()).isEqualTo(responsableId);
@@ -413,17 +398,17 @@ class CrmToolMapperTest {
     }
 
     @Test
-    void editTratoAcceptsBlankOptionalStringsAndNullOptionalFields() {
+    void editTratoAcceptsNullOptionalFieldsWhenContractTypeIsPresent() {
         UUID id = UUID.fromString("99999999-9999-9999-9999-999999999999");
         UUID responsableId = UUID.fromString("77777777-7777-7777-7777-777777777777");
         EditTratoCommand command = CrmToolMapper.toEditTratoCommand(
                 id, responsableId, "Deal",
-                null, null, null, "");
+                null, null, null, TipoContrato.SERVICIO);
 
         assertThat(command.valorEstimado()).isNull();
         assertThat(command.probabilidad()).isNull();
         assertThat(command.fechaCierreEsperada()).isNull();
-        assertThat(command.tipoContrato()).isNull();
+        assertThat(command.tipoContrato()).isEqualTo(TipoContrato.SERVICIO);
     }
 
     @Test
@@ -431,32 +416,27 @@ class CrmToolMapperTest {
         UUID validResponsable = UUID.fromString("77777777-7777-7777-7777-777777777777");
         String validId = "99999999-9999-9999-9999-999999999999";
         assertThatThrownBy(() -> CrmToolMapper.toEditTratoCommand(
-                null, validResponsable, "Deal", null, null, null, null))
+                null, validResponsable, "Deal", null, null, null, TipoContrato.SERVICIO))
                 .as("missing id")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toEditTratoCommand(
-                UUID.fromString(validId), null, "Deal", null, null, null, null))
+                UUID.fromString(validId), null, "Deal", null, null, null, TipoContrato.SERVICIO))
                 .as("missing responsableId")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toEditTratoCommand(
-                UUID.fromString(validId), validResponsable, null, null, null, null, null))
+                UUID.fromString(validId), validResponsable, null, null, null, null, TipoContrato.SERVICIO))
                 .as("missing nombre")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> CrmToolMapper.toEditTratoCommand(
-                UUID.fromString(validId), validResponsable, "   ", null, null, null, null))
+                UUID.fromString(validId), validResponsable, "   ", null, null, null, TipoContrato.SERVICIO))
                 .as("blank nombre")
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CrmToolMapper.toEditTratoCommand(
+                UUID.fromString(validId), validResponsable, "Deal", null, null, null, null))
+                .as("missing tipoContrato")
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
-    @Test
-    void editTratoRejectsUnknownTipoContratoName() {
-        UUID validId = UUID.fromString("99999999-9999-9999-9999-999999999999");
-        UUID validResponsable = UUID.fromString("77777777-7777-7777-7777-777777777777");
-        assertThatThrownBy(() -> CrmToolMapper.toEditTratoCommand(
-                validId, validResponsable, "Deal", null, null, null, "NOT_A_TYPE"))
-                .as("unknown TipoContrato")
-                .isInstanceOf(IllegalArgumentException.class);
-    }
 
     @Test
     void findContactsProjectsDomainEntitiesToBoundedOutputRecords() {

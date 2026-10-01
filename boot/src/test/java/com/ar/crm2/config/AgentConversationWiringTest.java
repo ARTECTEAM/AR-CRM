@@ -354,38 +354,34 @@ class AgentConversationWiringTest {
                 editEmpresaUseCase);
     }
 
-    /**
-     * Defence-in-depth wiring proof: the shared {@code SpringAiCrmTools}
-     * bean MUST NOT take any delete-company use case as a constructor
-     * dependency. The REST controllers may still wire a
-     * {@code DeleteEmpresaUseCase} for the HTTP surface, but the
-     * Spring AI tools bean must remain a thin adapter over the
-     * allowlisted canonical use cases — exposing a delete-company
-     * tool would silently let the agent destroy company records.
-     *
-     * <p>This test reflects on the {@code SpringAiCrmTools}
-     * constructor's parameter types and asserts that none of them
-     * matches {@code DeleteEmpresaUseCase} or {@code DeleteContactoUseCase}.
-     */
+    /** Resource adapters must depend on the canonical delete use cases exposed by the REST surface. */
     @Test
-    void springAiCrmToolsConstructorDoesNotInjectAnyDeleteUseCase() {
-        java.lang.reflect.Constructor<?>[] constructors =
-                com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools.class.getDeclaredConstructors();
-        assertThat(constructors)
-                .as("SpringAiCrmTools must expose exactly one constructor")
+    void resourceToolGroupsInjectCanonicalDeleteUseCases() {
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.EmpresaTools.class,
+                com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.ContactoTools.class,
+                com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.TableroTools.class,
+                com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.ColumnaTools.class,
+                com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.FichaTools.class,
+                com.ar.crm2.application.ficha.port.in.DeleteFichaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.TratoTools.class,
+                com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.TareaTools.class,
+                com.ar.crm2.application.tarea.port.in.DeleteTareaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.EtiquetaTools.class,
+                com.ar.crm2.application.etiqueta.port.in.DeleteEtiquetaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.AgendaTools.class,
+                com.ar.crm2.application.agenda.port.in.DeleteAgendaUseCase.class);
+    }
+
+    private void assertConstructorDependsOn(Class<?> resourceTools, Class<?> deleteUseCase) {
+        java.lang.reflect.Constructor<?>[] constructors = resourceTools.getDeclaredConstructors();
+        assertThat(constructors).as("%s should expose one dependency constructor", resourceTools.getSimpleName())
                 .hasSize(1);
-        Class<?>[] parameterTypes = constructors[0].getParameterTypes();
-        for (Class<?> type : parameterTypes) {
-            assertThat(type.getSimpleName())
-                    .as("SpringAiCrmTools constructor must NOT depend on any Delete*UseCase")
-                    .doesNotStartWith("Delete");
-            assertThat(type)
-                    .as("SpringAiCrmTools constructor must NOT depend on DeleteEmpresaUseCase")
-                    .isNotEqualTo(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class);
-            assertThat(type)
-                    .as("SpringAiCrmTools constructor must NOT depend on DeleteContactoUseCase")
-                    .isNotEqualTo(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class);
-        }
+        assertThat(constructors[0].getParameterTypes()).contains(deleteUseCase);
     }
 
     private void assertSingleBean(Class<?> type, Object expected) {

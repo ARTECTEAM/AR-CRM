@@ -13,11 +13,21 @@ import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
 import com.ar.crm2.application.trato.command.EditTratoCommand;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
+import com.ar.crm2.application.tablero.command.CreateTableroCommand;
+import com.ar.crm2.application.tablero.port.in.CreateTableroUseCase;
+import com.ar.crm2.application.columna.command.CreateColumnaCommand;
+import com.ar.crm2.application.columna.port.in.CreateColumnaUseCase;
+import com.ar.crm2.application.ficha.port.in.EditFichaUseCase;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.entity.Empresa;
 import com.ar.crm2.model.entity.Trato;
+import com.ar.crm2.model.entity.Tablero;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.enums.TipoContrato;
+import com.ar.crm2.model.enums.TipoTablero;
+import com.ar.crm2.model.enums.TipoColumna;
+import com.ar.crm2.model.enums.TipoFicha;
+import com.ar.crm2.model.vo.TableroId;
 import com.ar.crm2.model.vo.ContactoId;
 import com.ar.crm2.model.vo.EmpresaId;
 import com.ar.crm2.model.vo.TratoId;
@@ -49,15 +59,71 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Spring AI 2.0 contract tests for the shared, stateless CRM tool bean.
- * They prove the non-delete allowlist, model-visible schema boundary,
+ * Spring AI 2.0 contract tests for the stateless CRM resource tool groups.
+ * They prove the catalog, model-visible schema boundary,
  * trusted per-call identity, bounded outputs, and Application
  * delegation.
  */
 class SpringAiCrmToolsTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final String ACTOR_CONTEXT_KEY = "actorUsuarioId";
+    private static final String ACTOR_CONTEXT_KEY = ToolContextSupport.ACTOR_CONTEXT_KEY;
+
+    @Test
+    void typedCallbacksValidateNamesAndRequiredEnumsWithTrustedContext() throws Exception {
+        CreateTableroUseCase board = mock(CreateTableroUseCase.class);
+        CreateColumnaUseCase column = mock(CreateColumnaUseCase.class);
+        var tools = toolsWithBoardWrites(board, column, mock(EditFichaUseCase.class));
+        var callbacks = java.util.Arrays.asList(ToolCallbacks.from(tools));
+        ToolCallback create = findCallback(callbacks, "create_tablero");
+        for (String invalid : List.of("tareas", "TASKS", "99999", "", " ")) {
+            String input = MAPPER.writeValueAsString(Map.of("nombre", "Board", "descripcion", "Description", "tipoTablero", invalid));
+            assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> create.call(input, actorContext(UUID.randomUUID())))).isNotNull();
+        }
+        verify(board, never()).create(any());
+        for (String input : List.of("{\"nombre\":\"Board\",\"descripcion\":\"Description\"}",
+                "{\"nombre\":\"Board\",\"descripcion\":\"Description\",\"tipoTablero\":null}",
+                "{\"nombre\":\"Board\",\"descripcion\":\"Description\",\"tipoTablero\":99999}")) {
+            assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> create.call(input, actorContext(UUID.randomUUID())))).isNotNull();
+        }
+        verify(board, never()).create(any());
+        UUID actor = UUID.randomUUID();
+        create.call("{\"nombre\":\"Board\",\"descripcion\":\"Description\",\"tipoTablero\":\"TAREAS\"}", actorContext(actor));
+        var command = ArgumentCaptor.forClass(CreateTableroCommand.class);
+        verify(board).create(command.capture());
+        assertThat(command.getValue().actorId()).isEqualTo(actor);
+        assertThat(command.getValue().tipoTablero()).isEqualTo(TipoTablero.TAREAS);
+        for (String ordinal : List.of("0", "\"0\"")) {
+            create.call("{\"nombre\":\"Board\",\"descripcion\":\"Description\",\"tipoTablero\":" + ordinal + "}", actorContext(actor));
+        }
+        verify(board, org.mockito.Mockito.times(3)).create(any());
+        ToolCallback createColumn = findCallback(callbacks, "create_columna");
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> createColumn.call(
+                "{\"nombre\":\"Default\",\"tipoTablero\":\"TAREAS\",\"tipoColumna\":\"PREDETERMINADA\"}", actorContext(actor)))).isNotNull();
+        verify(column, never()).create(any());
+        assertThat(org.assertj.core.api.Assertions.catchThrowable(() -> createColumn.call(
+                "{\"nombre\":\"Default\",\"tipoTablero\":0,\"tipoColumna\":0}", actorContext(actor)))).isNotNull();
+        verify(column, never()).create(any());
+        createColumn.call("{\"nombre\":\"Default\",\"tipoTablero\":\"TAREAS\",\"tipoColumna\":\"PREDETERMINADA\"}",
+                new ToolContext(Map.of(ACTOR_CONTEXT_KEY, actor, ToolContextSupport.SUPER_USUARIO_CONTEXT_KEY, actor)));
+        verify(column).create(any());
+    }
+
+    @Test
+    void typedFindContactsPreservesOptionalNullAndRelationshipFilter() {
+        var contacts = mock(GetAllContactosUseCase.class);
+        var tools = newTools(contacts, mock(CreateContactoUseCase.class), mock(EditContactoUseCase.class),
+                mock(CreateEmpresaUseCase.class), mock(EditEmpresaUseCase.class), mock(EditTratoUseCase.class));
+        verify(contacts, never()).getAll(any());
+        var callback = findCallback(java.util.Arrays.asList(ToolCallbacks.from(tools)), "find_contacts");
+        for (String input : List.of("{}", "{\"estadoRelacion\":null}", "{\"estadoRelacion\":\"ACTIVO\"}")) {
+            callback.call(input, actorContext(UUID.randomUUID()));
+        }
+        var commands = ArgumentCaptor.forClass(GetAllContactosCommand.class);
+        org.mockito.Mockito.verify(contacts, org.mockito.Mockito.times(3)).getAll(commands.capture());
+        assertThat(commands.getAllValues().stream().map(GetAllContactosCommand::estadoRelacion).toList())
+                .containsExactly(null, null, "ACTIVO");
+    }
 
     private static ToolCallback findCallback(List<ToolCallback> callbacks, String name) {
         return callbacks.stream()
@@ -71,21 +137,97 @@ class SpringAiCrmToolsTest {
         return new ToolContext(Map.of(ACTOR_CONTEXT_KEY, actor));
     }
 
-    private static SpringAiCrmTools newTools(
+    private static Object[] newTools(
             GetAllContactosUseCase contactosUseCase,
             CreateContactoUseCase createUseCase,
             EditContactoUseCase editContactoUseCase,
             CreateEmpresaUseCase createEmpresaUseCase,
             EditEmpresaUseCase editEmpresaUseCase,
             EditTratoUseCase editTratoUseCase) {
-        return new SpringAiCrmTools(
-                contactosUseCase, createUseCase, editContactoUseCase,
-                createEmpresaUseCase, editEmpresaUseCase, editTratoUseCase);
+        return newTools(contactosUseCase, createUseCase, editContactoUseCase,
+                createEmpresaUseCase, editEmpresaUseCase, editTratoUseCase,
+                mock(com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class));
+    }
+
+    private static Object[] newTools(
+            GetAllContactosUseCase contactosUseCase,
+            CreateContactoUseCase createUseCase,
+            EditContactoUseCase editContactoUseCase,
+            CreateEmpresaUseCase createEmpresaUseCase,
+            EditEmpresaUseCase editEmpresaUseCase,
+            EditTratoUseCase editTratoUseCase,
+            com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase getAllEmpresasUseCase) {
+        var getContactoByIdUseCase = mock(com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase.class);
+        when(getContactoByIdUseCase.getById(any())).thenAnswer(invocation -> {
+            var command = invocation.getArgument(0, com.ar.crm2.application.contacto.command.GetContactoByIdCommand.class);
+            var now = java.time.LocalDateTime.now();
+            return Contacto.reconstitute(ContactoId.from(command.id()),
+                    EmpresaId.from(UUID.fromString("11111111-2222-3332-4444-555555555555")),
+                    null, null, "Existing contact", "existing@example.com", "existing phone",
+                    "Existing title", "Existing source", now, now, EstadoRelacion.PROSPECTO);
+        });
+        var getTratoByIdUseCase = mock(com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase.class);
+        when(getTratoByIdUseCase.getById(any())).thenAnswer(invocation -> {
+            var command = invocation.getArgument(0, com.ar.crm2.application.trato.command.GetTratoByIdCommand.class);
+            var now = java.time.LocalDateTime.now();
+            return Trato.reconstitute(TratoId.from(command.id()),
+                    ContactoId.from(UUID.fromString("11111111-2222-3332-4444-555555555555")),
+                    UsuarioId.from(UUID.fromString("77777777-7777-7777-7777-777777777777")),
+                    "Existing deal", new BigDecimal("3200.00"), 60, LocalDate.parse("2027-03-15"),
+                    TipoContrato.OTRO, com.ar.crm2.model.enums.EstadoTrato.ABIERTO, now, now);
+        });
+        return new Object[]{
+                new TableroTools(mock(com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.CreateTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.EditTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class)),
+                new ColumnaTools(mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
+                        mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
+                        mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
+                        mock(com.ar.crm2.application.columna.port.in.EditColumnaUseCase.class),
+                        mock(com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase.class)),
+                new FichaTools(mock(com.ar.crm2.application.ficha.port.in.CreateFichaUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.EditFichaUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.DeleteFichaUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase.class)),
+                new ContactoTools(contactosUseCase, createUseCase, editContactoUseCase,
+                        getContactoByIdUseCase,
+                        mock(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class),
+                        mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class)),
+                new EmpresaTools(createEmpresaUseCase,
+                        getAllEmpresasUseCase,
+                        editEmpresaUseCase, mock(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class),
+                        mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class)),
+                new TratoTools(mock(com.ar.crm2.application.trato.port.in.CreateTratoUseCase.class),
+                        mock(com.ar.crm2.application.trato.port.in.GetAllTratosUseCase.class),
+                        getTratoByIdUseCase,
+                        editTratoUseCase, mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class)),
+                new TareaTools(mock(com.ar.crm2.application.tarea.port.in.CreateTareaUseCase.class),
+                        mock(com.ar.crm2.application.tarea.port.in.GetAllTareasUseCase.class),
+                        mock(com.ar.crm2.application.tarea.port.in.GetTareaByIdUseCase.class),
+                        mock(com.ar.crm2.application.tarea.port.in.EditTareaUseCase.class),
+                        mock(com.ar.crm2.application.tarea.port.in.DeleteTareaUseCase.class)),
+                new EtiquetaTools(mock(com.ar.crm2.application.etiqueta.port.in.CreateEtiquetaUseCase.class),
+                        mock(com.ar.crm2.application.etiqueta.port.in.GetAllEtiquetasUseCase.class),
+                        mock(com.ar.crm2.application.etiqueta.port.in.GetEtiquetaByIdUseCase.class),
+                        mock(com.ar.crm2.application.etiqueta.port.in.EditEtiquetaUseCase.class),
+                        mock(com.ar.crm2.application.etiqueta.port.in.DeleteEtiquetaUseCase.class)),
+                new AgendaTools(mock(com.ar.crm2.application.agenda.port.in.CreateAgendaUseCase.class),
+                        mock(com.ar.crm2.application.agenda.port.in.GetAgendasByUserUseCase.class),
+                        mock(com.ar.crm2.application.agenda.port.in.GetAgendaByIdUseCase.class),
+                        mock(com.ar.crm2.application.agenda.port.in.EditAgendaUseCase.class),
+                        mock(com.ar.crm2.application.agenda.port.in.DeleteAgendaUseCase.class))};
     }
 
     @Test
-    void sharedToolsObjectExposesExactlySixAllowlistedCallbacksThroughSpringAiDiscovery() {
-        SpringAiCrmTools tools = newTools(
+    void resourceGroupsExposeExactlyFiftyAllowlistedCallbacksThroughSpringAiDiscovery() {
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -99,12 +241,21 @@ class SpringAiCrmToolsTest {
                 .map(callback -> callback.getToolDefinition().name())
                 .collect(Collectors.toUnmodifiableSet());
         assertThat(names).containsExactlyInAnyOrder(
-                "find_contacts", "create_contact", "edit_contact", "create_company", "edit_company", "edit_trato");
+                "find_contacts", "create_contact", "get_contact", "edit_contact", "change_contact_state", "delete_contact",
+                "create_company", "list_companies", "edit_company", "change_company_state", "delete_company",
+                "create_trato", "list_tratos", "get_trato", "edit_trato", "delete_trato",
+                "create_tarea", "list_tareas", "get_tarea", "edit_tarea", "delete_tarea",
+                "create_etiqueta", "list_etiquetas", "get_etiqueta", "edit_etiqueta", "delete_etiqueta",
+                "create_agenda", "list_agendas", "get_agenda", "edit_agenda", "delete_agenda",
+                "list_tableros", "get_tablero", "create_tablero", "edit_tablero", "delete_tablero",
+                "eliminar_columna_del_tablero", "assign_columna_to_tablero", "reorder_tablero_columns",
+                "list_columnas", "get_columna", "create_columna", "edit_columna", "delete_columna",
+                "list_fichas", "get_ficha", "create_ficha", "edit_ficha", "delete_ficha", "move_ficha_to_columna");
     }
 
     @Test
     void sharedToolsObjectIsReusableAcrossMultipleDiscoveryCallsAndYieldsSameCallbacks() {
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -128,7 +279,7 @@ class SpringAiCrmToolsTest {
 
     @Test
     void discoveredCallbacksCarryRealAnnotationMetadataAndGeneratedSchemas() throws Exception {
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -157,7 +308,7 @@ class SpringAiCrmToolsTest {
         ToolDefinition create = byName.get("create_contact");
         assertThat(create.description())
                 .as("create_contact description comes from @Tool annotation")
-                .contains("Create a new contact");
+                .contains("Create a contact");
         JsonNode createSchema = MAPPER.readTree(create.inputSchema());
         assertThat(createSchema.get("required"))
                 .as("create_contact must require empresaId, nombre, and estadoRelacion")
@@ -190,7 +341,7 @@ class SpringAiCrmToolsTest {
         ToolDefinition createCompany = byName.get("create_company");
         assertThat(createCompany.description())
                 .as("create_company description comes from @Tool annotation")
-                .contains("Create a new company");
+                .contains("Create a company");
         JsonNode createCompanySchema = MAPPER.readTree(createCompany.inputSchema());
         assertThat(createCompanySchema.get("required"))
                 .as("create_company must require nombre")
@@ -221,7 +372,9 @@ class SpringAiCrmToolsTest {
                 .isNotNull();
         Set<String> editRequired = new HashSet<>();
         editSchema.get("required").forEach(node -> editRequired.add(node.asText()));
-        assertThat(editRequired).contains("id", "responsableId", "nombre");
+        assertThat(editRequired).contains("id", "responsableId", "nombre", "tipoContrato");
+        assertThat(byName.get("create_trato").description())
+                .contains("initial Ficha", "do not create a second card");
         // Non-editable deal state is not part of the edit contract.
         JsonNode editProperties = editSchema.get("properties");
         assertThat(editProperties.has("status"))
@@ -231,7 +384,7 @@ class SpringAiCrmToolsTest {
 
     @Test
     void discoveredSchemasExcludeTheActorContextAndNeverExposeAnyIdentityField() throws Exception {
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -262,7 +415,7 @@ class SpringAiCrmToolsTest {
         UUID trustedActor = UUID.fromString("aaaa1111-2222-3333-4444-555566667777");
         GetAllContactosUseCase contactosUseCase = mock(GetAllContactosUseCase.class);
         when(contactosUseCase.getAll(any(GetAllContactosCommand.class))).thenReturn(List.of());
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 contactosUseCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -293,7 +446,7 @@ class SpringAiCrmToolsTest {
     void findContactsEmptyResultReturnsBoundedEmptyContactsArray() throws Exception {
         GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
         when(useCase.getAll(any(GetAllContactosCommand.class))).thenReturn(List.of());
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 useCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -318,7 +471,7 @@ class SpringAiCrmToolsTest {
     void directToolMethodReturnsTypedBoundedOutput() {
         GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
         when(useCase.getAll(any(GetAllContactosCommand.class))).thenReturn(List.of());
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 useCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -326,7 +479,7 @@ class SpringAiCrmToolsTest {
                 mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
 
-        FindContactsOutput output = tools.findContacts(null, null, null, null, null,
+        FindContactsOutput output = ((ContactoTools) tools[3]).findContacts(null, null, null, null, null,
                 actorContext(UUID.randomUUID()));
 
         assertThat(output.contacts()).isEmpty();
@@ -344,7 +497,7 @@ class SpringAiCrmToolsTest {
                 null, null, null, null, null);
         GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
         when(useCase.getAll(any(GetAllContactosCommand.class))).thenReturn(List.of(contact));
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 useCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -388,7 +541,7 @@ class SpringAiCrmToolsTest {
                 UsuarioId.from(trustedActor),
                 null, null, null);
         when(createUseCase.create(any(CreateContactoCommand.class))).thenReturn(created);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 createUseCase,
                 mock(EditContactoUseCase.class),
@@ -428,7 +581,7 @@ class SpringAiCrmToolsTest {
     void createContactRejectsMissingRelationshipStateBeforeMutation() {
         // Spring AI preserves mapper validation through ToolExecutionException.
         CreateContactoUseCase createUseCase = mock(CreateContactoUseCase.class);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 createUseCase,
                 mock(EditContactoUseCase.class),
@@ -448,17 +601,17 @@ class SpringAiCrmToolsTest {
                 .isInstanceOf(org.springframework.ai.tool.execution.ToolExecutionException.class);
         assertThat(failure.getMessage())
                 .as("the wrapped message must be the original mapper validation message, not a sanitized replacement")
-                .isEqualTo("create_contact requires estadoRelacion");
+                .isEqualTo("create_contact estadoRelacion is required");
         assertThat(failure.getCause())
                 .as("the cause must preserve the original mapper IllegalArgumentException type")
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(failure.getCause().getMessage())
                 .as("the original mapper validation message must reach Spring AI unchanged")
-                .isEqualTo("create_contact requires estadoRelacion");
+                .isEqualTo("create_contact estadoRelacion is required");
         assertThat(new SafeToolExecutionExceptionProcessor(MAPPER).process(
                 (org.springframework.ai.tool.execution.ToolExecutionException) failure))
                 .contains("TOOL_VALIDATION_FAILED", "The tool input is invalid.")
-                .doesNotContain("create_contact requires estadoRelacion")
+                .doesNotContain("create_contact estadoRelacion is required")
                 .doesNotContain("java.lang");
         verify(createUseCase, never()).create(any());
     }
@@ -483,7 +636,7 @@ class SpringAiCrmToolsTest {
                 java.time.LocalDateTime.now(),
                 EstadoRelacion.ACTIVO);
         when(editContactoUseCase.edit(any(EditContactoCommand.class))).thenReturn(updated);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 editContactoUseCase,
@@ -511,6 +664,9 @@ class SpringAiCrmToolsTest {
         assertThat(command.correo()).isEqualTo("renamed@example.com");
         assertThat(command.estadoRelacion()).isEqualTo(EstadoRelacion.ACTIVO);
         assertThat(command.responsableId()).isEqualTo(responsableId);
+        assertThat(command.telefono()).isEqualTo("existing phone");
+        assertThat(command.cargo()).isEqualTo("Existing title");
+        assertThat(command.comoNosConocio()).isEqualTo("Existing source");
 
         JsonNode outputJson = MAPPER.readTree(output);
         assertThat(outputJson.get("id").asText()).isEqualTo(contactoId.toString());
@@ -529,7 +685,7 @@ class SpringAiCrmToolsTest {
     @Test
     void editContactRejectsMissingIdNombreAndEstadoRelacionBeforeMutation() {
         EditContactoUseCase editContactoUseCase = mock(EditContactoUseCase.class);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 editContactoUseCase,
@@ -562,7 +718,7 @@ class SpringAiCrmToolsTest {
     @Test
     void editContactRejectsUnknownEstadoRelacionBeforeMutation() {
         EditContactoUseCase editContactoUseCase = mock(EditContactoUseCase.class);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 editContactoUseCase,
@@ -580,7 +736,7 @@ class SpringAiCrmToolsTest {
                 () -> editContact.call(input, actorContext(UUID.randomUUID())));
         assertThat(failure)
                 .isInstanceOf(org.springframework.ai.tool.execution.ToolExecutionException.class);
-        assertThat(failure.getCause()).isInstanceOf(IllegalArgumentException.class);
+        assertThat(failure.getCause()).isInstanceOf(tools.jackson.databind.exc.InvalidFormatException.class);
         assertThat(failure.getCause().getMessage()).contains("EstadoRelacion");
         verify(editContactoUseCase, never()).edit(any());
     }
@@ -595,7 +751,7 @@ class SpringAiCrmToolsTest {
                 EstadoRelacion.ACTIVO,
                 null, UsuarioId.from(trustedActor), null);
         when(createEmpresaUseCase.create(any(CreateEmpresaCommand.class))).thenReturn(created);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -636,7 +792,7 @@ class SpringAiCrmToolsTest {
     @Test
     void createCompanyRejectsMissingNombreAndUnknownEstadoRelacionBeforeMutation() {
         CreateEmpresaUseCase createEmpresaUseCase = mock(CreateEmpresaUseCase.class);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -660,7 +816,7 @@ class SpringAiCrmToolsTest {
                         actorContext(UUID.randomUUID())));
         assertThat(unknownEstado)
                 .isInstanceOf(org.springframework.ai.tool.execution.ToolExecutionException.class);
-        assertThat(unknownEstado.getCause()).isInstanceOf(IllegalArgumentException.class);
+        assertThat(unknownEstado.getCause()).isInstanceOf(tools.jackson.databind.exc.InvalidFormatException.class);
         assertThat(unknownEstado.getCause().getMessage()).contains("EstadoRelacion");
 
         verify(createEmpresaUseCase, never()).create(any());
@@ -684,13 +840,16 @@ class SpringAiCrmToolsTest {
                 java.time.LocalDateTime.now(),
                 java.time.LocalDateTime.now());
         when(editEmpresaUseCase.edit(any(EditEmpresaCommand.class))).thenReturn(updated);
-        SpringAiCrmTools tools = newTools(
+        var getAllEmpresasUseCase = mock(com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class);
+        when(getAllEmpresasUseCase.getAll()).thenReturn(List.of(updated));
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 editEmpresaUseCase,
-                mock(EditTratoUseCase.class));
+                mock(EditTratoUseCase.class),
+                getAllEmpresasUseCase);
 
         ToolCallback editCompany = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -710,6 +869,10 @@ class SpringAiCrmToolsTest {
         assertThat(command.nombre()).isEqualTo("Renamed Co");
         assertThat(command.estadoRelacion()).isEqualTo(EstadoRelacion.ACTIVO);
         assertThat(command.responsableId()).isEqualTo(responsableId);
+        assertThat(command.sector()).isEqualTo("Software");
+        assertThat(command.telefono()).isEqualTo("+525500000001");
+        assertThat(command.paginaWeb()).isEqualTo("https://renamed.example");
+        assertThat(command.notas()).isEqualTo("notes");
 
         JsonNode outputJson = MAPPER.readTree(output);
         assertThat(outputJson.get("id").asText()).isEqualTo(companyId.toString());
@@ -729,7 +892,7 @@ class SpringAiCrmToolsTest {
     @Test
     void editCompanyRejectsMissingIdAndNombreBeforeMutation() {
         EditEmpresaUseCase editEmpresaUseCase = mock(EditEmpresaUseCase.class);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -778,7 +941,7 @@ class SpringAiCrmToolsTest {
                 java.time.LocalDateTime.now(),
                 null);
         when(editTratoUseCase.edit(any(EditTratoCommand.class))).thenReturn(updated);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -793,8 +956,6 @@ class SpringAiCrmToolsTest {
         String input = "{\"id\":\"" + tratoId
                 + "\",\"responsableId\":\"" + responsableId
                 + "\",\"nombre\":\"Renamed Deal\""
-                + ",\"valorEstimado\":1500.00,\"probabilidad\":75"
-                + ",\"fechaCierreEsperada\":\"2026-12-31\""
                 + ",\"tipoContrato\":\"SERVICIO\"}";
         String output = editTrato.call(input, actorContext(trustedActor));
 
@@ -805,9 +966,9 @@ class SpringAiCrmToolsTest {
         assertThat(command.id()).isEqualTo(tratoId);
         assertThat(command.responsableId()).isEqualTo(responsableId);
         assertThat(command.nombre()).isEqualTo("Renamed Deal");
-        assertThat(command.valorEstimado()).isEqualByComparingTo(new BigDecimal("1500.00"));
-        assertThat(command.probabilidad()).isEqualTo(75);
-        assertThat(command.fechaCierreEsperada()).isEqualTo(LocalDate.parse("2026-12-31"));
+        assertThat(command.valorEstimado()).isEqualByComparingTo(new BigDecimal("3200.00"));
+        assertThat(command.probabilidad()).isEqualTo(60);
+        assertThat(command.fechaCierreEsperada()).isEqualTo(LocalDate.parse("2027-03-15"));
         assertThat(command.tipoContrato()).isEqualTo(TipoContrato.SERVICIO);
 
         JsonNode outputJson = MAPPER.readTree(output);
@@ -827,7 +988,7 @@ class SpringAiCrmToolsTest {
     @Test
     void editTratoRejectsMissingIdResponsableIdAndNombreBeforeMutation() {
         EditTratoUseCase editTratoUseCase = mock(EditTratoUseCase.class);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -845,7 +1006,8 @@ class SpringAiCrmToolsTest {
                 "{\"responsableId\":\"" + validResponsable + "\",\"nombre\":\"x\"}",
                 "{\"id\":\"" + validId + "\",\"nombre\":\"x\"}",
                 "{\"id\":\"" + validId + "\",\"responsableId\":\"" + validResponsable + "\"}",
-                "{\"id\":\"" + validId + "\",\"responsableId\":\"" + validResponsable + "\",\"nombre\":\"  \"}"
+                "{\"id\":\"" + validId + "\",\"responsableId\":\"" + validResponsable + "\",\"nombre\":\"  \"}",
+                "{\"id\":\"" + validId + "\",\"responsableId\":\"" + validResponsable + "\",\"nombre\":\"x\",\"tipoContrato\":null}"
         );
         for (String input : invalidInputs) {
             Throwable failure = org.assertj.core.api.Assertions.catchThrowable(
@@ -861,7 +1023,7 @@ class SpringAiCrmToolsTest {
     @Test
     void editTratoRejectsUnknownTipoContratoBeforeMutation() {
         EditTratoUseCase editTratoUseCase = mock(EditTratoUseCase.class);
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -880,7 +1042,7 @@ class SpringAiCrmToolsTest {
                 () -> editTrato.call(input, actorContext(UUID.randomUUID())));
         assertThat(failure)
                 .isInstanceOf(org.springframework.ai.tool.execution.ToolExecutionException.class);
-        assertThat(failure.getCause()).isInstanceOf(IllegalArgumentException.class);
+        assertThat(failure.getCause()).isInstanceOf(tools.jackson.databind.exc.InvalidFormatException.class);
         assertThat(failure.getCause().getMessage()).contains("TipoContrato");
         verify(editTratoUseCase, never()).edit(any());
     }
@@ -890,7 +1052,7 @@ class SpringAiCrmToolsTest {
         GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
         when(useCase.getAll(any())).thenThrow(
                 new IllegalStateException("downstream-failure-sentinel-must-not-be-redacted"));
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 useCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -918,13 +1080,20 @@ class SpringAiCrmToolsTest {
         EditEmpresaUseCase useCase = mock(EditEmpresaUseCase.class);
         when(useCase.edit(any())).thenThrow(
                 new EmpresaNotFoundExceptionSentinel("empresa-not-found-sentinel"));
-        SpringAiCrmTools tools = newTools(
+        var getAllEmpresasUseCase = mock(com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class);
+        var now = java.time.LocalDateTime.now();
+        when(getAllEmpresasUseCase.getAll()).thenReturn(List.of(Empresa.reconstitute(
+                EmpresaId.from(UUID.fromString("88888888-8888-8888-8888-888888888888")),
+                "Existing company", null, null, null, null, null, null,
+                null, null, null, null, now, now)));
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
                 mock(CreateEmpresaUseCase.class),
                 useCase,
-                mock(EditTratoUseCase.class));
+                mock(EditTratoUseCase.class),
+                getAllEmpresasUseCase);
 
         ToolCallback editCompany = findCallback(
                 java.util.Arrays.asList(ToolCallbacks.from(tools)),
@@ -947,7 +1116,7 @@ class SpringAiCrmToolsTest {
         UUID actorB = UUID.fromString("deadbeef-0000-0000-0000-000000000002");
         GetAllContactosUseCase useCase = mock(GetAllContactosUseCase.class);
         when(useCase.getAll(any(GetAllContactosCommand.class))).thenReturn(List.of());
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 useCase,
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -973,7 +1142,7 @@ class SpringAiCrmToolsTest {
     @Test
     void missingOrEmptyActorContextFailsClosedAtFrameworkBoundary() {
         // MethodToolCallback rejects absent/empty context before dispatch.
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -1006,7 +1175,7 @@ class SpringAiCrmToolsTest {
     @Test
     void presentContextWithoutActorKeyFailsClosedThroughNaturalBoundary() {
         // A present context without a usable actor is wrapped naturally.
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -1029,7 +1198,7 @@ class SpringAiCrmToolsTest {
     @Test
     void wrongTypeActorValueFailsClosedThroughNaturalBoundary() {
         // Non-UUID actor values fail closed and preserve the cause.
-        SpringAiCrmTools tools = newTools(
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -1069,27 +1238,36 @@ class SpringAiCrmToolsTest {
         when(tableros.getAll()).thenReturn(List.of());
         when(columnas.getAll()).thenReturn(List.of());
         when(fichas.getAll()).thenReturn(List.of());
-        SpringAiDevelopmentCrmTools tools = new SpringAiDevelopmentCrmTools(
-                tableros, tableroById, createTablero, editTablero, assign, reorder,
-                columnas, columnaById, createColumna, editColumna,
-                fichas, fichaById, createFicha, editFicha, moveFicha);
+        UUID columnaId = UUID.randomUUID();
+        String existingColor = "#A1B2C3";
+        var existingColumna = com.ar.crm2.model.entity.Columna.reconstitute(
+                com.ar.crm2.model.vo.ColumnaId.from(columnaId), "Column", existingColor,
+                TipoTablero.TAREAS, TipoColumna.PERSONALIZADA, false);
+        when(columnaById.getById(any())).thenReturn(existingColumna);
+        TableroTools tableroTools = new TableroTools(tableros, tableroById, createTablero, editTablero,
+                mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class), assign, reorder);
+        ColumnaTools columnaTools = new ColumnaTools(createColumna, columnas, columnaById, editColumna,
+                mock(com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase.class));
+        FichaTools fichaTools = new FichaTools(createFicha, fichas, fichaById, editFicha,
+                mock(com.ar.crm2.application.ficha.port.in.DeleteFichaUseCase.class), moveFicha);
         ToolContext context = actorContext(UUID.randomUUID());
 
-        tools.listTableros(context);
-        tools.getTablero(UUID.randomUUID(), context);
-        tools.createTablero("Board", "Description", "TAREAS", context);
-        tools.editTablero(UUID.randomUUID(), "Board", "Description", context);
-        tools.assignColumnaToTablero(UUID.randomUUID(), UUID.randomUUID(), 1, null, BigDecimal.ZERO, context);
-        tools.reorderTableroColumns(UUID.randomUUID(), List.of(UUID.randomUUID()), context);
-        tools.listColumnas(context);
-        tools.getColumna(UUID.randomUUID(), context);
-        tools.createColumna("Column", null, "TAREAS", "PERSONALIZADA", context);
-        tools.editColumna(UUID.randomUUID(), "Column", null, "TAREAS", "PERSONALIZADA", context);
-        tools.listFichas(context);
-        tools.getFicha(UUID.randomUUID(), context);
-        tools.createFicha(UUID.randomUUID(), "TRATO", UUID.randomUUID(), null, List.of(), context);
-        tools.editFicha(UUID.randomUUID(), UUID.randomUUID(), "TRATO", UUID.randomUUID(), null, List.of(), context);
-        tools.moveFichaToColumna(UUID.randomUUID(), UUID.randomUUID(), context);
+        tableroTools.listTableros(context);
+        tableroTools.getTablero(UUID.randomUUID(), context);
+        tableroTools.createTablero("Board", "Description", TipoTablero.TAREAS, context);
+        tableroTools.editTablero(UUID.randomUUID(), "Board", "Description", context);
+        tableroTools.assignColumnaToTablero(UUID.randomUUID(), UUID.randomUUID(), 1, null, BigDecimal.ZERO, context);
+        tableroTools.reorderTableroColumns(UUID.randomUUID(), List.of(UUID.randomUUID()), context);
+        columnaTools.listColumnas(context);
+        columnaTools.getColumna(UUID.randomUUID(), context);
+        columnaTools.createColumna("Column", null, TipoTablero.TAREAS, TipoColumna.PERSONALIZADA, context);
+        columnaTools.editColumna(columnaId, "Column", null, TipoTablero.TAREAS, TipoColumna.PERSONALIZADA, context);
+        fichaTools.listFichas(context);
+        fichaTools.getFicha(UUID.randomUUID(), context);
+        fichaTools.createFicha(UUID.randomUUID(), TipoFicha.TRATO, UUID.randomUUID(), null, List.of(), context);
+        fichaTools.editFicha(UUID.randomUUID(), UUID.randomUUID(), TipoFicha.TRATO, UUID.randomUUID(), null, List.of(), context);
+        fichaTools.moveFichaToColumna(UUID.randomUUID(), UUID.randomUUID(), context);
 
         verify(tableros).getAll();
         verify(tableroById).getById(any());
@@ -1098,9 +1276,12 @@ class SpringAiCrmToolsTest {
         verify(assign).asignarColumna(any());
         verify(reorder).reordenar(any());
         verify(columnas).getAll();
-        verify(columnaById).getById(any());
+        verify(columnaById, org.mockito.Mockito.times(2)).getById(any());
         verify(createColumna).create(any());
-        verify(editColumna).edit(any());
+        ArgumentCaptor<com.ar.crm2.application.columna.command.EditColumnaCommand> editCommand =
+                ArgumentCaptor.forClass(com.ar.crm2.application.columna.command.EditColumnaCommand.class);
+        verify(editColumna).edit(editCommand.capture());
+        assertThat(editCommand.getValue().color()).isEqualTo(existingColor);
         verify(fichas).getAll();
         verify(fichaById).getById(any());
         verify(createFicha).create(any());
@@ -1109,11 +1290,8 @@ class SpringAiCrmToolsTest {
     }
 
     @Test
-    void noCompanyDeleteToolIsExposedByTheSharedSpringAiCrmToolsBean() {
-        // Defence-in-depth: explicit allowlist check, in addition to the
-        // generic six-tool discovery assertion, that no tool that even
-        // hints at company deletion is exposed.
-        SpringAiCrmTools tools = newTools(
+    void deleteToolsAreExposedOnlyAsResourceSpecificCallbacks() {
+        Object[] tools = newTools(
                 mock(GetAllContactosUseCase.class),
                 mock(CreateContactoUseCase.class),
                 mock(EditContactoUseCase.class),
@@ -1126,34 +1304,137 @@ class SpringAiCrmToolsTest {
                 .collect(Collectors.toUnmodifiableSet());
 
         assertThat(names)
-                .as("no company-delete tool may be exposed to the LLM")
-                .noneMatch(name -> name.toLowerCase().contains("delete"))
-                .doesNotContain("delete_company")
+                .as("delete callbacks must use explicit resource-specific names")
+                .contains("delete_contact", "delete_company", "delete_trato", "delete_tarea",
+                        "delete_etiqueta", "delete_agenda", "delete_tablero", "delete_columna", "delete_ficha")
                 .doesNotContain("delete_empresa");
     }
 
     @Test
-    void sharedToolsConstructorIsLombokGeneratedAndTakesAllAllowlistedDependencies() throws Exception {
-        // Constructor shape protects composition-root wiring.
-        Constructor<?>[] constructors = SpringAiCrmTools.class.getDeclaredConstructors();
-        assertThat(constructors).hasSize(1);
-        Constructor<?> constructor = constructors[0];
-        assertThat(constructor.getParameterTypes()).containsExactly(
-                GetAllContactosUseCase.class,
-                CreateContactoUseCase.class,
-                EditContactoUseCase.class,
-                CreateEmpresaUseCase.class,
-                EditEmpresaUseCase.class,
-                EditTratoUseCase.class);
-        constructor.setAccessible(true);
-        Object instance = constructor.newInstance(
-                mock(GetAllContactosUseCase.class),
-                mock(CreateContactoUseCase.class),
-                mock(EditContactoUseCase.class),
-                mock(CreateEmpresaUseCase.class),
-                mock(EditEmpresaUseCase.class),
+    void eachResourceGroupHasOneDependencyConstructor() {
+        for (Class<?> tools : List.of(TableroTools.class, ColumnaTools.class, FichaTools.class,
+                ContactoTools.class, EmpresaTools.class, TratoTools.class, TareaTools.class,
+                EtiquetaTools.class, AgendaTools.class)) {
+            Constructor<?>[] constructors = tools.getDeclaredConstructors();
+            assertThat(constructors).as("%s should have one resource constructor", tools.getSimpleName())
+                    .hasSize(1);
+        }
+    }
+
+    @Test
+    void listTablerosMapsAndSerializesOnlyTheBoundedSummary() throws Exception {
+        var getAllTableros = mock(com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase.class);
+        List<Tablero> boards = java.util.stream.IntStream.rangeClosed(1, 51)
+                .mapToObj(index -> {
+                    Tablero board = mock(Tablero.class);
+                    when(board.getId()).thenReturn(TableroId.from(new UUID(0, index)));
+                    when(board.getNombre()).thenReturn("Board " + index);
+                    when(board.getDescripcion()).thenReturn("Description " + index);
+                    when(board.getTipoTablero()).thenReturn(TipoTablero.TAREAS);
+                    when(board.getColumnasTablero()).thenReturn(List.of());
+                    return board;
+                }).toList();
+        when(getAllTableros.getAll()).thenReturn(boards);
+        Object[] tools = toolsWithBoardRead(getAllTableros);
+        ToolCallback list = findCallback(java.util.Arrays.asList(ToolCallbacks.from(tools)), "list_tableros");
+
+        JsonNode serialized = MAPPER.readTree(list.call("{}", actorContext(UUID.randomUUID())));
+
+        assertThat(serialized.get("tableros")).hasSize(50);
+        assertThat(serialized.get("total").asInt()).isEqualTo(51);
+        assertThat(serialized.get("truncated").asBoolean()).isTrue();
+        assertThat(serialized.get("tableros").get(0).get("nombre").asText()).isEqualTo("Board 1");
+        assertThat(serialized.toString()).doesNotContain("creadoEn", "columnasTablero");
+    }
+
+    @Test
+    void createBoardMapsFieldsAndTrustedActorWhileDefaultColumnUsesTrustedSuperUserClaim() {
+        CreateTableroUseCase createTablero = mock(CreateTableroUseCase.class);
+        CreateColumnaUseCase createColumna = mock(CreateColumnaUseCase.class);
+        Object[] tools = toolsWithBoardWrites(createTablero, createColumna, mock(EditFichaUseCase.class));
+        UUID actor = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        UUID superUser = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        ToolContext context = new ToolContext(Map.of(ACTOR_CONTEXT_KEY, actor,
+                ToolContextSupport.SUPER_USUARIO_CONTEXT_KEY, superUser));
+
+        ((TableroTools) tools[0]).createTablero("Board", "Description", TipoTablero.TAREAS, context);
+        ((ColumnaTools) tools[1]).createColumna("Default", "#112233", TipoTablero.TAREAS,
+                TipoColumna.PREDETERMINADA, context);
+
+        ArgumentCaptor<CreateTableroCommand> boardCommand = ArgumentCaptor.forClass(CreateTableroCommand.class);
+        verify(createTablero).create(boardCommand.capture());
+        assertThat(boardCommand.getValue().nombre()).isEqualTo("Board");
+        assertThat(boardCommand.getValue().descripcion()).isEqualTo("Description");
+        assertThat(boardCommand.getValue().tipoTablero()).isEqualTo(TipoTablero.TAREAS);
+        assertThat(boardCommand.getValue().actorId()).isEqualTo(actor);
+        ArgumentCaptor<CreateColumnaCommand> columnCommand = ArgumentCaptor.forClass(CreateColumnaCommand.class);
+        verify(createColumna).create(columnCommand.capture());
+        assertThat(columnCommand.getValue().superUsuarioId()).contains(superUser);
+    }
+
+    @Test
+    void aggregateWriteValidationFailsBeforeUseCaseAndRequiresTrustedSuperUserForDefaultColumn() {
+        CreateTableroUseCase createTablero = mock(CreateTableroUseCase.class);
+        CreateColumnaUseCase createColumna = mock(CreateColumnaUseCase.class);
+        EditFichaUseCase editFicha = mock(EditFichaUseCase.class);
+        Object[] tools = toolsWithBoardWrites(createTablero, createColumna, editFicha);
+        ToolContext actorOnly = actorContext(UUID.randomUUID());
+
+        Throwable invalidBoard = org.assertj.core.api.Assertions.catchThrowable(
+                () -> ((TableroTools) tools[0]).createTablero(" ", "Description", TipoTablero.TAREAS, actorOnly));
+        assertThat(invalidBoard).isInstanceOf(SafeToolValidationException.class);
+        Throwable missingSuperUser = org.assertj.core.api.Assertions.catchThrowable(
+                () -> ((ColumnaTools) tools[1]).createColumna(
+                        "Default", null, TipoTablero.TAREAS, TipoColumna.PREDETERMINADA, actorOnly));
+        assertThat(missingSuperUser).isInstanceOf(SafeToolValidationException.class)
+                .hasMessageContaining("trusted super-user claim");
+        Throwable omittedLabels = org.assertj.core.api.Assertions.catchThrowable(
+                () -> ((FichaTools) tools[2]).editFicha(UUID.randomUUID(), UUID.randomUUID(), TipoFicha.TRATO, UUID.randomUUID(), null, null,
+                        actorOnly));
+        assertThat(omittedLabels).isInstanceOf(SafeToolValidationException.class)
+                .hasMessageContaining("requires etiquetaIds");
+        verify(createTablero, never()).create(any());
+        verify(createColumna, never()).create(any());
+        verify(editFicha, never()).edit(any());
+    }
+
+    private static Object[] toolsWithBoardRead(
+            com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase getAllTableros) {
+        Object[] tools = newTools(mock(GetAllContactosUseCase.class), mock(CreateContactoUseCase.class),
+                mock(EditContactoUseCase.class), mock(CreateEmpresaUseCase.class), mock(EditEmpresaUseCase.class),
                 mock(EditTratoUseCase.class));
-        assertThat(instance).isInstanceOf(SpringAiCrmTools.class);
+        tools[0] = new TableroTools(getAllTableros,
+                mock(com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase.class),
+                mock(CreateTableroUseCase.class), mock(com.ar.crm2.application.tablero.port.in.EditTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class));
+        return tools;
+    }
+
+    private static Object[] toolsWithBoardWrites(CreateTableroUseCase createTablero,
+            CreateColumnaUseCase createColumna, EditFichaUseCase editFicha) {
+        Object[] tools = newTools(mock(GetAllContactosUseCase.class), mock(CreateContactoUseCase.class),
+                mock(EditContactoUseCase.class), mock(CreateEmpresaUseCase.class), mock(EditEmpresaUseCase.class),
+                mock(EditTratoUseCase.class));
+        tools[0] = new TableroTools(mock(com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase.class), createTablero,
+                mock(com.ar.crm2.application.tablero.port.in.EditTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
+                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class));
+        tools[1] = new ColumnaTools(createColumna, mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
+                mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
+                mock(com.ar.crm2.application.columna.port.in.EditColumnaUseCase.class),
+                mock(com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase.class));
+        tools[2] = new FichaTools(mock(com.ar.crm2.application.ficha.port.in.CreateFichaUseCase.class),
+                mock(com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase.class),
+                mock(com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase.class), editFicha,
+                mock(com.ar.crm2.application.ficha.port.in.DeleteFichaUseCase.class),
+                mock(com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase.class));
+        return tools;
     }
 
     /**

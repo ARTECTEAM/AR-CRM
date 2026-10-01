@@ -1,10 +1,10 @@
 # Spring AI CRM Tool Rules
 
-This document is the canonical rulebook for every Spring AI 2.0 CRM
-tool exposed by `com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools` or
-`SpringAiDevelopmentCrmTools`. It
-is normative: any new CRM tool must follow every rule below, and any
-existing tool that drifts from these rules is a regression to fix.
+This document is the canonical rulebook for the nine Spring AI CRM tool
+groups in `com.ar.crm2.adapter.out.ai.tool`. The groups expose 50 callbacks:
+49 controller-equivalent CRM operations plus the actor-scoped `find_contacts`.
+Any new tool must follow these rules, and any existing tool that drifts is a
+regression to fix.
 
 ## Outcome
 
@@ -13,9 +13,8 @@ A new allowlisted CRM tool must be:
 1. **Thin** — a mapper-and-delegate adapter over an existing Application
    use case. No business logic, no repository access, no authorization
    invention.
-2. **Discoverable** — registered once on the shared
-   `SpringAiCrmTools` bean via `defaultTools(...)` on the configured
-   `ChatClient` builder. No per-invocation `.tools(...)` calls (they
+2. **Discoverable** — the nine resource groups are registered via
+   `defaultTools(...)` on the configured `ChatClient` builder. No per-invocation `.tools(...)` calls (they
    would replace builder defaults in Spring AI 2.0).
 3. **Bounded** — the model's schema and the model's output strip every
    internal handle, identity, or sensitive business field.
@@ -25,9 +24,9 @@ A new allowlisted CRM tool must be:
 1. Decide which existing Application use case owns the capability. If
    none exists, write the use case first in `application/.../<aggregate>/port/in/`
    and its `service/` implementation; do not skip straight to the tool.
-2. Add a `@Tool(name = "<snake_case>", description = "...")` method on
-   `SpringAiCrmTools` that maps raw parameters plus trusted context to
-   the existing Application command and delegates to the use case.
+2. Add a `@Tool(name = "<snake_case>", description = "...")` method to
+   the controller-aligned `<Resource>Tools` class. Map inputs and trusted
+   context to the canonical Application command and delegate to its use case.
 3. Add (or reuse) a bounded output record in
    `infrastructure/.../adapter/out/ai/tool/dto/output/`.
 4. Validate and map at the boundary that owns each invariant: mapper,
@@ -36,6 +35,8 @@ A new allowlisted CRM tool must be:
 5. Update the production default-system template in
    `boot/.../config/AgentConfig.java` to advertise the new tool name.
 6. Add focused tests (next section).
+   Use the domain enum type directly for enum arguments and mapper inputs.
+   Spring AI generates its allowed names; retain explicit required-null checks.
 7. Update this file's tool inventory and any directly relevant OpenSpec
    spec under `openspec/changes/<change>/specs/agent-crm-tools/spec.md`.
 
@@ -70,6 +71,14 @@ A new allowlisted CRM tool must be:
 
 ## Validation and error behavior
 
+Enum arguments use domain types directly. Spring AI/Jackson owns deserialization:
+unknown names are rejected before invocation; optional omitted/null inputs remain
+null. Its default conversion also accepts numeric and numeric-string ordinals
+and trims surrounding whitespace. The schema advertises enum names, not ordinals.
+Required enums are checked for null by the mapper, and trusted-context checks run
+on the converted enum, including ordinal inputs. Conversion failures use the
+central generic redacted tool-error response; no custom coercion layer is added.
+
 | Rule | Why |
 |------|-----|
 | Validation MUST occur at the mapper, tool boundary, or Application layer according to ownership of the invariant. | Parsing belongs in the mapper, trusted-context checks belong at the tool boundary, and business invariants remain in Application/domain. |
@@ -102,16 +111,55 @@ A new allowlisted CRM tool must be:
 | Idempotency for write tools MUST live in the Application layer (e.g. via the agent tool-action ledger), not in the tool. | The tool should stay a thin mapper. |
 | Write effects MUST be auditable through the existing Application logging or the durable agent-tool-action ledger; the tool MUST NOT add its own audit logging. | One audit story, owned by Application. |
 
+## User control of write inputs
+
+Schema-required means the backend needs a value, not that the agent may invent it.
+The system prompt governs all write tools: important business choices must come
+from the owner's current conversation or scoped permission to choose them.
+Ask for missing choices or that permission, then wait before writing. Existing
+permission (including in the same request) needs no repeated confirmation;
+report agent-chosen values after completion. Never invent optional facts. Omit
+optional inputs only when supported without unwanted changes; do not require a
+questionnaire for every optional field. Only documented defaults may be used.
+
+For boards, prefer owner-provided name, description, and type. A name-only request
+must trigger a request for description and TAREAS/TRATOS, or permission to fill
+them. The backend still requires all three; this does not make them nullable.
+Use available reads to resolve references or preserve unchanged fields; ask when
+ambiguous or unavailable. Never guess UUIDs or silently clear full replacement
+sets (labels/order). Read-only queries do not require write confirmation.
+
+For `edit_contact`, `edit_company`, `edit_tarea`, `edit_agenda`, and `edit_trato`,
+omitted or null optional values preserve the existing value because their
+canonical edit commands are full replacements. Empty strings set optional text
+to blank, and Contacto/Empresa/Agenda normalize such strings to null; this does
+not provide a clear operation for nullable UUID links or agenda end time.
+Changing a nullable UUID requires an explicit replacement UUID. These reads and
+edits are separate use-case calls, not an atomic patch; concurrent edits can
+race. Company lookup uses the canonical all-companies use case because no
+get-by-id use case exists; it is not target authorization. `edit_agenda` uses the existing reminder flag
+and lead time when they are omitted; enabling reminders requires an existing or
+explicitly provided positive `minutosAntes`. `edit_trato` cannot clear its
+optional value/probability/close-date fields through null; `tipoContrato` is
+required, matching REST validation. `create_trato` creates its initial Ficha
+through the canonical use case; the tool must never create a second card.
+
+This is prompt guidance, not a server-enforced approval gate. Contract tests
+verify instructions/schema delivery, not live model compliance. Manual checks:
+name-only board asks before creating; all three values supplied creates without
+repeating questions; explicit permission fills missing values and reports them;
+editing an unrelated card field does not silently clear its labels.
+
 ## Focused contract and wiring tests
 
 For every new (or modified) tool, add or update the following tests:
 
 | Test class | Location | Must cover |
 |------------|----------|------------|
-| `SpringAiCrmToolsTest` | `infrastructure/.../test/.../adapter/out/ai/tool/` | Allowlist exact six names; each tool's discovery carries real annotation metadata; the generated JSON schema requires exactly the documented fields; schemas never expose actor/owner/turn/handle; mapper validation is marked explicitly; model-visible errors use stable validation/execution codes and never expose downstream exception text. |
+| `SpringAiCrmToolsTest` | `infrastructure/.../test/.../adapter/out/ai/tool/` | Allowlist exact 50 names; each tool's discovery carries real annotation metadata; the generated JSON schema requires exactly the documented fields; schemas never expose actor/owner/turn/handle; mapper validation is marked explicitly; model-visible errors use stable validation/execution codes and never expose downstream exception text. |
 | `CrmToolMapperTest` | `infrastructure/.../test/.../adapter/out/ai/tool/` | Mapper accepts valid required + optional inputs; rejects null/blank required inputs with the documented message; rejects unknown enum names; maps domain entity to bounded output. |
 | `AgentConfigTest` | `boot/.../test/.../config/` | The real two-response tool loop uses the configured redacting manager; the production default-system template advertises every allowlisted tool by name. |
-| `AgentDevelopmentToolsConfigTest` | `boot/.../test/.../config/` | Property-driven contexts distinguish absent/default, explicit false, exactly-one accepted non-production profile (`noauth` or `test`), and reject profile-less, unknown, production, `noauth,test`, or accepted-plus-production true; successful contexts synchronize model-received callback definitions and rendered prompt names at exactly six or 21, with no delete/remove callback. |
+| `AgentConfigTest` | `boot/.../test/.../config/` | The configured client registers all 50 tools by default and uses the redacting tool loop. |
 | `AgentConfigOpenAiWiringTest` | `boot/.../test/.../config/` | Provider wiring resolves the production `ChatClient` and tool error processor. |
 | `AgentConversationWiringTest` | `boot/.../test/.../config/` | The canonical use case backing each write tool is wired exactly once. |
 
@@ -127,14 +175,14 @@ Copy and complete this checklist when adding a new tool.
 ### Tool: `<name>`
 
 - [ ] Existing Application use case: `<fully.qualified.UseCase>` accepts `<command>`
-- [ ] `SpringAiCrmTools` method: `<javaMethodName>` with `@Tool(name = "<snake_name>", description = "...")`
+- [ ] `<Resource>Tools` method: `<javaMethodName>` with `@Tool(name = "<snake_name>", description = "...")`
 - [ ] `@ToolParam` set on every parameter; required fields documented in the description
 - [ ] Output record created under `dto/output/`
 - [ ] `CrmToolMapper.to<Name>Command(...)` validates required fields, parses enums, and rejects unknowns
 - [ ] `CrmToolMapper.to<Name>Output(...)` projects domain entity to the bounded output record
 - [ ] `@Tool` returns that concrete output record directly; no tool-local `ObjectMapper` serialization
 - [ ] A `ToolCallback.call(...)` test asserts the exact model-visible JSON keys; any intentional key/component mismatch uses Jackson 3 `tools.jackson.annotation.JsonProperty`
-- [ ] `WiringConfig` injects the canonical use case into the `springAiCrmTools` bean
+- [ ] `WiringConfig` injects canonical use cases into the resource-specific tool bean
 - [ ] `AgentConfig.DEFAULT_SYSTEM_TEMPLATE` advertises the new tool by name
 - [ ] Tests added in `SpringAiCrmToolsTest`, `CrmToolMapperTest`, `AgentConfigTest`, `AgentConfigOpenAiWiringTest`, `AgentConversationWiringTest`
 - [ ] Allowlist test still asserts exactly the right set of tool names
@@ -144,15 +192,33 @@ Copy and complete this checklist when adding a new tool.
 - [ ] OpenSpec `agent-crm-tools/spec.md` updated with the tool's contract and a scenario
 ```
 
-## Tool inventory (current)
+## Tool inventory
 
-| Tool | Java method | Use case | Notes |
-|------|-------------|----------|-------|
-| `find_contacts` | `findContacts` | `GetAllContactosUseCase` | Read-only, hard cap 20, trusted actor injected. |
-| `create_contact` | `createContact` | `CreateContactoUseCase` | Required: `empresaId`, `nombre`, `estadoRelacion`. Trusted actor becomes `creadoPor`. |
-| `edit_contact` | `editContact` | `EditContactoUseCase` | Required: `id`, `nombre`, `estadoRelacion`. Optional: `correo`, `responsableId`, `telefono`, `cargo`, `comoNosConocio`. Preserves `empresaId` and `creadoPor`. |
-| `create_company` | `createCompany` | `CreateEmpresaUseCase` | Required: `nombre`. Optional: `sector`, `telefono`, `paginaWeb`, `facebook`, `instagram`, `twitter`, `estadoRelacion`, `responsableId`, `notas`. Trusted actor becomes `creadoPor`. |
-| `edit_company` | `editCompany` | `EditEmpresaUseCase` | Required: `id`, `nombre`. Optional: `sector`, `telefono`, `paginaWeb`, `facebook`, `instagram`, `twitter`, `estadoRelacion`, `responsableId`, `notas`. Preserves `creadoPor`. |
-| `edit_trato` | `editTrato` | `EditTratoUseCase` | Required: `id`, `responsableId`, `nombre`. Optional: `valorEstimado`, `probabilidad`, `fechaCierreEsperada`, `tipoContrato`. Preserves non-editable deal state. **DEVELOPMENT-ONLY TECHNICAL DEBT:** trusted actor presence is validated at the tool boundary, but `EditTratoUseCase` does not receive the actor or enforce actor-aware target authorization. |
+The catalog is registered through nine controller-aligned classes. Each tool
+delegates to the same canonical Application use case used by its controller.
 
-Company deletion is intentionally NOT exposed: no `delete_company` tool exists, and none must be added without re-opening the canonical authorization design.
+| Group | Tool names |
+|-------|------------|
+| `ContactoTools` | `find_contacts`, `create_contact`, `get_contact`, `edit_contact`, `change_contact_state`, `delete_contact` |
+| `EmpresaTools` | `create_company`, `list_companies`, `edit_company`, `change_company_state`, `delete_company` |
+| `TratoTools` | `create_trato`, `list_tratos`, `get_trato`, `edit_trato`, `delete_trato` |
+| `TareaTools` | `create_tarea`, `list_tareas`, `get_tarea`, `edit_tarea`, `delete_tarea` |
+| `EtiquetaTools` | `create_etiqueta`, `list_etiquetas`, `get_etiqueta`, `edit_etiqueta`, `delete_etiqueta` |
+| `AgendaTools` | `create_agenda`, `list_agendas`, `get_agenda`, `edit_agenda`, `delete_agenda` |
+| `TableroTools` | `list_tableros`, `get_tablero`, `create_tablero`, `edit_tablero`, `delete_tablero`, `eliminar_columna_del_tablero`, `assign_columna_to_tablero`, `reorder_tablero_columns` |
+| `ColumnaTools` | `list_columnas`, `get_columna`, `create_columna`, `edit_columna`, `delete_columna` |
+| `FichaTools` | `list_fichas`, `get_ficha`, `create_ficha`, `edit_ficha`, `delete_ficha`, `move_ficha_to_columna` |
+
+Delete tools are exposed, including `delete_company`. Destructive calls require a
+clear user request; `delete_etiqueta` additionally requires an explicit
+confirmation argument that defaults to `false`. The authenticated actor and,
+where required, super-user identity come from trusted `ToolContext`, never model
+arguments. This identity check does not guarantee target ownership: many
+canonical CRUD use cases do not enforce actor/tenant scoping, and the tools do
+not add or claim stronger authorization.
+
+Agenda creator/list identity is resolved from trusted actor context. `create_tarea`
+uses its canonical use case's existing initial-card behavior and must not create a
+second Ficha. Ficha output labels may be truncated; never use that output to
+reconstruct a full replacement set. All tool outputs remain bounded DTOs, not
+raw entities.

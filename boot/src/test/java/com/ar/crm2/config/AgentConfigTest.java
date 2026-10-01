@@ -1,7 +1,14 @@
 package com.ar.crm2.config;
 
-import com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools;
-import com.ar.crm2.adapter.out.ai.tool.SpringAiDevelopmentCrmTools;
+import com.ar.crm2.adapter.out.ai.tool.AgendaTools;
+import com.ar.crm2.adapter.out.ai.tool.ColumnaTools;
+import com.ar.crm2.adapter.out.ai.tool.ContactoTools;
+import com.ar.crm2.adapter.out.ai.tool.EmpresaTools;
+import com.ar.crm2.adapter.out.ai.tool.EtiquetaTools;
+import com.ar.crm2.adapter.out.ai.tool.FichaTools;
+import com.ar.crm2.adapter.out.ai.tool.TableroTools;
+import com.ar.crm2.adapter.out.ai.tool.TareaTools;
+import com.ar.crm2.adapter.out.ai.tool.TratoTools;
 import com.ar.crm2.application.contacto.port.in.CreateContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
@@ -45,50 +52,130 @@ import static org.mockito.Mockito.when;
  * {@link AgentConfig} bean that owns the CRM agent's
  * {@link ChatClient} and its {@code defaultSystem} template.
  *
- * <p>Corrected A3 contract: AgentConfig composes a SINGLE shared
- * {@link SpringAiCrmTools} bean and registers it once via
+ * <p>AgentConfig composes nine resource-grouped tool beans and registers them together via
  * {@code ChatClient.Builder#defaultTools(Object...)}. The configured
- * {@link ChatClient} exposes the six allowlisted CRM tools to every
+ * {@link ChatClient} exposes all 50 allowlisted CRM tools to every
  * request; the per-request actor identity travels separately through
  * {@code ChatClient.RequestSpec#toolContext(...)} set by the adapter.
  */
 class AgentConfigTest {
 
-    private static SpringAiCrmTools newNoopTools() {
+    @Test
+    void configuredCallbacksConstrainAllDomainEnumsWithoutChangingOtherSchemaFields() throws Exception {
+        var enums = new java.util.HashMap<>(Map.of(
+                "estadoRelacion", com.ar.crm2.model.enums.EstadoRelacion.class,
+                "tipoContrato", com.ar.crm2.model.enums.TipoContrato.class,
+                "tipoTablero", com.ar.crm2.model.enums.TipoTablero.class,
+                "tipoColumna", com.ar.crm2.model.enums.TipoColumna.class,
+                "tipoFicha", com.ar.crm2.model.enums.TipoFicha.class));
+        enums.put("tipo", com.ar.crm2.model.enums.TipoTarea.class);
+        enums.put("prioridad", com.ar.crm2.model.enums.PrioridadTarea.class);
+        enums.put("tipoEtiqueta", com.ar.crm2.model.enums.TipoEtiqueta.class);
+        Object[] tools = newNoopTools();
+        List<Class<?>> groups = List.of(TableroTools.class, ColumnaTools.class, FichaTools.class,
+                ContactoTools.class, EmpresaTools.class, TratoTools.class, TareaTools.class,
+                EtiquetaTools.class, AgendaTools.class);
+        for (Class<?> group : groups) {
+            for (var method : group.getDeclaredMethods()) {
+                for (var parameter : method.getParameters()) {
+                    if (enums.containsKey(parameter.getName())) {
+                        Class<?> expected = group == AgendaTools.class && "tipo".equals(parameter.getName())
+                                ? com.ar.crm2.model.enums.TipoAgenda.class : enums.get(parameter.getName());
+                        assertThat(parameter.getType()).isEqualTo(expected);
+                    }
+                }
+            }
+        }
+        CapturingChatModel model = new CapturingChatModel("ok");
+        new AgentConfig().chatClient(model, tools).prompt().user("hi").call().content();
+        var callbacks = ((ToolCallingChatOptions) model.capturedPrompt().getOptions()).getToolCallbacks();
+        var originals = java.util.Arrays.stream(org.springframework.ai.support.ToolCallbacks.from(tools))
+                .collect(java.util.stream.Collectors.toMap(c -> c.getToolDefinition().name(), c -> c));
+        assertThat(callbacks).hasSize(50);
+        assertThat(callbacks.stream().map(c -> c.getToolDefinition().name())).containsExactlyInAnyOrderElementsOf(originals.keySet());
+        ObjectMapper mapper = new ObjectMapper();
+        int constrained = 0;
+        for (ToolCallback callback : callbacks) {
+            var definition = callback.getToolDefinition();
+            var original = originals.get(definition.name());
+            var schema = mapper.readTree(definition.inputSchema());
+            var unchanged = schema.deepCopy();
+            assertThat(definition.description()).isEqualTo(original.getToolDefinition().description());
+            assertThat(callback.getToolMetadata()).isEqualTo(original.getToolMetadata());
+            for (var entry : enums.entrySet()) {
+                var property = schema.path("properties").get(entry.getKey());
+                if (property == null) continue;
+                constrained++;
+                Class<?> enumType = "tipo".equals(entry.getKey())
+                        && java.util.Set.of("create_agenda", "edit_agenda").contains(definition.name())
+                        ? com.ar.crm2.model.enums.TipoAgenda.class : entry.getValue();
+                var names = java.util.Arrays.stream(enumType.getEnumConstants())
+                        .map(value -> ((Enum<?>) value).name()).toList();
+                assertThat(property.path("enum")).as("%s.%s", definition.name(), entry.getKey())
+                        .isEqualTo(mapper.valueToTree(names));
+                assertThat(property.path("type").asText()).isEqualTo("string");
+            }
+            assertThat(unchanged).isEqualTo(mapper.readTree(original.getToolDefinition().inputSchema()));
+        }
+        assertThat(constrained).isEqualTo(22);
+    }
+
+    private static Object[] newNoopTools() {
         return newTools(mock(GetAllContactosUseCase.class));
     }
 
-    private static SpringAiCrmTools newTools(GetAllContactosUseCase getAllContactosUseCase) {
-        return new SpringAiCrmTools(
-                getAllContactosUseCase,
-                mock(CreateContactoUseCase.class),
-                mock(EditContactoUseCase.class),
-                mock(CreateEmpresaUseCase.class),
-                mock(EditEmpresaUseCase.class),
-                mock(EditTratoUseCase.class));
+    private static Object[] newTools(GetAllContactosUseCase getAllContactosUseCase) {
+        return new Object[]{
+                new TableroTools(mock(com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.CreateTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.EditTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
+                        mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class)),
+                new ColumnaTools(mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
+                        mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
+                        mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
+                        mock(com.ar.crm2.application.columna.port.in.EditColumnaUseCase.class),
+                        mock(com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase.class)),
+                new FichaTools(mock(com.ar.crm2.application.ficha.port.in.CreateFichaUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.EditFichaUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.DeleteFichaUseCase.class),
+                        mock(com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase.class)),
+                new ContactoTools(getAllContactosUseCase, mock(CreateContactoUseCase.class),
+                        mock(EditContactoUseCase.class), mock(com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase.class),
+                        mock(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class),
+                        mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class)),
+                new EmpresaTools(mock(CreateEmpresaUseCase.class),
+                        mock(com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class),
+                        mock(EditEmpresaUseCase.class), mock(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class),
+                        mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class)),
+                new TratoTools(mock(com.ar.crm2.application.trato.port.in.CreateTratoUseCase.class),
+                        mock(com.ar.crm2.application.trato.port.in.GetAllTratosUseCase.class),
+                        mock(com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase.class),
+                        mock(EditTratoUseCase.class), mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class)),
+                new TareaTools(mock(com.ar.crm2.application.tarea.port.in.CreateTareaUseCase.class),
+                        mock(com.ar.crm2.application.tarea.port.in.GetAllTareasUseCase.class),
+                        mock(com.ar.crm2.application.tarea.port.in.GetTareaByIdUseCase.class),
+                        mock(com.ar.crm2.application.tarea.port.in.EditTareaUseCase.class),
+                        mock(com.ar.crm2.application.tarea.port.in.DeleteTareaUseCase.class)),
+                new EtiquetaTools(mock(com.ar.crm2.application.etiqueta.port.in.CreateEtiquetaUseCase.class),
+                        mock(com.ar.crm2.application.etiqueta.port.in.GetAllEtiquetasUseCase.class),
+                        mock(com.ar.crm2.application.etiqueta.port.in.GetEtiquetaByIdUseCase.class),
+                        mock(com.ar.crm2.application.etiqueta.port.in.EditEtiquetaUseCase.class),
+                        mock(com.ar.crm2.application.etiqueta.port.in.DeleteEtiquetaUseCase.class)),
+                new AgendaTools(mock(com.ar.crm2.application.agenda.port.in.CreateAgendaUseCase.class),
+                        mock(com.ar.crm2.application.agenda.port.in.GetAgendasByUserUseCase.class),
+                        mock(com.ar.crm2.application.agenda.port.in.GetAgendaByIdUseCase.class),
+                        mock(com.ar.crm2.application.agenda.port.in.EditAgendaUseCase.class),
+                        mock(com.ar.crm2.application.agenda.port.in.DeleteAgendaUseCase.class))};
     }
 
     private static ChatClient newClientUnderTest() {
         return new AgentConfig().chatClient(new CapturingChatModel("ok"), newNoopTools());
-    }
-
-    private static SpringAiDevelopmentCrmTools newNoopDevelopmentTools() {
-        return new SpringAiDevelopmentCrmTools(
-                mock(com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.CreateTableroUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.EditTableroUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class),
-                mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
-                mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
-                mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
-                mock(com.ar.crm2.application.columna.port.in.EditColumnaUseCase.class),
-                mock(com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase.class),
-                mock(com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase.class),
-                mock(com.ar.crm2.application.ficha.port.in.CreateFichaUseCase.class),
-                mock(com.ar.crm2.application.ficha.port.in.EditFichaUseCase.class),
-                mock(com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase.class));
     }
 
     @Test
@@ -126,23 +213,15 @@ class AgentConfigTest {
     }
 
     @Test
-    void chatClientFactoryConsumesTheSharedStatelessSpringAiCrmToolsBean() {
-        // The factory signature must accept the shared SpringAiCrmTools
-        // bean — NOT a binder or any request-scoped type. The shared
-        // tools carry only the existing use cases.
+    void chatClientFactoryConsumesAllResourceToolGroups() {
         Method chatClientMethod = findChatClientFactoryMethod();
 
         Parameter[] parameters = chatClientMethod.getParameters();
-        boolean hasSharedToolsParameter = false;
-        for (Parameter parameter : parameters) {
-            if (SpringAiCrmTools.class.equals(parameter.getType())) {
-                hasSharedToolsParameter = true;
-                break;
-            }
-        }
-        assertThat(hasSharedToolsParameter)
-                .as("chatClient factory must accept the shared SpringAiCrmTools bean for defaultTools(...)")
-                .isTrue();
+        Set<Class<?>> parameterTypes = java.util.Arrays.stream(parameters)
+                .map(Parameter::getType).collect(java.util.stream.Collectors.toSet());
+        assertThat(parameterTypes).contains(TableroTools.class, ColumnaTools.class, FichaTools.class,
+                ContactoTools.class, EmpresaTools.class, TratoTools.class, TareaTools.class,
+                EtiquetaTools.class, AgendaTools.class);
         // The factory must NOT receive a binder/request-tools class.
         for (Parameter parameter : parameters) {
             assertThat(parameter.getType().getSimpleName())
@@ -216,8 +295,18 @@ class AgentConfigTest {
                 .contains("create_contact")
                 .contains("edit_contact")
                 .contains("create_company")
-                .contains("edit_company", "edit_trato")
-                .doesNotContain("list_tableros", "create_columna", "edit_ficha");
+                .contains("edit_company", "edit_trato", "list_tableros", "get_tablero", "create_tablero",
+                        "edit_tablero", "delete_tablero", "eliminar_columna_del_tablero",
+                        "assign_columna_to_tablero", "reorder_tablero_columns", "list_columnas",
+                        "get_columna", "create_columna", "edit_columna", "delete_columna",
+                        "list_fichas", "get_ficha", "create_ficha", "edit_ficha", "delete_ficha",
+                        "move_ficha_to_columna", "create_tarea", "list_tareas", "get_tarea",
+                        "edit_tarea", "delete_tarea", "create_etiqueta", "list_etiquetas",
+                        "get_etiqueta", "edit_etiqueta", "delete_etiqueta", "create_agenda",
+                        "list_agendas", "get_agenda", "edit_agenda", "delete_agenda",
+                        "get_contact", "change_contact_state", "delete_contact", "list_companies",
+                        "change_company_state", "delete_company", "create_trato", "list_tratos",
+                        "get_trato", "delete_trato");
         assertThat(text)
                 .as("template forbids the model from supplying actor identity")
                 .containsIgnoringCase("actor");
@@ -229,9 +318,30 @@ class AgentConfigTest {
                 .as("template mentions the durable memory placeholder")
                 .containsIgnoringCase("durable memory");
         assertThat(text)
-                .as("company deletion is intentionally not advertised")
-                .doesNotContain("delete_company")
-                .doesNotContain("delete_empresa");
+                .as("destructive tools and label deletion confirmation policy are disclosed")
+                .contains("delete_company", "Only delete records after the owner clearly requests deletion",
+                        "pass confirm=true only after explicit confirmation");
+        assertThat(text)
+                .as("write choices belong to the owner, not silent model defaults")
+                .contains("explicit choices in the current conversation", "scoped permission", "wait for the owner's reply",
+                        "Permission already given", "disclose which values you chose", "never fabricate optional facts",
+                        "Read-only queries do not need this clarification", "preserve unchanged fields",
+                        "never silently clear", "available read tools", "ask when a match is ambiguous",
+                        "name, description, and board type", "do not default to TAREAS");
+    }
+
+    @Test
+    void boardCallbackExplainsMissingInputPolicyAndUserChosenType() throws Exception {
+        CapturingChatModel model = new CapturingChatModel("ok");
+        new AgentConfig().chatClient(model, newNoopTools()).prompt().user("hi").call().content();
+        var callbacks = ((ToolCallingChatOptions) model.capturedPrompt().getOptions()).getToolCallbacks();
+        var board = callbacks.stream().filter(c -> c.getToolDefinition().name().equals("create_tablero"))
+                .findFirst().orElseThrow().getToolDefinition();
+        assertThat(board.description()).contains("ask for missing description/type", "permission to choose them");
+        var properties = new ObjectMapper().readTree(board.inputSchema()).path("properties");
+        assertThat(properties.path("descripcion").path("description").asText()).contains("owner", "permission");
+        assertThat(properties.path("tipoTablero").path("description").asText())
+                .contains("owner", "permission", "Never silently default");
     }
 
     @Test
@@ -290,19 +400,19 @@ class AgentConfigTest {
     }
 
     @Test
-    void sharedSpringAiCrmToolsIsRegisteredAsDefaultToolsOnTheConfiguredChatClient() {
-         // The configured ChatClient must expose the shared non-delete tools
+    void resourceToolGroupsAreRegisteredAsDefaultToolsOnTheConfiguredChatClient() {
+         // The configured ChatClient must expose the full allowlisted catalog
         // through the maintained Spring AI 2.0 defaultTools path. The
         // exact tool names appear in the ChatClient's default callbacks
         // (introspected via getToolCallbacks() if exposed; otherwise via
         // the round-trip prompt that carries the schema to the model).
         CapturingChatModel model = new CapturingChatModel("ok");
-        SpringAiCrmTools sharedTools = newNoopTools();
-        ChatClient configured = new AgentConfig().chatClient(model, sharedTools);
+        Object[] toolGroups = newNoopTools();
+        ChatClient configured = new AgentConfig().chatClient(model, toolGroups);
 
         // Round-trip exercises the configured ChatClient end-to-end.
         // The captured prompt includes the tool definitions sent to the
-         // model. All non-delete allowlisted tool names must be present.
+         // model. All allowlisted tool names must be present.
         configured.prompt()
                 .system(spec -> spec.param("durable_memories", ""))
                 .user("hi")
@@ -311,50 +421,34 @@ class AgentConfigTest {
 
         String renderedSystem = model.capturedPrompt().getInstructions().get(0).getText();
         assertThat(renderedSystem)
-                .as("the configured client must advertise all non-delete allowlisted tools by name")
+                .as("the configured client must advertise all allowlisted tools by name")
                 .contains("find_contacts")
                 .contains("create_contact")
                 .contains("edit_contact")
                 .contains("create_company")
-                .contains("edit_company", "edit_trato")
-                .doesNotContain("list_tableros", "create_columna", "edit_ficha");
+                .contains("edit_company", "edit_trato", "list_tableros", "create_columna", "edit_ficha",
+                        "delete_company", "create_agenda", "delete_tarea", "delete_ficha");
 
-        // The shared tools object must be reusable across ChatClient
-        // builds — the same shared instance produces the same callback
-        // set every time. This guards against an accidental regression
-        // to a per-invocation binder/factory.
+        // The stateless resource groups are reusable across ChatClient builds.
         org.springframework.ai.tool.ToolCallback[] callbacks =
-                org.springframework.ai.support.ToolCallbacks.from(sharedTools);
+                org.springframework.ai.support.ToolCallbacks.from(toolGroups);
         Set<String> names = new HashSet<>();
         for (ToolCallback callback : callbacks) {
             names.add(callback.getToolDefinition().name());
         }
         assertThat(names)
-                 .as("the shared SpringAiCrmTools bean must produce exactly the non-delete allowlisted callbacks")
+                 .as("the resource tool groups must produce exactly the allowlisted callbacks")
                  .containsExactlyInAnyOrder(
-                         "find_contacts", "create_contact", "edit_contact", "create_company", "edit_company", "edit_trato");
-    }
-
-    @Test
-    void developmentToolsOptInAdvertisesExactlyTwentyOneCallbacksAndPromptNames() {
-        CapturingChatModel model = new CapturingChatModel("ok");
-        SpringAiCrmTools base = newNoopTools();
-        SpringAiDevelopmentCrmTools development = newNoopDevelopmentTools();
-        ChatClient configured = new AgentConfig().buildChatClient(
-                model, base, development,
-                new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()));
-
-        configured.prompt().system(spec -> spec.param("durable_memories", "")).user("hi").call().content();
-
-        Set<String> names = new HashSet<>();
-        for (ToolCallback callback : org.springframework.ai.support.ToolCallbacks.from(base, development)) {
-            names.add(callback.getToolDefinition().name());
-        }
-        assertThat(names).hasSize(21)
-                .contains("find_contacts", "edit_trato", "list_tableros", "create_columna", "edit_ficha")
-                .noneMatch(name -> name.contains("delete") || name.contains("remove"));
-        assertThat(model.capturedPrompt().getInstructions().get(0).getText())
-                .contains("list_tableros", "move_ficha_to_columna");
+                         "find_contacts", "create_contact", "get_contact", "edit_contact", "change_contact_state", "delete_contact",
+                         "create_company", "list_companies", "edit_company", "change_company_state", "delete_company",
+                         "create_trato", "list_tratos", "get_trato", "edit_trato", "delete_trato",
+                         "create_tarea", "list_tareas", "get_tarea", "edit_tarea", "delete_tarea",
+                         "create_etiqueta", "list_etiquetas", "get_etiqueta", "edit_etiqueta", "delete_etiqueta",
+                         "create_agenda", "list_agendas", "get_agenda", "edit_agenda", "delete_agenda",
+                         "list_tableros", "get_tablero", "create_tablero", "edit_tablero", "delete_tablero",
+                         "eliminar_columna_del_tablero", "assign_columna_to_tablero", "reorder_tablero_columns",
+                         "list_columnas", "get_columna", "create_columna", "edit_columna", "delete_columna",
+                         "list_fichas", "get_ficha", "create_ficha", "edit_ficha", "delete_ficha", "move_ficha_to_columna");
     }
 
     @Test
@@ -365,8 +459,8 @@ class AgentConfigTest {
         SequentialToolCallingChatModel model =
                 new SequentialToolCallingChatModel("find_contacts", "{}");
         ChatClient configured = new AgentConfig().buildChatClient(
-                model, newTools(useCase), null,
-                new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()));
+                model, new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()),
+                newTools(useCase));
 
         String content = configured.prompt()
                 .system(spec -> spec.param("durable_memories", ""))
@@ -389,10 +483,10 @@ class AgentConfigTest {
     @Test
     void realToolLoopReturnsOnlyStableCodeForExplicitSafeValidationFailure() {
         SequentialToolCallingChatModel model = new SequentialToolCallingChatModel(
-                "create_contact", "{\"nombre\":\"Ada\",\"estadoRelacion\":\"CLIENTE\"}");
+                "create_contact", "{\"nombre\":\"Ada\",\"estadoRelacion\":\"ACTIVO\"}");
         ChatClient configured = new AgentConfig().buildChatClient(
-                model, newNoopTools(), null,
-                new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()));
+                model, new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(new ObjectMapper()),
+                newNoopTools());
 
         configured.prompt()
                 .system(spec -> spec.param("durable_memories", ""))

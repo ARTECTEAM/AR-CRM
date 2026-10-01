@@ -881,52 +881,108 @@ public class WiringConfig {
     }
 
 
-    // ── Pipely Agent: A3 Tool Components ─────────────────────────────────
+    // ── Pipely Agent: Resource Tool Components ────────────────────────────
 
     /**
-     * Stateless shared Spring AI 2.0 CRM tools bean.
-     *
-     * <p>Stores only shared dependencies: the existing Application
-     * use cases that back every allowlisted tool
-     * ({@code GetAllContactosUseCase}, {@code CreateContactoUseCase},
-     * {@code EditContactoUseCase}, {@code CreateEmpresaUseCase},
-     * {@code EditEmpresaUseCase}, and the canonical
-     * {@code EditTratoUseCase}). Spring AI's default result converter
-     * serializes the bounded return records. The bean
-     * carries NO request actor, owner, or turn: every trusted CRM
-     * identity piece reaches each tool through the framework's
-     * per-request {@code ToolContext} parameter on the
-     * {@link ChatClient#prompt()} call. Boot registers this same
-     * shared object once via {@code ChatClient.Builder#defaultTools(tools)}
-     * in {@link AgentConfig}; every request through the default configured
-     * {@code ChatClient} advertises these six non-delete tools
-     * ({@code find_contacts}, {@code create_contact},
-     * {@code edit_contact}, {@code create_company},
-     * {@code edit_company}, {@code edit_trato}) and Spring AI 2.0's
-     * {@code JsonSchemaGenerator} excludes any {@code ToolContext} from
-     * the generated JSON schema.
-     *
-      * <p>All board, column, and card deletion/removal operations are outside
-      * this allowlist. Temporary actor/tenant authorization debt is documented
-      * in the infrastructure adapter and blocks production exposure.
-     *
-     * <p>No REST endpoint is added for these tools: tool-only features
-     * MUST NOT create controllers without a separate HTTP use case.
+     * Creates stateless resource-aligned tool adapters. Trusted identity is supplied per call
+     * through ToolContext; its presence does not imply target ownership authorization.
+     * AgentConfig registers these nine beans as the 50-tool catalog.
      */
     @Bean
-    public com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools springAiCrmTools(
-            GetAllContactosUseCase getAllContactosUseCase,
-            CreateContactoUseCase createContactoUseCase,
-            EditContactoUseCase editContactoUseCase,
-            com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase createEmpresaUseCase,
-            com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase editEmpresaUseCase,
-            com.ar.crm2.application.trato.port.in.EditTratoUseCase editTratoUseCase
-    ) {
-        return new com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools(
-                getAllContactosUseCase, createContactoUseCase, editContactoUseCase,
-                createEmpresaUseCase, editEmpresaUseCase, editTratoUseCase);
+    public com.ar.crm2.adapter.out.ai.tool.TableroTools tableroTools(
+            com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase getAll,
+            com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase getById,
+            com.ar.crm2.application.tablero.port.in.CreateTableroUseCase create,
+            com.ar.crm2.application.tablero.port.in.EditTableroUseCase edit,
+            com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase delete,
+            com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase eliminarColumna,
+            com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase asignarColumna,
+            com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase reordenarColumnas) {
+        return new com.ar.crm2.adapter.out.ai.tool.TableroTools(
+                getAll, getById, create, edit, delete, eliminarColumna, asignarColumna, reordenarColumnas);
     }
 
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.ColumnaTools columnaTools(
+            com.ar.crm2.application.columna.port.in.CreateColumnaUseCase create,
+            com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase getAll,
+            com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase getById,
+            com.ar.crm2.application.columna.port.in.EditColumnaUseCase edit,
+            com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.ColumnaTools(create, getAll, getById, edit, delete);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.FichaTools fichaTools(
+            com.ar.crm2.application.ficha.port.in.CreateFichaUseCase create,
+            com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase getAll,
+            com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase getById,
+            com.ar.crm2.application.ficha.port.in.EditFichaUseCase edit,
+            com.ar.crm2.application.ficha.port.in.DeleteFichaUseCase delete,
+            com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase mover) {
+        return new com.ar.crm2.adapter.out.ai.tool.FichaTools(create, getAll, getById, edit, delete, mover);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.ContactoTools contactoTools(
+            GetAllContactosUseCase getAll,
+            CreateContactoUseCase create,
+            EditContactoUseCase edit,
+            com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase getById,
+            com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase delete,
+            com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase cambiarEstado) {
+        return new com.ar.crm2.adapter.out.ai.tool.ContactoTools(getAll, create, edit, getById, delete, cambiarEstado);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.EmpresaTools empresaTools(
+            com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase create,
+            com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase getAll,
+            com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase edit,
+            com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase delete,
+            com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase cambiarEstado) {
+        return new com.ar.crm2.adapter.out.ai.tool.EmpresaTools(create, getAll, edit, delete, cambiarEstado);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.TratoTools tratoTools(
+            com.ar.crm2.application.trato.port.in.CreateTratoUseCase create,
+            com.ar.crm2.application.trato.port.in.GetAllTratosUseCase getAll,
+            com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase getById,
+            com.ar.crm2.application.trato.port.in.EditTratoUseCase edit,
+            com.ar.crm2.application.trato.port.in.DeleteTratoUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.TratoTools(create, getAll, getById, edit, delete);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.TareaTools tareaTools(
+            com.ar.crm2.application.tarea.port.in.CreateTareaUseCase create,
+            com.ar.crm2.application.tarea.port.in.GetAllTareasUseCase getAll,
+            com.ar.crm2.application.tarea.port.in.GetTareaByIdUseCase getById,
+            com.ar.crm2.application.tarea.port.in.EditTareaUseCase edit,
+            com.ar.crm2.application.tarea.port.in.DeleteTareaUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.TareaTools(create, getAll, getById, edit, delete);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.EtiquetaTools etiquetaTools(
+            com.ar.crm2.application.etiqueta.port.in.CreateEtiquetaUseCase create,
+            com.ar.crm2.application.etiqueta.port.in.GetAllEtiquetasUseCase getAll,
+            com.ar.crm2.application.etiqueta.port.in.GetEtiquetaByIdUseCase getById,
+            com.ar.crm2.application.etiqueta.port.in.EditEtiquetaUseCase edit,
+            com.ar.crm2.application.etiqueta.port.in.DeleteEtiquetaUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.EtiquetaTools(create, getAll, getById, edit, delete);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.AgendaTools agendaTools(
+            com.ar.crm2.application.agenda.port.in.CreateAgendaUseCase create,
+            com.ar.crm2.application.agenda.port.in.GetAgendasByUserUseCase getByUser,
+            com.ar.crm2.application.agenda.port.in.GetAgendaByIdUseCase getById,
+            com.ar.crm2.application.agenda.port.in.EditAgendaUseCase edit,
+            com.ar.crm2.application.agenda.port.in.DeleteAgendaUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.AgendaTools(create, getByUser, getById, edit, delete);
+    }
     /**
      * Provider-neutral Spring AI completion adapter.
      *

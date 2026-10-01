@@ -1,6 +1,6 @@
 package com.ar.crm2.adapter.in.rest;
 
-import com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools;
+import com.ar.crm2.adapter.out.ai.tool.ContactoTools;
 import com.ar.crm2.adapter.out.persistence.agent.AgentTurnAdapter;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentConversationRepository;
 import com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository;
@@ -208,7 +208,7 @@ class AgentConversationIT {
                 AgentTurnRequestRepository r, AgentVisibleHistoryRepository h) {
             return new AgentTurnAdapter(c, t, r, h);
         }
-        @Bean ChatCompletionPort chatCompletionPort(SpringAiCrmTools tools) {
+        @Bean ChatCompletionPort chatCompletionPort(ContactoTools tools) {
             return new StubChatCompletionPort(tools);
         }
         @Bean FindEligibleDurableMemoriesPort findEligibleDurableMemoriesPort() {
@@ -228,13 +228,21 @@ class AgentConversationIT {
             // mapper tolerates a null Trato.
             return command -> null;
         }
-        @Bean SpringAiCrmTools crmTools(GetAllContactosUseCase get, CreateContactoUseCase create,
+        @Bean ContactoTools crmTools(GetAllContactosUseCase get, CreateContactoUseCase create,
                 EditContactoUseCase editContacto,
-                CreateEmpresaUseCase createCompany, EditEmpresaUseCase editCompany,
-                EditTratoUseCase editTratoUseCase) {
-            return new SpringAiCrmTools(get, create, editContacto,
-                    createCompany, editCompany,
-                    editTratoUseCase);
+                com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase getById,
+                com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase delete,
+                com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase changeState) {
+            return new ContactoTools(get, create, editContacto, getById, delete, changeState);
+        }
+        @Bean com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase getContactoByIdUseCase() {
+            return org.mockito.Mockito.mock(com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase.class);
+        }
+        @Bean com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase deleteContactoUseCase() {
+            return org.mockito.Mockito.mock(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class);
+        }
+        @Bean com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase cambiarEstadoContactoUseCase() {
+            return org.mockito.Mockito.mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class);
         }
         @Bean ObjectMapper objectMapper() { return new ObjectMapper(); }
         @Bean CreateUserTurnService createUserTurnService(CreateUserTurnPort p) { return new CreateUserTurnService(p); }
@@ -269,7 +277,7 @@ class AgentConversationIT {
         private String lastToolResult;
         private String lastResponse;
 
-        StubChatCompletionPort(SpringAiCrmTools tools) {
+        StubChatCompletionPort(ContactoTools tools) {
             findContacts = Arrays.stream(ToolCallbacks.from(tools))
                     .filter(tool -> "find_contacts".equals(tool.getToolDefinition().name()))
                     .findFirst().orElseThrow();

@@ -70,9 +70,6 @@ server:
   port: 8080
 
 crm2:
-  agent:
-    # Development-only actor/tenant-unscoped board, column, and card tools.
-    development-tools-enabled: false
   keycloak:
     admin:
       server-url: ${CRM2_KEYCLOAK_SERVER_URL:http://localhost:8180}
