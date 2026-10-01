@@ -62,3 +62,28 @@ CREATE INDEX IF NOT EXISTS idx_fichas_etiquetas_etiqueta
 UPDATE tratos
 SET estado = 'CERRADO'
 WHERE estado IN ('GANADO', 'PERDIDO');
+
+-- Configurable role authorization. Existing roles have no rows in this table
+-- and therefore remain denied until an administrator explicitly configures them.
+CREATE TABLE IF NOT EXISTS rol_permisos (
+    rol_id              VARCHAR(36) NOT NULL,
+    recurso             VARCHAR(32) NOT NULL,
+    acciones            VARCHAR(255) NOT NULL,
+    alcance             VARCHAR(40) NOT NULL,
+    ids_permitidos      TEXT,
+    grupos_lectura      VARCHAR(100) NOT NULL,
+    grupos_escritura    VARCHAR(100) NOT NULL,
+    CONSTRAINT pk_rol_permisos PRIMARY KEY (rol_id, recurso),
+    CONSTRAINT fk_rol_permisos_rol FOREIGN KEY (rol_id) REFERENCES roles (id) ON DELETE CASCADE
+);
+
+-- A validated JWT subject resolves to exactly one local CRM user. PostgreSQL
+-- unique indexes allow multiple NULLs, so users without Keycloak linkage remain valid.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_usuarios_keycloak_id
+    ON usuarios (keycloak_id);
+
+-- Old agent history/memory is not carried across a changed permission policy.
+ALTER TABLE IF EXISTS agent_visible_history
+    ADD COLUMN IF NOT EXISTS authorization_revision VARCHAR(64);
+ALTER TABLE IF EXISTS agent_durable_memories
+    ADD COLUMN IF NOT EXISTS authorization_revision VARCHAR(64);
