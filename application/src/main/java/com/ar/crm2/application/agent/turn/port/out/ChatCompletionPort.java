@@ -1,5 +1,6 @@
 package com.ar.crm2.application.agent.turn.port.out;
 
+import com.ar.crm2.application.security.AuthorizationCapabilities;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
 import com.ar.crm2.model.agent.vo.VisibleMessage;
@@ -32,6 +33,7 @@ public interface ChatCompletionPort {
             AgentOwnerId ownerId,
             UUID actorUsuarioId,
             UUID actorSuperUsuarioId,
+            AuthorizationCapabilities authorizationCapabilities,
             TurnId turnId,
             List<VisibleMessage> visibleHistory,
             List<String> durableMemories,

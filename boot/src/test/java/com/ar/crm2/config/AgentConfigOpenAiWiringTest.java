@@ -6,6 +6,16 @@ import com.ar.crm2.application.contacto.port.in.GetAllContactosUseCase;
 import com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
+import com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter;
+import com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog;
+import com.ar.crm2.application.security.AuthorizationCapabilities;
+import com.ar.crm2.application.security.ResourceCapabilities;
+import com.ar.crm2.model.agent.vo.AgentOwnerId;
+import com.ar.crm2.model.agent.vo.TurnId;
+import com.ar.crm2.model.agent.vo.VisibleMessage;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.AlcanceCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.adapter.out.ai.tool.AgendaTools;
 import com.ar.crm2.adapter.out.ai.tool.ColumnaTools;
 import com.ar.crm2.adapter.out.ai.tool.ContactoTools;
@@ -29,6 +39,9 @@ import org.springframework.context.annotation.Import;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -158,7 +171,8 @@ class AgentConfigOpenAiWiringTest {
             ChatClient chatClient = context.getBean(chatClientBeans[0], ChatClient.class);
 
             String content = chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", "- wired-memory"))
+                    .system(spec -> spec.param("durable_memories", "- wired-memory")
+                            .param("agent_capabilities", "No CRM tool capabilities."))
                     .user("hi-from-context")
                     .call()
                     .content();
@@ -177,7 +191,8 @@ class AgentConfigOpenAiWiringTest {
             ChatClient chatClient = context.getBean(ChatClient.class);
 
             chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", "- wired-memory-2"))
+                    .system(spec -> spec.param("durable_memories", "- wired-memory-2")
+                            .param("agent_capabilities", "No CRM tool capabilities."))
                     .user("hello")
                     .call()
                     .content();
@@ -214,7 +229,7 @@ class AgentConfigOpenAiWiringTest {
     }
 
     @Test
-    void groupedResourceToolsAreResolvedAsTheExactDefaultToolCatalog() {
+    void groupedResourceToolsBuildAnExactCatalogWithoutGlobalChatClientCallbacks() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 OpenAiTestContext.class)) {
 
@@ -229,18 +244,19 @@ class AgentConfigOpenAiWiringTest {
             assertThat(context.getBean(AgendaTools.class)).isNotNull();
 
             ChatClient chatClient = context.getBean(ChatClient.class);
-
-            // Round-trip confirms all resource groups reach the configured client.
             chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", ""))
+                    .system(spec -> spec.param("durable_memories", "")
+                            .param("agent_capabilities", "No CRM tool capabilities."))
                     .user("hi")
                     .call()
                     .content();
 
             var callbacks = ((ToolCallingChatOptions) ((CapturingChatModel) context.getBean("openAiChatModel"))
                     .capturedPrompt().getOptions()).getToolCallbacks();
-            assertThat(callbacks).hasSize(50);
-            assertThat(callbacks.stream().map(callback -> callback.getToolDefinition().name()))
+            assertThat(callbacks).as("the shared production ChatClient has no default tools").isNullOrEmpty();
+
+            AgentToolCallbackCatalog catalog = context.getBean(AgentToolCallbackCatalog.class);
+            assertThat(catalog.registeredToolNames()).hasSize(50)
                     .containsExactlyInAnyOrder(
                             "find_contacts", "create_contact", "get_contact", "edit_contact", "change_contact_state", "delete_contact",
                             "create_company", "list_companies", "edit_company", "change_company_state", "delete_company",
@@ -256,12 +272,61 @@ class AgentConfigOpenAiWiringTest {
     }
 
     @Test
+    void productionAdapterSendsNoToolDefinitionsWhenTurnHasNoCapabilities() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                OpenAiTestContext.class)) {
+            ChatClient chatClient = context.getBean(ChatClient.class);
+            AgentToolCallbackCatalog catalog = context.getBean(AgentToolCallbackCatalog.class);
+            var adapter = new SpringAiChatCompletionAdapter(chatClient, catalog);
+
+            adapter.complete(AgentOwnerId.from("owner-test"), UUID.randomUUID(), null,
+                    AuthorizationCapabilities.none(), TurnId.create(),
+                    List.of(VisibleMessage.user("use a tool")), List.of(), "use a tool");
+
+            var options = (ToolCallingChatOptions) ((CapturingChatModel) context.getBean("openAiChatModel"))
+                    .capturedPrompt().getOptions();
+            assertThat(options.getToolCallbacks())
+                    .as("the production request has no callback definitions for a no-capability turn")
+                    .isNullOrEmpty();
+        }
+    }
+
+    @Test
+    void productionAdapterSendsOnlyCallbacksPermittedByTheTurnSnapshot() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                OpenAiTestContext.class)) {
+            ChatClient chatClient = context.getBean(ChatClient.class);
+            AgentToolCallbackCatalog catalog = context.getBean(AgentToolCallbackCatalog.class);
+            var adapter = new SpringAiChatCompletionAdapter(chatClient, catalog);
+            AuthorizationCapabilities capabilities = new AuthorizationCapabilities(Map.of(
+                    RecursoCrm.CONTACTO, readCapability(),
+                    RecursoCrm.EMPRESA, readCapability()));
+
+            adapter.complete(AgentOwnerId.from("owner-test"), UUID.randomUUID(), null,
+                    capabilities, TurnId.create(), List.of(VisibleMessage.user("find contacts")),
+                    List.of(), "find contacts");
+
+            var options = (ToolCallingChatOptions) ((CapturingChatModel) context.getBean("openAiChatModel"))
+                    .capturedPrompt().getOptions();
+            assertThat(options.getToolCallbacks())
+                    .extracting(callback -> callback.getToolDefinition().name())
+                    .containsExactly("find_contacts", "get_contact", "list_companies");
+        }
+    }
+
+    private static ResourceCapabilities readCapability() {
+        return new ResourceCapabilities(AlcanceCrm.TODO_COMPARTIDO,
+                Set.of(AccionCrm.LEER), Set.of(), Set.of());
+    }
+
+    @Test
     void wiredContextClosesCleanlyAfterOpenAiChatClientRoundTrip() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 OpenAiTestContext.class)) {
             ChatClient chatClient = context.getBean(ChatClient.class);
             chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", "- x"))
+                    .system(spec -> spec.param("durable_memories", "- x")
+                            .param("agent_capabilities", "No CRM tool capabilities."))
                     .user("y")
                     .call()
                     .content();

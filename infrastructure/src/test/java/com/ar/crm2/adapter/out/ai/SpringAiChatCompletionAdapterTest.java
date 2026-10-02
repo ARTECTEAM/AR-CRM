@@ -2,6 +2,12 @@ package com.ar.crm2.adapter.out.ai;
 
 import com.ar.crm2.adapter.out.ai.testing.CapturingChatModel;
 import com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort;
+import com.ar.crm2.application.security.AuthorizationCapabilities;
+import com.ar.crm2.application.security.ResourceCapabilities;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.AlcanceCrm;
+import com.ar.crm2.model.autorizacion.GrupoCampoSensible;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
 import com.ar.crm2.model.agent.vo.VisibleMessage;
@@ -17,6 +23,7 @@ import org.springframework.ai.chat.model.Generation;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -46,11 +53,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *     <li>Forwards the trusted CRM {@code actorUsuarioId} per request via the
  *         framework {@code .toolContext(Map.of("actorUsuarioId", ...))} path,
  *         so the model's view of the request never carries the identity.</li>
- *     <li>Does NOT call request {@code .tools(...)} — Spring AI 2.0 runtime
- *         tools would replace builder defaults, so the adapter only supplies
- *         trusted per-request tool context and lets the configured
-     *         {@code defaultTools} (the 50 allowlisted CRM tools) reach the
- *         model unchanged.</li>
+ *     <li>Supplies only the authorization-filtered callbacks for this
+ *         request. A missing capability mapping fails closed with no tool
+ *         callbacks; no user-specific callback set is stored globally.</li>
  * </ul>
  *
  * <p>These tests use deterministic provider-free seams ({@link CapturingChatModel}
@@ -75,11 +80,10 @@ class SpringAiChatCompletionAdapterTest {
 
     /**
      * Memory-aware fixture that mirrors the shape of what the production
-     * {@code com.ar.crm2.config.AgentConfig} bean owns at runtime, plus
-     * the six shared {@code defaultTools} the agent advertises. The
-     * adapter is constructed only with the configured {@link ChatClient};
-     * it MUST NOT need the tools at construction time because the
-     * defaults carry the tool catalog.
+     * {@code com.ar.crm2.config.AgentConfig} bean owns at runtime. The
+     * adapter is constructed with the configured {@link ChatClient} and
+     * an immutable callback catalog; the default fixture uses a fail-closed
+     * empty catalog.
      */
     private static ChatClient newMemoryAwareClient(CapturingChatModel model) {
         return ChatClient.builder(model)
@@ -388,6 +392,50 @@ class SpringAiChatCompletionAdapterTest {
     }
 
     @Test
+    void rendersRoleCapabilitiesAsAnUpperBoundWithoutExposingRecordIdentifiers() {
+        UUID privateBoardId = UUID.fromString("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+        AuthorizationCapabilities capabilities = new AuthorizationCapabilities(Map.of(
+                RecursoCrm.TABLERO, new ResourceCapabilities(
+                        AlcanceCrm.TABLEROS_PERMITIDOS,
+                        Set.of(AccionCrm.LEER),
+                        Set.of(GrupoCampoSensible.FINANCIERO),
+                        Set.of())
+        ));
+        CapturingChatModel model = new CapturingChatModel("ok");
+        ChatClient client = ChatClient.builder(model).defaultSystem("{agent_capabilities}").build();
+        SpringAiChatCompletionAdapter adapter = new SpringAiChatCompletionAdapter(
+                client, com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog.empty());
+
+        adapter.complete(OWNER, ACTOR_USUARIO_ID, null, capabilities, TURN,
+                List.of(VisibleMessage.user("show board")), List.of(), "show board");
+
+        String summary = model.capturedPrompt().getInstructions().stream()
+                .filter(SystemMessage.class::isInstance)
+                .map(Message::getText)
+                .findFirst()
+                .orElseThrow();
+        assertThat(summary)
+                .contains("upper bound", "TABLERO", "record_scope=TABLEROS_PERMITIDOS",
+                        "readable_sensitive_groups=FINANCIERO", "record, relationship, and field checks")
+                .doesNotContain(privateBoardId.toString());
+    }
+
+    @Test
+    void noCapabilitiesProducesNoModelToolDefinitions() {
+        CapturingChatModel model = new CapturingChatModel("ok");
+        ChatClient client = ChatClient.builder(model).defaultSystem("{agent_capabilities}").build();
+        SpringAiChatCompletionAdapter adapter = new SpringAiChatCompletionAdapter(
+                client, com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog.empty());
+
+        adapter.complete(OWNER, ACTOR_USUARIO_ID, null, AuthorizationCapabilities.none(), TURN,
+                List.of(VisibleMessage.user("try a tool")), List.of(), "try a tool");
+
+        assertThat(model.capturedPrompt().getOptions())
+                .as("a turn with no matching authorization mapping sends no tool definitions")
+                .isNotInstanceOf(org.springframework.ai.model.tool.ToolCallingChatOptions.class);
+    }
+
+    @Test
     void ownerTurnAndActorAreNeverEmbeddedInAnyModelVisiblePromptPart() {
         // Spring AI 2.0 stores `.toolContext(Map)` on the request spec /
         // ChatClientRequest.context, not on the Prompt options the
@@ -423,15 +471,9 @@ class SpringAiChatCompletionAdapterTest {
     }
 
     @Test
-    void adapterConstructsWithoutToolsArgumentAndDoesNotRequestToolsPerInvocation() {
-        // The corrected adapter must NOT take a per-request tools binder or
-        // any tools at construction — defaults are registered once on the
-        // ChatClient by AgentConfig. The adapter also must NOT call
-        // .tools(...) at request time (Spring AI 2.0 runtime tools
-        // replace defaults). Construct via reflection to prove the
-        // constructor signature has no tools parameter; this guards
-        // against an accidental regression to the prior binder-based
-        // architecture.
+    void adapterHasFailClosedChatClientOnlyConstructorForTests() {
+        // Direct test construction remains fail-closed; the production
+        // composition injects the complete immutable callback catalog.
         CapturingChatModel model = new CapturingChatModel("ok");
         ChatClient client = newMemoryAwareClient(model);
         SpringAiChatCompletionAdapter adapter = new SpringAiChatCompletionAdapter(client);
@@ -451,7 +493,7 @@ class SpringAiChatCompletionAdapterTest {
             }
         }
         assertThat(hasSingleChatClientConstructor)
-                .as("the corrected adapter must declare exactly one (ChatClient) constructor")
+                .as("the adapter must retain a fail-closed (ChatClient) test constructor")
                 .isTrue();
     }
 }

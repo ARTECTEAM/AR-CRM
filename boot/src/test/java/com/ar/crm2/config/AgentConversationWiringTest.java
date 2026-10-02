@@ -100,6 +100,7 @@ class AgentConversationWiringTest {
     @Autowired private ReplaceDurableMemoryUseCase replaceDurableMemoryUseCase;
     @Autowired private DeleteDurableMemoryUseCase deleteDurableMemoryUseCase;
     @Autowired private PurgeDurableMemoriesUseCase purgeDurableMemoriesUseCase;
+    @Autowired private com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog toolCallbackCatalog;
     @Autowired private ApplicationContext applicationContext;
 
     /**
@@ -137,6 +138,16 @@ class AgentConversationWiringTest {
                 .as("CompleteUserTurnService must receive the ChatCompletionPort "
                         + "composed from the configured Spring AI ChatClient")
                 .isSameAs(applicationContext().getBean(ChatCompletionPort.class));
+    }
+
+    @Test
+    void chatCompletionAdapterReceivesTheComposedCallbackCatalog() throws Exception {
+        Object adapter = applicationContext().getBean(ChatCompletionPort.class);
+        assertThat(adapter)
+                .isInstanceOf(com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter.class);
+        Field field = adapter.getClass().getDeclaredField("toolCallbackCatalog");
+        field.setAccessible(true);
+        assertThat(field.get(adapter)).isSameAs(toolCallbackCatalog);
     }
 
     /**
@@ -443,6 +454,11 @@ class AgentConversationWiringTest {
         @Bean
         ChatClient chatClient() {
             return mock(ChatClient.class);
+        }
+
+        @Bean
+        com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog toolCallbackCatalog() {
+            return com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog.empty();
         }
 
         // ── Platform transaction manager + clock for the tool ledger ──

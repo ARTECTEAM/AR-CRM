@@ -9,6 +9,7 @@ import com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPo
 import com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPort;
 import com.ar.crm2.application.agent.turn.port.out.FindUserTurnContentPort;
 import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.AuthorizationCapabilities;
 import com.ar.crm2.application.security.CurrentActor;
 import com.ar.crm2.application.security.exception.CrmActorUnavailableException;
 import com.ar.crm2.application.security.port.out.CurrentActorPort;
@@ -19,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -60,10 +62,12 @@ public class RegenerateUserTurnService implements RegenerateUserTurnUseCase {
                 ownerId, turnId, command.opaqueHandle(), authorizationRevision);
         List<String> durableMemories = findEligibleDurableMemoriesPort.findEligibleDurableMemories(
                 ownerId, authorizationRevision);
+        AuthorizationCapabilities capabilities = Objects.requireNonNullElse(
+                authorization.authorizationCapabilities(), AuthorizationCapabilities.none());
         requireAuthorizationRevision(authorizationRevision,
                 "CRM permissions changed while preparing agent context; start a new turn");
         String assistantContent = chatCompletionPort.complete(
-                ownerId, actorUsuarioId, command.actorSuperUsuarioId(), turnId,
+                ownerId, actorUsuarioId, command.actorSuperUsuarioId(), capabilities, turnId,
                 visibleHistory, durableMemories, userContent);
         requireAuthorizationRevision(authorizationRevision,
                 "CRM permissions changed during agent regeneration; start a new turn");

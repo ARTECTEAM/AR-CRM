@@ -7,6 +7,9 @@ import com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContent
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPort;
 import com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPort;
 import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.AuthorizationCapabilities;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.application.security.exception.CrmActorUnavailableException;
 import com.ar.crm2.application.support.TestCrmAuthorization;
 import com.ar.crm2.application.support.TestCurrentActorPort;
@@ -24,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -107,6 +111,7 @@ class CompleteUserTurnServiceTest {
         assertEquals(TurnId.from(turnId), chatCompletionPort.turnId);
         assertEquals(orderedHistory, chatCompletionPort.visibleHistory);
         assertEquals(List.of("remember the customer timezone"), chatCompletionPort.durableMemories);
+        assertTrue(chatCompletionPort.authorizationCapabilities.permits(RecursoCrm.CONTACTO, AccionCrm.LEER));
         assertEquals("current prompt", chatCompletionPort.prompt);
         assertEquals(AgentOwnerId.from("owner-a"), historyPort.ownerId);
         assertEquals(TurnId.from(turnId), historyPort.turnId);
@@ -191,7 +196,7 @@ class CompleteUserTurnServiceTest {
                 (ownerId, turnId, opaqueHandle, maximumMessages, revision) -> List.of(VisibleMessage.user("history")),
                 (ownerId, revision) -> List.of("memory"),
                 completionPort,
-                (ownerId, actorUsuarioId, actorSuperUsuarioId, turnId, visibleHistory, durableMemories, prompt) -> {
+                (ownerId, actorUsuarioId, actorSuperUsuarioId, capabilities, turnId, visibleHistory, durableMemories, prompt) -> {
                     throw new IllegalStateException("provider failed");
                 },
                 new TestCrmAuthorization(),
@@ -270,7 +275,7 @@ class CompleteUserTurnServiceTest {
                 (owner, turn, handle, maximum, revision) -> List.of(),
                 (owner, revision) -> List.of(),
                 completionPort,
-                (owner, actor, superActor, turn, history, memories, prompt) -> {
+                (owner, actor, superActor, capabilities, turn, history, memories, prompt) -> {
                     revisionState.set("revision-after-model");
                     return "model output";
                 },
@@ -456,6 +461,7 @@ class CompleteUserTurnServiceTest {
         private List<VisibleMessage> visibleHistory;
         private List<String> durableMemories;
         private String prompt;
+        private AuthorizationCapabilities authorizationCapabilities;
 
         private CapturingChatCompletionPort(String output) {
             this.output = output;
@@ -466,6 +472,7 @@ class CompleteUserTurnServiceTest {
                 AgentOwnerId ownerId,
                 UUID actorUsuarioId,
                 UUID actorSuperUsuarioId,
+                AuthorizationCapabilities authorizationCapabilities,
                 TurnId turnId,
                 List<VisibleMessage> visibleHistory,
                 List<String> durableMemories,
@@ -475,6 +482,7 @@ class CompleteUserTurnServiceTest {
             this.ownerId = ownerId;
             this.actorUsuarioId = actorUsuarioId;
             this.actorSuperUsuarioId = actorSuperUsuarioId;
+            this.authorizationCapabilities = authorizationCapabilities;
             this.turnId = turnId;
             this.visibleHistory = visibleHistory;
             this.durableMemories = durableMemories;

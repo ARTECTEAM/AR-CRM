@@ -1,7 +1,9 @@
 package com.ar.crm2.application.support;
 
 import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.AuthorizationCapabilities;
 import com.ar.crm2.application.security.ResourceReadPolicy;
+import com.ar.crm2.application.security.ResourceCapabilities;
 import com.ar.crm2.application.security.ResourceScopeCandidate;
 import com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException;
 import com.ar.crm2.model.autorizacion.AccionCrm;
@@ -11,6 +13,7 @@ import com.ar.crm2.model.autorizacion.PermisoRecurso;
 import com.ar.crm2.model.autorizacion.RecursoCrm;
 
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.Collection;
 import java.util.Set;
@@ -52,6 +55,19 @@ public class TestCrmAuthorization implements CrmAuthorization {
     public TestCrmAuthorization revision(String revision) {
         this.revision = revision;
         return this;
+    }
+
+    @Override
+    public AuthorizationCapabilities authorizationCapabilities() {
+        EnumMap<RecursoCrm, ResourceCapabilities> capabilities = new EnumMap<>(RecursoCrm.class);
+        policies.forEach((resource, policy) -> {
+            EnumSet<AccionCrm> actions = EnumSet.allOf(AccionCrm.class);
+            actions.remove(AccionCrm.ADMINISTRAR);
+            actions.removeIf(action -> deniedActions.contains(resource + ":" + action));
+            capabilities.put(resource, new ResourceCapabilities(
+                    policy.scope(), actions, policy.readableGroups(), policy.writableGroups()));
+        });
+        return new AuthorizationCapabilities(capabilities);
     }
 
     @Override

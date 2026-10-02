@@ -10,6 +10,7 @@ import com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPo
 import com.ar.crm2.application.agent.turn.port.in.CompleteUserTurnUseCase;
 import com.ar.crm2.application.agent.turn.port.in.CreateUserTurnUseCase;
 import com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort;
+import com.ar.crm2.application.security.AuthorizationCapabilities;
 import com.ar.crm2.application.agent.turn.port.out.CompletePreparedTurnPort;
 import com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort;
 import com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContentPort;
@@ -307,7 +308,7 @@ class AgentConversationIT {
                     .findFirst().orElseThrow();
         }
         @Override public String complete(AgentOwnerId ownerId, UUID actorUsuarioId, UUID actorSuperUsuarioId,
-                TurnId turnId,
+                AuthorizationCapabilities authorizationCapabilities, TurnId turnId,
                 List<VisibleMessage> visibleHistory, List<String> durableMemories, String normalizedPrompt) {
             calls.incrementAndGet(); lastHistory = visibleHistory; lastMemories = durableMemories;
             ownerIds.add(ownerId.value());

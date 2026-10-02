@@ -1072,13 +1072,12 @@ public class WiringConfig {
     /**
      * Provider-neutral Spring AI completion adapter.
      *
-     * <p>The adapter consumes only the configured {@link ChatClient}
-      * (produced by {@link AgentConfig} with the configured CRM catalog)
-     * and forwards distinct trusted CRM user and optional super-user claims
-     * per request through the framework tool context.
-     * The adapter does NOT call request {@code .tools(...)} because
-     * Spring AI 2.0 runtime tools replace builder defaults — omitting
-     * that call preserves the configured allowlist.
+     * <p>The adapter consumes the configured {@link ChatClient} and the
+     * immutable complete CRM callback catalog. It derives a request-local
+     * subset from the current authorization snapshot and forwards distinct
+     * trusted CRM user and optional super-user claims per request through
+     * the framework tool context. The ChatClient itself has no global tool
+     * callbacks.
      *
      * <p>The adapter fills the {@code {durable_memories}} placeholder at
      * request time via
@@ -1092,9 +1091,10 @@ public class WiringConfig {
      */
     @Bean
     public com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort chatCompletionPort(
-            org.springframework.ai.chat.client.ChatClient chatClient
+            org.springframework.ai.chat.client.ChatClient chatClient,
+            com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog toolCallbackCatalog
     ) {
-        return new com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter(chatClient);
+        return new com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter(chatClient, toolCallbackCatalog);
     }
 
 

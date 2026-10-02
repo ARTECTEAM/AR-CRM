@@ -12,6 +12,14 @@ import java.util.UUID;
 
 /** Application boundary for action, record-scope, and sensitive-field authorization. */
 public interface CrmAuthorization {
+    /**
+     * Returns role-level action, scope, and field capabilities for model-facing
+     * tool selection. This is not a record-level authorization decision.
+     */
+    default AuthorizationCapabilities authorizationCapabilities() {
+        return AuthorizationCapabilities.none();
+    }
+
     void require(RecursoCrm recurso, AccionCrm accion);
 
     boolean permitsRecord(RecursoCrm recurso, AccionCrm accion, UUID recordId);

@@ -8,6 +8,9 @@ import com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPo
 import com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPort;
 import com.ar.crm2.application.agent.turn.port.out.FindUserTurnContentPort;
 import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.AuthorizationCapabilities;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.application.security.exception.CrmActorUnavailableException;
 import com.ar.crm2.application.support.TestCrmAuthorization;
 import com.ar.crm2.application.support.TestCurrentActorPort;
@@ -25,6 +28,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -127,6 +131,8 @@ class RegenerateUserTurnServiceTest {
         assertEquals(orderedHistory, chatCompletionPort.visibleHistory.get(0));
         assertEquals(List.of("durable instruction"), chatCompletionPort.durableMemories.get(0));
         assertEquals(List.of("original user content", "original user content"), chatCompletionPort.prompts);
+        assertTrue(chatCompletionPort.authorizationCapabilities.stream()
+                .allMatch(capabilities -> capabilities.permits(RecursoCrm.CONTACTO, AccionCrm.LEER)));
         assertEquals(0, chatCompletionPort.visibleHistory.stream()
                 .flatMap(List::stream)
                 .filter(message -> "original user content".equals(message.content()))
@@ -156,7 +162,7 @@ class RegenerateUserTurnServiceTest {
                 (ownerId, turnId, opaqueHandle, revision) -> "original user content",
                 (ownerId, revision) -> List.of("memory"),
                 completionPort,
-                (ownerId, actorUsuarioId, actorSuperUsuarioId, turnId, visibleHistory, durableMemories, prompt) -> {
+                (ownerId, actorUsuarioId, actorSuperUsuarioId, capabilities, turnId, visibleHistory, durableMemories, prompt) -> {
                     throw new IllegalStateException("provider failed");
                 },
                 new TestCrmAuthorization(),
@@ -312,6 +318,7 @@ class RegenerateUserTurnServiceTest {
         private final List<List<VisibleMessage>> visibleHistory = new ArrayList<>();
         private final List<List<String>> durableMemories = new ArrayList<>();
         private final List<String> prompts = new ArrayList<>();
+        private final List<AuthorizationCapabilities> authorizationCapabilities = new ArrayList<>();
 
         private CapturingChatCompletionPort(String... outputs) {
             this.outputs = List.of(outputs);
@@ -322,6 +329,7 @@ class RegenerateUserTurnServiceTest {
                 AgentOwnerId ownerId,
                 UUID actorUsuarioId,
                 UUID actorSuperUsuarioId,
+                AuthorizationCapabilities authorizationCapabilities,
                 TurnId turnId,
                 List<VisibleMessage> visibleHistory,
                 List<String> durableMemories,
@@ -329,6 +337,7 @@ class RegenerateUserTurnServiceTest {
         ) {
             ownerIds.add(ownerId);
             actorUsuarioIds.add(actorUsuarioId);
+            this.authorizationCapabilities.add(authorizationCapabilities);
             turnIds.add(turnId);
             this.visibleHistory.add(visibleHistory);
             this.durableMemories.add(durableMemories);
