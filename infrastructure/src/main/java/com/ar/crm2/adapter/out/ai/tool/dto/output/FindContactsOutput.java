@@ -1,7 +1,5 @@
 package com.ar.crm2.adapter.out.ai.tool.dto.output;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
-
 import java.util.List;
 
 /**
@@ -12,10 +10,19 @@ import java.util.List;
  * {@code telefono}, and {@code comoNosConocio} are stripped at the
  * mapper boundary so the model never sees them — they are not part of
  * the contract the agent advertises.
+ * The backing query fetches at most one sentinel row beyond the 20-item
+ * output cap, so this contract truthfully exposes {@code returned} and
+ * {@code truncated}; it does not claim an exact total match count.
  */
 public record FindContactsOutput(
-        @JsonProperty("contacts") List<ContactSummary> contacts
+        List<ContactSummary> contacts,
+        int returned,
+        boolean truncated
 ) {
+
+    public FindContactsOutput {
+        contacts = contacts == null ? List.of() : List.copyOf(contacts);
+    }
 
     /**
      * Per-contact bounded summary. {@code id} is the canonical contact
@@ -23,10 +30,10 @@ public record FindContactsOutput(
      * {@code correo} are the only business fields exposed.
      */
     public record ContactSummary(
-            @JsonProperty("id") String id,
-            @JsonProperty("nombre") String nombre,
-            @JsonProperty("estadoRelacion") String estadoRelacion,
-            @JsonProperty("correo") String correo
+            String id,
+            String nombre,
+            String estadoRelacion,
+            String correo
     ) {
     }
 }

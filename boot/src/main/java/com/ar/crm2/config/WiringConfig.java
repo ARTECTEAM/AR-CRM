@@ -253,11 +253,6 @@ public class WiringConfig {
     }
 
     @Bean
-    public com.ar.crm2.adapter.out.persistence.ContactoUpsertAdapter contactoUpsertAdapter(ContactoRepository repository) {
-        return new com.ar.crm2.adapter.out.persistence.ContactoUpsertAdapter(repository);
-    }
-
-    @Bean
     public TableroRepositoryAdapter tableroRepositoryAdapter(
             TableroRepository tableroRepository,
             ColumnaRepository columnaRepository,
@@ -919,423 +914,6 @@ public class WiringConfig {
     }
 
 
-    // ── WhatsApp Module: Adapter Beans ──────────────────────────────────────
-
-    @Bean
-    public com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter canalWhatsappRepositoryAdapter(
-            com.ar.crm2.adapter.out.persistence.repository.CanalWhatsappRepository repository
-    ) {
-        return new com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter(repository);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter conversacionRepositoryAdapter(
-            com.ar.crm2.adapter.out.persistence.repository.ConversacionRepository repository
-    ) {
-        return new com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter(repository);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.persistence.MensajeRepositoryAdapter mensajeRepositoryAdapter(
-            com.ar.crm2.adapter.out.persistence.repository.MensajeRepository repository
-    ) {
-        return new com.ar.crm2.adapter.out.persistence.MensajeRepositoryAdapter(repository);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionWhatsappAdapter(
-            org.springframework.web.reactive.function.client.WebClient.Builder webClientBuilder,
-            com.ar.crm2.security.WaProperties waProperties
-    ) {
-        return new com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter(webClientBuilder, waProperties);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.ia.AnthropicSugerenciaAdapter anthropicSugerenciaAdapter(
-            org.springframework.web.reactive.function.client.WebClient.Builder webClientBuilder,
-            @org.springframework.beans.factory.annotation.Value("${anthropic.api-key:}") String apiKey,
-            @org.springframework.beans.factory.annotation.Value("${anthropic.model:claude-haiku-4-5-20251001}") String model
-    ) {
-        return new com.ar.crm2.adapter.out.ia.AnthropicSugerenciaAdapter(webClientBuilder, apiKey, model);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.ia.port.in.SugerirRespuestaUseCase sugerirRespuestaUseCase(
-            com.ar.crm2.adapter.out.persistence.MensajeRepositoryAdapter mensajeAdapter,
-            com.ar.crm2.adapter.out.ia.AnthropicSugerenciaAdapter iaAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.ia.service.SugerirRespuestaService(mensajeAdapter, iaAdapter);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.media.LocalMediaStorageAdapter localMediaStorageAdapter() {
-        return new com.ar.crm2.adapter.out.media.LocalMediaStorageAdapter();
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.sse.SseMensajeNotifyAdapter sseMensajeNotifyAdapter(
-            com.ar.crm2.adapter.out.sse.SseEmitterRegistry registry
-    ) {
-        return new com.ar.crm2.adapter.out.sse.SseMensajeNotifyAdapter(registry);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter botRepositoryAdapter(
-            com.ar.crm2.adapter.out.persistence.repository.BotRepository repository
-    ) {
-        return new com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter(repository);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.bot.BotWebhookNotifier botWebhookNotifier(
-            org.springframework.web.reactive.function.client.WebClient.Builder webClientBuilder,
-            com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter botAdapter,
-            com.ar.crm2.security.WaProperties waProperties
-    ) {
-        return new com.ar.crm2.adapter.out.bot.BotWebhookNotifier(webClientBuilder, botAdapter, waProperties);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.persistence.FunnelMovementAdapter funnelMovementAdapter(
-            com.ar.crm2.adapter.out.persistence.repository.TratoRepository tratoRepository,
-            com.ar.crm2.adapter.out.persistence.repository.FichaRepository fichaRepository,
-            com.ar.crm2.adapter.out.persistence.repository.TableroRepository tableroRepository,
-            com.ar.crm2.adapter.out.persistence.repository.ColumnaRepository columnaRepository
-    ) {
-        return new com.ar.crm2.adapter.out.persistence.FunnelMovementAdapter(
-                tratoRepository, fichaRepository, tableroRepository, columnaRepository);
-    }
-
-
-    // ── WhatsApp Module: Bot UseCase Beans ──────────────────────────────────
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.bot.port.in.CreateBotUseCase createBotUseCase(
-            com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.bot.service.CreateBotService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.bot.port.in.EditBotUseCase editBotUseCase(
-            com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.bot.service.EditBotService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.bot.port.in.GetAllBotsUseCase getAllBotsUseCase(
-            com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.bot.service.GetAllBotsService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.bot.port.in.GetBotByIdUseCase getBotByIdUseCase(
-            com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.bot.service.GetBotByIdService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.bot.port.in.DeleteBotUseCase deleteBotUseCase(
-            com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.bot.service.DeleteBotService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.bot.port.in.FindBotByTokenUseCase findBotByTokenUseCase(
-            com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.bot.service.FindBotByTokenService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.bot.port.in.ToggleBotActivoUseCase toggleBotActivoUseCase(
-            com.ar.crm2.adapter.out.persistence.BotRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.bot.service.ToggleBotActivoService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.funnel.port.in.MoverFunnelUseCase moverFunnelUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter conversacionAdapter,
-            com.ar.crm2.adapter.out.persistence.FunnelMovementAdapter funnelAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.funnel.service.MoverFunnelService(conversacionAdapter, funnelAdapter);
-    }
-
-
-    // ── WhatsApp Module: Canal UseCase Beans ────────────────────────────────
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.canal.port.in.CreateCanalUseCase createCanalUseCase(
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.canal.service.CreateCanalService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.canal.port.in.GetAllCanalesUseCase getAllCanalesUseCase(
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.canal.service.GetAllCanalesService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.canal.port.in.GetCanalByIdUseCase getCanalByIdUseCase(
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.canal.service.GetCanalByIdService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.canal.port.in.EditCanalUseCase editCanalUseCase(
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.canal.service.EditCanalService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.canal.port.in.DeleteCanalUseCase deleteCanalUseCase(
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.canal.service.DeleteCanalService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.canal.port.in.ConectarCanalUseCase conectarCanalUseCase(
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter adapter,
-            com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.canal.service.ConectarCanalService(adapter, adapter, evolutionAdapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.canal.port.in.GetEstadoCanalUseCase getEstadoCanalUseCase(
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter adapter,
-            com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.canal.service.GetEstadoCanalService(adapter, adapter, evolutionAdapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.canal.port.in.ReconfigurarWebhookUseCase reconfigurarWebhookUseCase(
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter adapter,
-            com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.canal.service.ReconfigurarWebhookService(adapter, evolutionAdapter);
-    }
-
-
-    // ── WhatsApp Module: Conversacion UseCase Beans ─────────────────────────
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.GetOrCreateConversacionUseCase getOrCreateConversacionUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.GetOrCreateConversacionService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.GetAllConversacionesUseCase getAllConversacionesUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.GetAllConversacionesService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.GetConversacionByIdUseCase getConversacionByIdUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.GetConversacionByIdService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.AsignarAgenteUseCase asignarAgenteUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.AsignarAgenteService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.CerrarConversacionUseCase cerrarConversacionUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter,
-            com.ar.crm2.adapter.out.persistence.AjustesWaAdapter ajustesAdapter,
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter canalAdapter,
-            com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.CerrarConversacionService(
-                adapter, adapter, ajustesAdapter, canalAdapter, evolutionAdapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.GetCsatResumenUseCase getCsatResumenUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.GetCsatResumenService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.MarcarConversacionLeidaUseCase marcarConversacionLeidaUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.MarcarConversacionLeidaService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.RenombrarConversacionUseCase renombrarConversacionUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter,
-            com.ar.crm2.adapter.out.persistence.ContactoUpsertAdapter contactoUpsertAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.RenombrarConversacionService(
-                adapter, adapter, contactoUpsertAdapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.ReabrirConversacionUseCase reabrirConversacionUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.ReabrirConversacionService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.AplicarLabelsUseCase aplicarLabelsUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.AplicarLabelsService(adapter, adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.conversacion.port.in.AutoResolverConversacionesUseCase autoResolverConversacionesUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.conversacion.service.AutoResolverConversacionesService(adapter, adapter);
-    }
-
-
-    // ── WhatsApp Module: Mensaje UseCase Beans ──────────────────────────────
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.mensaje.port.in.ReceiveMensajeUseCase receiveMensajeUseCase(
-            com.ar.crm2.adapter.out.persistence.MensajeRepositoryAdapter mensajeAdapter,
-            com.ar.crm2.whatsapp.application.conversacion.port.in.GetOrCreateConversacionUseCase getOrCreate,
-            com.ar.crm2.adapter.out.sse.SseMensajeNotifyAdapter notifyAdapter,
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter canalAdapter,
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter conversacionAdapter,
-            com.ar.crm2.adapter.out.persistence.ContactoUpsertAdapter contactoUpsertAdapter,
-            com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionAdapter,
-            com.ar.crm2.adapter.out.media.LocalMediaStorageAdapter mediaStorage,
-            com.ar.crm2.adapter.out.persistence.AjustesWaAdapter ajustesAdapter,
-            com.ar.crm2.adapter.out.persistence.SugerirResponsableAdapter sugerirResponsableAdapter,
-            com.ar.crm2.adapter.out.bot.BotWebhookNotifier botWebhookNotifier
-    ) {
-        return new com.ar.crm2.whatsapp.application.mensaje.service.ReceiveMensajeService(
-                mensajeAdapter, getOrCreate, mensajeAdapter, notifyAdapter,
-                canalAdapter, conversacionAdapter, contactoUpsertAdapter, evolutionAdapter, mediaStorage,
-                ajustesAdapter, evolutionAdapter, mensajeAdapter, sugerirResponsableAdapter, botWebhookNotifier);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.persistence.AjustesWaAdapter ajustesWaAdapter(
-            com.ar.crm2.adapter.out.persistence.repository.AjustesWaRepository repository
-    ) {
-        return new com.ar.crm2.adapter.out.persistence.AjustesWaAdapter(repository);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.persistence.PlantillaAdapter plantillaAdapter(
-            com.ar.crm2.adapter.out.persistence.repository.PlantillaRepository repository
-    ) {
-        return new com.ar.crm2.adapter.out.persistence.PlantillaAdapter(repository);
-    }
-
-    @Bean
-    public com.ar.crm2.adapter.out.persistence.SugerirResponsableAdapter sugerirResponsableAdapter(
-            com.ar.crm2.adapter.out.persistence.repository.UsuarioRepository usuarioRepository,
-            com.ar.crm2.adapter.out.persistence.repository.ConversacionRepository conversacionRepository
-    ) {
-        return new com.ar.crm2.adapter.out.persistence.SugerirResponsableAdapter(usuarioRepository, conversacionRepository);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.mensaje.port.in.SendMensajeUseCase sendMensajeUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter conversacionAdapter,
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter canalAdapter,
-            com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionAdapter,
-            com.ar.crm2.adapter.out.persistence.MensajeRepositoryAdapter mensajeAdapter,
-            com.ar.crm2.adapter.out.sse.SseMensajeNotifyAdapter notifyAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.mensaje.service.SendMensajeService(
-                conversacionAdapter, canalAdapter, evolutionAdapter, mensajeAdapter, notifyAdapter, conversacionAdapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.mensaje.port.in.ResponderBotUseCase responderBotUseCase(
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter conversacionAdapter,
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter canalAdapter,
-            com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionAdapter,
-            com.ar.crm2.adapter.out.persistence.MensajeRepositoryAdapter mensajeAdapter,
-            com.ar.crm2.adapter.out.sse.SseMensajeNotifyAdapter notifyAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.mensaje.service.ResponderBotService(
-                conversacionAdapter, canalAdapter, evolutionAdapter, mensajeAdapter, notifyAdapter, conversacionAdapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.mensaje.port.in.GetMensajesByConversacionUseCase getMensajesByConversacionUseCase(
-            com.ar.crm2.adapter.out.persistence.MensajeRepositoryAdapter adapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.mensaje.service.GetMensajesByConversacionService(adapter);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.canal.port.in.SyncChatsUseCase syncChatsUseCase(
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter canalAdapter,
-            com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionAdapter,
-            com.ar.crm2.whatsapp.application.conversacion.port.in.GetOrCreateConversacionUseCase getOrCreate,
-            com.ar.crm2.adapter.out.persistence.ConversacionRepositoryAdapter conversacionAdapter,
-            com.ar.crm2.adapter.out.persistence.ContactoUpsertAdapter contactoUpsertAdapter,
-            com.ar.crm2.adapter.out.persistence.MensajeRepositoryAdapter mensajeAdapter,
-            com.ar.crm2.adapter.out.media.LocalMediaStorageAdapter mediaStorage
-    ) {
-        return new com.ar.crm2.whatsapp.application.canal.service.SyncChatsService(
-                canalAdapter, evolutionAdapter, getOrCreate, conversacionAdapter, contactoUpsertAdapter,
-                mensajeAdapter, mensajeAdapter, mediaStorage);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.mensaje.service.ActualizarStatusMensajeService actualizarStatusMensajeService(
-            com.ar.crm2.adapter.out.persistence.MensajeRepositoryAdapter mensajeAdapter,
-            com.ar.crm2.adapter.out.sse.SseMensajeNotifyAdapter notifyAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.mensaje.service.ActualizarStatusMensajeService(
-                mensajeAdapter, mensajeAdapter, notifyAdapter);
-    }
-
-    // ── WhatsApp Module: Grupos ─────────────────────────────────────────────
-
-    @Bean
-    public com.ar.crm2.adapter.out.persistence.GrupoRepositoryAdapter grupoRepositoryAdapter(
-            com.ar.crm2.adapter.out.persistence.repository.GrupoRepository grupoRepository,
-            com.ar.crm2.adapter.out.persistence.repository.MensajeGrupoRepository mensajeGrupoRepository
-    ) {
-        return new com.ar.crm2.adapter.out.persistence.GrupoRepositoryAdapter(grupoRepository, mensajeGrupoRepository);
-    }
-
-    @Bean
-    public com.ar.crm2.whatsapp.application.grupo.service.GrupoService grupoService(
-            com.ar.crm2.adapter.out.persistence.GrupoRepositoryAdapter grupoAdapter,
-            com.ar.crm2.adapter.out.sse.SseMensajeNotifyAdapter notifyAdapter,
-            com.ar.crm2.adapter.out.evolution.EvolutionWhatsappAdapter evolutionAdapter,
-            com.ar.crm2.adapter.out.media.LocalMediaStorageAdapter mediaStorage,
-            com.ar.crm2.adapter.out.persistence.CanalWhatsappRepositoryAdapter canalAdapter
-    ) {
-        return new com.ar.crm2.whatsapp.application.grupo.service.GrupoService(
-                grupoAdapter, grupoAdapter, notifyAdapter, evolutionAdapter, mediaStorage, canalAdapter, evolutionAdapter);
-    }
-
     // ── Agent runtime and trusted CRM tools ───────────────────────────────
 
     @Bean
@@ -1346,19 +924,100 @@ public class WiringConfig {
     }
 
     @Bean
-    public com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools springAiCrmTools(
-            com.ar.crm2.application.contacto.port.in.SearchContactosForActorUseCase searchContactosForActorUseCase,
-            com.ar.crm2.application.contacto.port.in.CreateContactoUseCase createContactoUseCase,
-            com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase cambiarEstadoTratoUseCase,
-            com.fasterxml.jackson.databind.ObjectMapper objectMapper
-    ) {
-        return new com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools(
-                searchContactosForActorUseCase,
-                createContactoUseCase,
-                cambiarEstadoTratoUseCase,
-                objectMapper);
+    public com.ar.crm2.adapter.out.ai.tool.TableroTools tableroTools(
+            com.ar.crm2.application.tablero.port.in.GetAllTablerosUseCase getAll,
+            com.ar.crm2.application.tablero.port.in.GetTableroByIdUseCase getById,
+            com.ar.crm2.application.tablero.port.in.CreateTableroUseCase create,
+            com.ar.crm2.application.tablero.port.in.EditTableroUseCase edit,
+            com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase delete,
+            com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase eliminarColumna,
+            com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase asignarColumna,
+            com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase reordenarColumnas) {
+        return new com.ar.crm2.adapter.out.ai.tool.TableroTools(
+                getAll, getById, create, edit, delete, eliminarColumna, asignarColumna, reordenarColumnas);
     }
 
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.ColumnaTools columnaTools(
+            com.ar.crm2.application.columna.port.in.CreateColumnaUseCase create,
+            com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase getAll,
+            com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase getById,
+            com.ar.crm2.application.columna.port.in.EditColumnaUseCase edit,
+            com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.ColumnaTools(create, getAll, getById, edit, delete);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.FichaTools fichaTools(
+            com.ar.crm2.application.ficha.port.in.CreateFichaUseCase create,
+            com.ar.crm2.application.ficha.port.in.GetAllFichasUseCase getAll,
+            com.ar.crm2.application.ficha.port.in.GetFichaByIdUseCase getById,
+            com.ar.crm2.application.ficha.port.in.EditFichaUseCase edit,
+            com.ar.crm2.application.ficha.port.in.DeleteFichaUseCase delete,
+            com.ar.crm2.application.ficha.port.in.MoverColumnaFichaUseCase mover) {
+        return new com.ar.crm2.adapter.out.ai.tool.FichaTools(create, getAll, getById, edit, delete, mover);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.ContactoTools contactoTools(
+            com.ar.crm2.application.contacto.port.in.SearchContactosForActorUseCase search,
+            com.ar.crm2.application.contacto.port.in.CreateContactoUseCase create,
+            com.ar.crm2.application.contacto.port.in.EditContactoUseCase edit,
+            com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase getById,
+            com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase delete,
+            com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase cambiarEstado) {
+        return new com.ar.crm2.adapter.out.ai.tool.ContactoTools(search, create, edit, getById, delete, cambiarEstado);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.EmpresaTools empresaTools(
+            com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase create,
+            com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase getAll,
+            com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase edit,
+            com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase delete,
+            com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase cambiarEstado) {
+        return new com.ar.crm2.adapter.out.ai.tool.EmpresaTools(create, getAll, edit, delete, cambiarEstado);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.TratoTools tratoTools(
+            com.ar.crm2.application.trato.port.in.CreateTratoUseCase create,
+            com.ar.crm2.application.trato.port.in.GetAllTratosUseCase getAll,
+            com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase getById,
+            com.ar.crm2.application.trato.port.in.EditTratoUseCase edit,
+            com.ar.crm2.application.trato.port.in.DeleteTratoUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.TratoTools(create, getAll, getById, edit, delete);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.TareaTools tareaTools(
+            com.ar.crm2.application.tarea.port.in.CreateTareaUseCase create,
+            com.ar.crm2.application.tarea.port.in.GetAllTareasUseCase getAll,
+            com.ar.crm2.application.tarea.port.in.GetTareaByIdUseCase getById,
+            com.ar.crm2.application.tarea.port.in.EditTareaUseCase edit,
+            com.ar.crm2.application.tarea.port.in.DeleteTareaUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.TareaTools(create, getAll, getById, edit, delete);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.EtiquetaTools etiquetaTools(
+            com.ar.crm2.application.etiqueta.port.in.CreateEtiquetaUseCase create,
+            com.ar.crm2.application.etiqueta.port.in.GetAllEtiquetasUseCase getAll,
+            com.ar.crm2.application.etiqueta.port.in.GetEtiquetaByIdUseCase getById,
+            com.ar.crm2.application.etiqueta.port.in.EditEtiquetaUseCase edit,
+            com.ar.crm2.application.etiqueta.port.in.DeleteEtiquetaUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.EtiquetaTools(create, getAll, getById, edit, delete);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.AgendaTools agendaTools(
+            com.ar.crm2.application.agenda.port.in.CreateAgendaUseCase create,
+            com.ar.crm2.application.agenda.port.in.GetAgendasByUserUseCase getByUser,
+            com.ar.crm2.application.agenda.port.in.GetAgendaByIdUseCase getById,
+            com.ar.crm2.application.agenda.port.in.EditAgendaUseCase edit,
+            com.ar.crm2.application.agenda.port.in.DeleteAgendaUseCase delete) {
+        return new com.ar.crm2.adapter.out.ai.tool.AgendaTools(create, getByUser, getById, edit, delete);
+    }
     @Bean
     public com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort chatCompletionPort(
             org.springframework.ai.chat.client.ChatClient chatClient

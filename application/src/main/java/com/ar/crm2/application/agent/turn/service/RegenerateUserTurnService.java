@@ -48,7 +48,8 @@ public class RegenerateUserTurnService implements RegenerateUserTurnUseCase {
         String userContent = findUserTurnContentPort.findUserTurnContent(ownerId, turnId, command.opaqueHandle());
         List<String> durableMemories = findEligibleDurableMemoriesPort.findEligibleDurableMemories(ownerId);
         String assistantContent = chatCompletionPort.complete(
-                ownerId, actorUsuarioId, turnId, visibleHistory, durableMemories, userContent);
+                ownerId, actorUsuarioId, command.actorSuperUsuarioId(), turnId,
+                visibleHistory, durableMemories, userContent);
         return completeRegeneratedTurnPort.completeRegeneratedTurn(
                 ownerId, turnId, command.opaqueHandle(), command.idempotencyKey(), assistantContent);
     }

@@ -5,6 +5,8 @@ import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.model.tool.ToolCallingChatOptions;
 
 import java.util.List;
 
@@ -33,6 +35,11 @@ public final class CapturingChatModel implements ChatModel {
     public ChatResponse call(Prompt prompt) {
         this.capturedPrompt = prompt;
         return new ChatResponse(List.of(new Generation(new AssistantMessage(fixedAnswer))));
+    }
+
+    @Override
+    public ChatOptions getOptions() {
+        return ToolCallingChatOptions.builder().build();
     }
 
     public Prompt capturedPrompt() {

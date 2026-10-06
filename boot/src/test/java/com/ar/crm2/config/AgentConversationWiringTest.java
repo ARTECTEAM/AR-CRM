@@ -48,7 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 /**
- * Wiring-only proof for the agent conversation composition.
+ * Wiring-only proof for the final conversational composition (task 5.x).
  *
  * <p>Loads only {@code WiringConfig} — the boot composition root — and
  * verifies that the Agent conversation's Application services,
@@ -107,12 +107,6 @@ class AgentConversationWiringTest {
      * wiring actually injected the turn-level port — the type used to
      * pull eligible memories into chat completion.
      */
-    @Test
-    void agentContactSearch_usesTheDedicatedActorScopedUseCase() {
-        assertThat(searchContactosForActorUseCase)
-                .isInstanceOf(com.ar.crm2.application.contacto.service.SearchContactosForActorService.class);
-    }
-
     @Test
     void completeUserTurnService_receivesTurnLevelFindEligibleDurableMemoriesPortFromWiring()
             throws Exception {
@@ -234,6 +228,12 @@ class AgentConversationWiringTest {
                 .isInstanceOf(CompleteUserTurnService.class);
     }
 
+    @Test
+    void agentContactSearch_usesTheDedicatedActorScopedUseCase() {
+        assertThat(searchContactosForActorUseCase)
+                .isInstanceOf(com.ar.crm2.application.contacto.service.SearchContactosForActorService.class);
+    }
+
     /**
      * Triangulation: every durable-memory service is exposed under
      * its use case interface. The composition root must produce one
@@ -278,6 +278,117 @@ class AgentConversationWiringTest {
         assertSingleBean(SaveAgentToolActionPort.class, agentToolActionAdapter);
         assertSingleBean(MarkAgentToolActionCompletedPort.class, agentToolActionAdapter);
         assertSingleBean(FindAgentToolActionByIdPort.class, agentToolActionAdapter);
+    }
+
+    /**
+     * C1 corrective wiring proof: the composition root must expose
+     * exactly one {@link
+     * com.ar.crm2.application.trato.port.in.EditTratoUseCase}
+     * bean implemented by the canonical
+     * {@link com.ar.crm2.application.trato.service.EditTratoService}
+     * backing the {@code edit_trato} Spring AI tool.
+     */
+    @Test
+    void editTratoUseCase_isWiredAsEditTratoServiceAndExposedOnce() {
+        com.ar.crm2.application.trato.port.in.EditTratoUseCase editTratoUseCase =
+                applicationContext.getBean(
+                        com.ar.crm2.application.trato.port.in.EditTratoUseCase.class);
+        assertThat(editTratoUseCase)
+                .as("EditTratoUseCase must be wired as an EditTratoService instance")
+                .isInstanceOf(com.ar.crm2.application.trato.service.EditTratoService.class);
+        assertSingleBean(
+                com.ar.crm2.application.trato.port.in.EditTratoUseCase.class,
+                editTratoUseCase);
+    }
+
+    /**
+     * Wiring proof for the {@code edit_contact} Spring AI tool: the
+     * composition root must expose exactly one
+     * {@link com.ar.crm2.application.contacto.port.in.EditContactoUseCase}
+     * bean implemented by the canonical
+     * {@link com.ar.crm2.application.contacto.service.EditContactoService}.
+     */
+    @Test
+    void editContactoUseCase_isWiredAsEditContactoServiceAndExposedOnce() {
+        com.ar.crm2.application.contacto.port.in.EditContactoUseCase editContactoUseCase =
+                applicationContext.getBean(
+                        com.ar.crm2.application.contacto.port.in.EditContactoUseCase.class);
+        assertThat(editContactoUseCase)
+                .as("EditContactoUseCase must be wired as an EditContactoService instance")
+                .isInstanceOf(com.ar.crm2.application.contacto.service.EditContactoService.class);
+        assertSingleBean(
+                com.ar.crm2.application.contacto.port.in.EditContactoUseCase.class,
+                editContactoUseCase);
+    }
+
+    /**
+     * Wiring proof for the {@code create_company} Spring AI tool: the
+     * composition root must expose exactly one
+     * {@link com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase}
+     * bean implemented by the canonical
+     * {@link com.ar.crm2.application.empresa.service.CreateEmpresaService}.
+     */
+    @Test
+    void createEmpresaUseCase_isWiredAsCreateEmpresaServiceAndExposedOnce() {
+        com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase createEmpresaUseCase =
+                applicationContext.getBean(
+                        com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase.class);
+        assertThat(createEmpresaUseCase)
+                .as("CreateEmpresaUseCase must be wired as a CreateEmpresaService instance")
+                .isInstanceOf(com.ar.crm2.application.empresa.service.CreateEmpresaService.class);
+        assertSingleBean(
+                com.ar.crm2.application.empresa.port.in.CreateEmpresaUseCase.class,
+                createEmpresaUseCase);
+    }
+
+    /**
+     * Wiring proof for the {@code edit_company} Spring AI tool: the
+     * composition root must expose exactly one
+     * {@link com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase}
+     * bean implemented by the canonical
+     * {@link com.ar.crm2.application.empresa.service.EditEmpresaService}.
+     */
+    @Test
+    void editEmpresaUseCase_isWiredAsEditEmpresaServiceAndExposedOnce() {
+        com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase editEmpresaUseCase =
+                applicationContext.getBean(
+                        com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase.class);
+        assertThat(editEmpresaUseCase)
+                .as("EditEmpresaUseCase must be wired as an EditEmpresaService instance")
+                .isInstanceOf(com.ar.crm2.application.empresa.service.EditEmpresaService.class);
+        assertSingleBean(
+                com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase.class,
+                editEmpresaUseCase);
+    }
+
+    /** Resource adapters must depend on the canonical delete use cases exposed by the REST surface. */
+    @Test
+    void resourceToolGroupsInjectCanonicalDeleteUseCases() {
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.EmpresaTools.class,
+                com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.ContactoTools.class,
+                com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.TableroTools.class,
+                com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.ColumnaTools.class,
+                com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.FichaTools.class,
+                com.ar.crm2.application.ficha.port.in.DeleteFichaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.TratoTools.class,
+                com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.TareaTools.class,
+                com.ar.crm2.application.tarea.port.in.DeleteTareaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.EtiquetaTools.class,
+                com.ar.crm2.application.etiqueta.port.in.DeleteEtiquetaUseCase.class);
+        assertConstructorDependsOn(com.ar.crm2.adapter.out.ai.tool.AgendaTools.class,
+                com.ar.crm2.application.agenda.port.in.DeleteAgendaUseCase.class);
+    }
+
+    private void assertConstructorDependsOn(Class<?> resourceTools, Class<?> deleteUseCase) {
+        java.lang.reflect.Constructor<?>[] constructors = resourceTools.getDeclaredConstructors();
+        assertThat(constructors).as("%s should expose one dependency constructor", resourceTools.getSimpleName())
+                .hasSize(1);
+        assertThat(constructors[0].getParameterTypes()).contains(deleteUseCase);
     }
 
     private void assertSingleBean(Class<?> type, Object expected) {
@@ -395,36 +506,9 @@ class AgentConversationWiringTest {
         @Bean com.ar.crm2.adapter.out.persistence.repository.NotaTratoRepository notaTratoRepository() {
             return mock(com.ar.crm2.adapter.out.persistence.repository.NotaTratoRepository.class);
         }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.CanalWhatsappRepository canalWhatsappRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.CanalWhatsappRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.ConversacionRepository conversacionRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.ConversacionRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.MensajeRepository mensajeRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.MensajeRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.BotRepository botRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.BotRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.AjustesWaRepository ajustesWaRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.AjustesWaRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.PlantillaRepository plantillaRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.PlantillaRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.GrupoRepository grupoRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.GrupoRepository.class);
-        }
-        @Bean com.ar.crm2.adapter.out.persistence.repository.MensajeGrupoRepository mensajeGrupoRepository() {
-            return mock(com.ar.crm2.adapter.out.persistence.repository.MensajeGrupoRepository.class);
-        }
 
         // ── Non-repository collaborators that WiringConfig wires ───
 
-        @Bean com.ar.crm2.security.WaProperties waProperties() {
-            return new com.ar.crm2.security.WaProperties(null, null);
-        }
         @Bean com.ar.crm2.config.KeycloakAdminProperties keycloakAdminProperties() {
             return new com.ar.crm2.config.KeycloakAdminProperties();
         }
@@ -437,9 +521,6 @@ class AgentConversationWiringTest {
         }
         @Bean org.springframework.mail.javamail.JavaMailSender javaMailSender() {
             return mock(org.springframework.mail.javamail.JavaMailSender.class);
-        }
-        @Bean com.ar.crm2.adapter.out.sse.SseEmitterRegistry sseEmitterRegistry() {
-            return new com.ar.crm2.adapter.out.sse.SseEmitterRegistry();
         }
     }
 }

@@ -34,7 +34,6 @@
     <modules>
         <module>domain</module>
         <module>application</module>
-        <module>whatsapp</module>
         <module>infrastructure</module>
         <module>boot</module>
     </modules>

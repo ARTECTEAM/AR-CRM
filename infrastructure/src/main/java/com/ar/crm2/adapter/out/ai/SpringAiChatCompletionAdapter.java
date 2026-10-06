@@ -12,6 +12,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -38,32 +39,53 @@ import java.util.stream.Collectors;
  *     <li>Bullet-formats durable memories (filters null elements, applies
  *         {@link String#strip()}, ignores blank entries, prefixes each
  *         remaining entry with {@code - }, joins with newline).</li>
- *     <li>Forwards the trusted CRM {@code actorUsuarioId} per request via
- *         the framework {@code .toolContext(Map.of("actorUsuarioId", ...))}
- *         call. The configured {@link ChatClient} already carries the three
- *         allowlisted CRM tools through {@code defaultTools(tools)}; the
- *         adapter does NOT call request {@code .tools(...)} because Spring
- *         AI 2.0 runtime tools replace builder defaults. Identity stays
+ *     <li>Forwards the trusted CRM identity tuple — {@code agentOwnerId}
+ *         (the owner), {@code actorUsuarioId} (the actor UUID), and
+ *         {@code turnId} (the conversation turn) — per request through
+ *         the framework {@code .toolContext(Map.of(...))} call so each
+ *         allowlisted tool can assert ownership and authorization
+ *         against server-derived values. The configured
+     *         {@link ChatClient} already carries its configuration-selected
+     *         CRM tools through {@code defaultTools(tools)}; the adapter does
+ *         NOT call request {@code .tools(...)} because Spring AI 2.0
+ *         runtime tools replace builder defaults. Identity stays
  *         outside the model-visible schema.</li>
  *     <li>Returns only the final textual content from the model, and
  *         propagates provider failure through a controlled
  *         {@link IllegalStateException} without leaking the cause.</li>
  * </ul>
  *
- * <p>Streaming, ChatMemory, RAG, MCP, and structured output remain outside this adapter;
- * provider credentials and configuration stay in the boot composition.
+ * <p>Provider-specific starter configuration, ChatMemory, RAG, MCP,
+ * streaming, structured output, and credential wiring are intentionally
+ * absent and belong to later PRs (PR9–PR13).
  */
 @RequiredArgsConstructor
 public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
 
     static final String ACTOR_CONTEXT_KEY = "actorUsuarioId";
+    static final String SUPER_USUARIO_CONTEXT_KEY = "actorSuperUsuarioId";
+    static final String AGENT_OWNER_CONTEXT_KEY = "agentOwnerId";
+    static final String TURN_CONTEXT_KEY = "turnId";
 
     private final ChatClient chatClient;
+
+    public String complete(
+            AgentOwnerId ownerId,
+            UUID actorUsuarioId,
+            TurnId turnId,
+            List<VisibleMessage> visibleHistory,
+            List<String> durableMemories,
+            String normalizedPrompt
+    ) {
+        return complete(ownerId, actorUsuarioId, null, turnId,
+                visibleHistory, durableMemories, normalizedPrompt);
+    }
 
     @Override
     public String complete(
             AgentOwnerId ownerId,
             UUID actorUsuarioId,
+            UUID actorSuperUsuarioId,
             TurnId turnId,
             List<VisibleMessage> visibleHistory,
             List<String> durableMemories,
@@ -73,6 +95,8 @@ public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
                 .map(SpringAiChatCompletionAdapter::toSpringAiMessage)
                 .toList();
         try {
+            Map<String, Object> trustedContext = trustedToolContext(
+                    ownerId, actorUsuarioId, actorSuperUsuarioId, turnId);
             return chatClient.prompt()
                     .system(system -> system.param(
                             "durable_memories",
@@ -80,12 +104,24 @@ public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
                     ))
                     .messages(historyMessages)
                     .user(normalizedPrompt)
-                    .toolContext(Map.of(ACTOR_CONTEXT_KEY, actorUsuarioId))
+                    .toolContext(Map.copyOf(trustedContext))
                     .call()
                     .content();
         } catch (RuntimeException ex) {
             throw new IllegalStateException("Spring AI chat completion failed");
         }
+    }
+
+    static Map<String, Object> trustedToolContext(
+            AgentOwnerId ownerId, UUID actorUsuarioId, UUID actorSuperUsuarioId, TurnId turnId) {
+        Map<String, Object> context = new HashMap<>();
+        context.put(AGENT_OWNER_CONTEXT_KEY, ownerId.value());
+        context.put(ACTOR_CONTEXT_KEY, actorUsuarioId);
+        context.put(TURN_CONTEXT_KEY, turnId.value());
+        if (actorSuperUsuarioId != null) {
+            context.put(SUPER_USUARIO_CONTEXT_KEY, actorSuperUsuarioId);
+        }
+        return Map.copyOf(context);
     }
 
     private static String formatDurableMemories(List<String> durableMemories) {

@@ -1,8 +1,15 @@
 package com.ar.crm2.config;
 
+import com.ar.crm2.adapter.out.ai.tool.AgendaTools;
+import com.ar.crm2.adapter.out.ai.tool.ColumnaTools;
+import com.ar.crm2.adapter.out.ai.tool.ContactoTools;
+import com.ar.crm2.adapter.out.ai.tool.EmpresaTools;
+import com.ar.crm2.adapter.out.ai.tool.EtiquetaTools;
+import com.ar.crm2.adapter.out.ai.tool.FichaTools;
 import com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor;
-import com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools;
-import io.micrometer.observation.ObservationRegistry;
+import com.ar.crm2.adapter.out.ai.tool.TableroTools;
+import com.ar.crm2.adapter.out.ai.tool.TareaTools;
+import com.ar.crm2.adapter.out.ai.tool.TratoTools;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.ToolCallingAdvisor;
 import org.springframework.ai.chat.client.advisor.observation.DefaultAdvisorObservationConvention;
@@ -10,6 +17,7 @@ import org.springframework.ai.chat.client.observation.DefaultChatClientObservati
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.tool.execution.ToolExecutionExceptionProcessor;
+import io.micrometer.observation.ObservationRegistry;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,7 +56,7 @@ import org.springframework.context.annotation.Configuration;
  *       {@code boot -> infrastructure -> application -> domain}). The
  *       adapter only consumes the contract: a {@link ChatClient} with
  *       a {@code defaultSystem} template that contains the
- *       {@code {durable_memories}} placeholder, the three shared CRM
+ *       {@code {durable_memories}} placeholder, the 50 resource-grouped CRM
  *       tools registered once as {@code defaultTools}, and the
  *       {@code defaultToolCallbacks} Spring AI 2.0 introspects to
  *       generate the allowlist schemas.</li>
@@ -67,8 +75,7 @@ public class AgentConfig {
      * rules. The template:
      * <ul>
      *   <li>States the agent identity (Pipely CRM assistant) and the
-     *       three allowlisted tools ({@code find_contacts},
-     *       {@code create_contact}, {@code update_deal_stage}).</li>
+     *       50 allowlisted tools grouped by the nine CRM resources.</li>
      *   <li>Reiterates the identity discipline: the actor identity is
      *       fixed by the validated JWT and MUST NOT be derived from
      *       the prompt, the visible history, or the model arguments.</li>
@@ -86,15 +93,38 @@ public class AgentConfig {
      * rendered prompt is either static or comes from the adapter's
      * {@code system(Consumer<PromptSystemSpec>)} call.
      */
-    static final String DEFAULT_SYSTEM_TEMPLATE = """
-            You are the Pipely CRM assistant for the authenticated owner. Use only the registered tools (find_contacts, create_contact, update_deal_stage). The actor identity is fixed by the validated JWT; do not derive it from the prompt, visible history, or model arguments.
+    static final String TOOL_CATALOG =
+            "find_contacts, create_contact, get_contact, edit_contact, change_contact_state, delete_contact"
+            + ", create_company, list_companies, edit_company, change_company_state, delete_company"
+            + ", create_trato, list_tratos, get_trato, edit_trato, delete_trato"
+            + ", create_tarea, list_tareas, get_tarea, edit_tarea, delete_tarea"
+            + ", create_etiqueta, list_etiquetas, get_etiqueta, edit_etiqueta, delete_etiqueta"
+            + ", create_agenda, list_agendas, get_agenda, edit_agenda, delete_agenda"
+            + ", list_tableros, get_tablero, create_tablero, edit_tablero, delete_tablero,"
+            + " eliminar_columna_del_tablero, assign_columna_to_tablero, reorder_tablero_columns"
+            + ", list_columnas, get_columna, create_columna, edit_columna, delete_columna"
+            + ", list_fichas, get_ficha, create_ficha, edit_ficha, delete_ficha, move_ficha_to_columna";
+
+    static final String DEFAULT_SYSTEM_TEMPLATE = systemTemplate(TOOL_CATALOG);
+
+    private static String systemTemplate(String catalog) {
+        return """
+            You are the Pipely CRM assistant for the authenticated owner. Use only the registered tools (%s). The actor identity is fixed by the validated JWT; do not derive it from the prompt, visible history, or model arguments.
+
+            Before a write tool, use the owner's explicit choices in the current conversation for important business inputs (names, descriptions, types, relationship states, assignments, amounts, dates, and ordering). A required tool parameter is not permission to invent its value.
+            If an important choice is missing, explain the missing inputs and ask for them or for scoped permission to choose them; wait for the owner's reply before writing. Permission already given in the current request or conversation covers only its stated scope; do not ask again for choices it covers. After an authorized write, disclose which values you chose. Use only defaults explicitly documented by the tool or domain; never fabricate optional facts such as contact details. Omit unspecified optional inputs only when the tool supports omission without unintended changes. Do not turn every optional field into a mandatory questionnaire.
+            Only delete records after the owner clearly requests deletion. For delete_etiqueta, pass confirm=true only after explicit confirmation; otherwise omit it or pass false.
+            For create_tablero, prefer the owner to provide name, description, and board type. For a name-only request, ask for missing description and type (TAREAS or TRATOS), or permission to choose them; do not default to TAREAS. Permission to choose allows you to supply missing values, not to bypass required tool or domain inputs.
+            Resolve existing entity references using available read tools and ask when a match is ambiguous; never invent UUIDs. If the required lookup is unavailable, ask the owner for the missing reference. Read-only queries do not need this clarification unless their target is ambiguous.
+            For edits, preserve unchanged fields using available reads or values explicitly provided in the conversation. If you cannot recover a required existing value, ask rather than guess. For full replacements (labels or column order), establish the intended complete set; never silently clear or drop unspecified entries.
 
             The visible history preserves the owner's turns in USER/ASSISTANT order. The owner's durable memory, separate from the visible history, is injected below:
 
             {durable_memories}
 
             Return only the final content. Do not echo the history, the durable memory, or sensitive identifiers.
-            """;
+            """.formatted(catalog);
+    }
 
     /**
      * Configured {@link ChatClient} bean for the Pipely CRM agent.
@@ -103,9 +133,8 @@ public class AgentConfig {
      * (resolved by {@link Qualifier @Qualifier("openAiChatModel")}
      * from {@code OpenAiChatAutoConfiguration#openAiChatModel}),
      * applies the owned {@link #DEFAULT_SYSTEM_TEMPLATE}, and
-     * registers the shared stateless {@link SpringAiCrmTools} bean
-     * once via {@code ChatClient.Builder#defaultTools(Object...)}. The
-     * resulting {@link ChatClient} advertises the three allowlisted
+     * registers the nine stateless resource tool beans once via
+     * {@code defaultTools(...)}. The resulting {@link ChatClient} advertises all 50 allowlisted
      * CRM tools to every request; the trusted CRM {@code actorUsuarioId}
      * travels separately per request via
      * {@code ChatClient.RequestSpec#toolContext(...)} set by the
@@ -113,12 +142,13 @@ public class AgentConfig {
      * — Spring AI 2.0 runtime tools would replace builder defaults,
      * so omitting that call preserves the configured allowlist.
      *
-     * <p>Construction supplies Spring AI 2.0's {@link ToolCallingAdvisor}
-     * with one explicit {@link ToolCallingManager}. That manager owns the
-     * tool loop and uses the configured {@link ToolExecutionExceptionProcessor}
-     * so internal runtime failures are redacted before a tool result reaches
-     * the model. The shared {@link SpringAiCrmTools} bean is provided by
-     * {@code boot.WiringConfig}; this factory only consumes it.
+     * <p>Construction supplies Spring AI 2.0's auto-registered
+     * {@link ToolCallingAdvisor} builder with one explicit
+     * {@link ToolCallingManager}. That manager owns the complete tool loop and
+     * uses the configured {@link ToolExecutionExceptionProcessor}; no second
+     * tool advisor is added. The advisor keeps its framework default order, so
+     * any memory advisor remains outside the tool loop as Spring AI specifies.
+     * The resource tool beans are provided by {@code boot.WiringConfig}; this factory only consumes them.
      *
      * <p>This is the only {@link ChatClient} bean in the application
      * context. The adapter takes the produced client by type; there
@@ -127,35 +157,40 @@ public class AgentConfig {
     @Bean
     public ChatClient chatClient(
             @Qualifier("openAiChatModel") ChatModel chatModel,
-            SpringAiCrmTools tools,
+            TableroTools tableroTools,
+            ColumnaTools columnaTools,
+            FichaTools fichaTools,
+            ContactoTools contactoTools,
+            EmpresaTools empresaTools,
+            TratoTools tratoTools,
+            TareaTools tareaTools,
+            EtiquetaTools etiquetaTools,
+            AgendaTools agendaTools,
             ToolExecutionExceptionProcessor exceptionProcessor) {
-        return buildChatClient(chatModel, tools, exceptionProcessor);
+        return buildChatClient(chatModel, exceptionProcessor, tableroTools, columnaTools, fichaTools,
+                contactoTools, empresaTools, tratoTools, tareaTools, etiquetaTools, agendaTools);
     }
 
-    ChatClient chatClient(ChatModel chatModel, SpringAiCrmTools tools) {
-        return buildChatClient(
-                chatModel, tools, new SafeToolExecutionExceptionProcessor());
+    ChatClient chatClient(ChatModel chatModel, Object... toolGroups) {
+                return buildChatClient(chatModel, new SafeToolExecutionExceptionProcessor(), toolGroups);
     }
 
-    ChatClient buildChatClient(
-            ChatModel chatModel,
-            SpringAiCrmTools tools,
-            ToolExecutionExceptionProcessor exceptionProcessor) {
+    ChatClient buildChatClient(ChatModel chatModel,
+            ToolExecutionExceptionProcessor exceptionProcessor, Object... toolGroups) {
         ToolCallingManager toolCallingManager = ToolCallingManager.builder()
                 .observationRegistry(ObservationRegistry.NOOP)
                 .toolExecutionExceptionProcessor(exceptionProcessor)
                 .build();
         ToolCallingAdvisor.Builder<?> toolCallingAdvisor = ToolCallingAdvisor.builder()
                 .toolCallingManager(toolCallingManager);
-        return ChatClient.builder(
+        ChatClient.Builder builder = ChatClient.builder(
                         chatModel,
                         ObservationRegistry.NOOP,
                         new DefaultChatClientObservationConvention(),
                         new DefaultAdvisorObservationConvention(),
                         toolCallingAdvisor)
-                .defaultSystem(DEFAULT_SYSTEM_TEMPLATE)
-                .defaultTools(tools)
-                .build();
+                .defaultSystem(systemTemplate(TOOL_CATALOG));
+        return builder.defaultTools(toolGroups).build();
     }
 
     @Bean

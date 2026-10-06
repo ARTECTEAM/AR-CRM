@@ -59,7 +59,7 @@ public final class AgentRestMapper {
             String prompt, int visibleHistoryLimit
     ) {
         return new CompleteUserTurnCommand(
-                actor.subject(), actorUsuarioId,
+                actor.subject(), actorUsuarioId, actor.superUsuarioId().orElse(null),
                 accepted.turn().getId().value(), accepted.opaqueHandle(),
                 prompt, visibleHistoryLimit);
     }
