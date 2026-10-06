@@ -15,8 +15,15 @@ import lombok.RequiredArgsConstructor;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
-/** Coordinates sequential regeneration without persistence or provider details. */
+/**
+ * Coordinates sequential regeneration without persistence or provider details.
+ *
+ * <p>Threads the trusted CRM {@code actorUsuarioId} from the Command to
+ * the completion port as a separate, non-overridable parameter, in the
+ * same posture as {@link CompleteUserTurnService}.
+ */
 @RequiredArgsConstructor
 public class RegenerateUserTurnService implements RegenerateUserTurnUseCase {
     private final CreateRegenerationPort createRegenerationPort;
@@ -29,6 +36,7 @@ public class RegenerateUserTurnService implements RegenerateUserTurnUseCase {
     @Override
     public String regenerate(RegenerateUserTurnCommand command) {
         AgentOwnerId ownerId = AgentOwnerId.from(command.actorSubject());
+        UUID actorUsuarioId = command.actorUsuarioId();
         TurnId turnId = TurnId.from(command.turnId());
         Optional<String> canonicalContent = createRegenerationPort.createRegenerationOrFindCanonical(
                 ownerId, turnId, command.opaqueHandle(), command.idempotencyKey());
@@ -40,7 +48,7 @@ public class RegenerateUserTurnService implements RegenerateUserTurnUseCase {
         String userContent = findUserTurnContentPort.findUserTurnContent(ownerId, turnId, command.opaqueHandle());
         List<String> durableMemories = findEligibleDurableMemoriesPort.findEligibleDurableMemories(ownerId);
         String assistantContent = chatCompletionPort.complete(
-                ownerId, turnId, visibleHistory, durableMemories, userContent);
+                ownerId, actorUsuarioId, turnId, visibleHistory, durableMemories, userContent);
         return completeRegeneratedTurnPort.completeRegeneratedTurn(
                 ownerId, turnId, command.opaqueHandle(), command.idempotencyKey(), assistantContent);
     }

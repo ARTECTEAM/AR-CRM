@@ -1,6 +1,6 @@
 package com.ar.crm2.application.agent.memory.command;
 
-import com.ar.crm2.application.agent.command.ApplicationAssert;
+import com.ar.crm2.application.shared.ApplicationAssert;
 import com.ar.crm2.model.agent.policy.MemorySafetyContext;
 
 public record RememberDurableMemoryCommand(String actorSubject, String content, MemorySafetyContext safetyContext) {

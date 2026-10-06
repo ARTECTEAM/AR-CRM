@@ -106,6 +106,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Spring AI 2.0 provider-neutral ChatClient API used by infrastructure adapters.
+             Provider-specific client configuration and credentials stay in the boot module. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-client-chat</artifactId>
+        </dependency>
+
         <!-- Test dependencies: H2 for slice tests, Spring test MVC/Data JPA for WebMvcTest/DataJpaTest. -->
         <dependency>
             <groupId>com.h2database</groupId>

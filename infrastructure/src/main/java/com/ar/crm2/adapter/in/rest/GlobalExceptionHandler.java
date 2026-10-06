@@ -1,6 +1,7 @@
 package com.ar.crm2.adapter.in.rest;
 
 import com.ar.crm2.application.agenda.exception.AgendaNotFoundException;
+import com.ar.crm2.application.agent.turn.exception.IdempotencyKeyReusedException;
 import com.ar.crm2.application.columna.exception.ColumnaHasAssociatedFichasException;
 import com.ar.crm2.application.columna.exception.ColumnaNotFoundException;
 import com.ar.crm2.application.contacto.exception.ContactoHasAssociatedTratosException;
@@ -260,6 +261,16 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleIllegalState(IllegalStateException ex) {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
             .body(Map.of("error", ex.getMessage()));
+    }
+
+    /**
+     * Maps reuse of an idempotency key with a different message fingerprint to a conflict.
+     */
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    public ResponseEntity<Map<String, String>> handleIdempotencyKeyReusedException(IdempotencyKeyReusedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(Map.of("error", "idempotencyKey was reused with a different message; "
+                    + "send the same message body to retry or use a new idempotencyKey for a new turn"));
     }
 
     /**

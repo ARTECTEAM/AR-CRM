@@ -36,6 +36,17 @@ spring:
   jackson:
     time-zone: America/Mexico_City
 
+  ai:
+    # Spring AI 2.0 — OpenAI provider configuration for the Pipely CRM agent.
+    # The CRM agent ChatClient (boot/src/main/java/com/ar/crm2/config/AgentConfig.java)
+    # resolves the @Qualifier("openAiChatModel") ChatModel bean from
+    # OpenAiChatAutoConfiguration, which reads these properties. The api-key
+    # is environment-backed: set OPENAI_API_KEY in the deployment environment.
+    # No hardcoded secret, no unjustified model choice — base URL, model name,
+    # and credentials remain operator-driven.
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+
   security:
     oauth2:
       resourceserver:

@@ -1336,4 +1336,127 @@ public class WiringConfig {
                 grupoAdapter, grupoAdapter, notifyAdapter, evolutionAdapter, mediaStorage, canalAdapter, evolutionAdapter);
     }
 
+    // ── Agent runtime and trusted CRM tools ───────────────────────────────
+
+    @Bean
+    public com.ar.crm2.application.contacto.port.in.SearchContactosForActorUseCase searchContactosForActorUseCase(
+            com.ar.crm2.application.contacto.port.out.SearchContactosPort searchPort
+    ) {
+        return new com.ar.crm2.application.contacto.service.SearchContactosForActorService(searchPort);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools springAiCrmTools(
+            com.ar.crm2.application.contacto.port.in.SearchContactosForActorUseCase searchContactosForActorUseCase,
+            com.ar.crm2.application.contacto.port.in.CreateContactoUseCase createContactoUseCase,
+            com.ar.crm2.application.trato.port.in.CambiarEstadoTratoUseCase cambiarEstadoTratoUseCase,
+            com.fasterxml.jackson.databind.ObjectMapper objectMapper
+    ) {
+        return new com.ar.crm2.adapter.out.ai.tool.SpringAiCrmTools(
+                searchContactosForActorUseCase,
+                createContactoUseCase,
+                cambiarEstadoTratoUseCase,
+                objectMapper);
+    }
+
+    @Bean
+    public com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort chatCompletionPort(
+            org.springframework.ai.chat.client.ChatClient chatClient
+    ) {
+        return new com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter(chatClient);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.persistence.agent.AgentTurnAdapter agentTurnAdapter(
+            com.ar.crm2.adapter.out.persistence.agent.repository.AgentConversationRepository conversationRepository,
+            com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository turnRepository,
+            com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRequestRepository requestRepository,
+            com.ar.crm2.adapter.out.persistence.agent.repository.AgentVisibleHistoryRepository historyRepository,
+            org.springframework.transaction.PlatformTransactionManager transactionManager
+    ) {
+        return new com.ar.crm2.adapter.out.persistence.agent.AgentTurnAdapter(
+                conversationRepository, turnRepository, requestRepository, historyRepository, transactionManager);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.persistence.agent.memory.DurableMemoryPersistenceAdapter durableMemoryPersistenceAdapter(
+            com.ar.crm2.adapter.out.persistence.agent.memory.DurableMemoryRepository repository
+    ) {
+        return new com.ar.crm2.adapter.out.persistence.agent.memory.DurableMemoryPersistenceAdapter(repository);
+    }
+
+    @Bean
+    public com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionPersistenceAdapter agentToolActionPersistenceAdapter(
+            com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionRepository repository,
+            org.springframework.transaction.PlatformTransactionManager transactionManager,
+            java.time.Clock agentToolActionClock
+    ) {
+        return new com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionPersistenceAdapter(
+                repository, transactionManager, agentToolActionClock);
+    }
+
+    @Bean
+    public java.time.Clock agentToolActionClock() {
+        return java.time.Clock.systemUTC();
+    }
+
+    @Bean
+    public com.ar.crm2.application.agent.turn.port.in.CreateUserTurnUseCase createUserTurnUseCase(
+            com.ar.crm2.application.agent.turn.port.out.CreateUserTurnPort createUserTurnPort
+    ) {
+        return new com.ar.crm2.application.agent.turn.service.CreateUserTurnService(createUserTurnPort);
+    }
+
+    @Bean
+    public com.ar.crm2.application.agent.turn.port.in.CompleteUserTurnUseCase completeUserTurnUseCase(
+            com.ar.crm2.application.agent.turn.port.out.FindCompletedAssistantContentPort findCompletedAssistantContentPort,
+            com.ar.crm2.application.agent.turn.port.out.FindCompletedVisibleHistoryPort findCompletedVisibleHistoryPort,
+            com.ar.crm2.application.agent.turn.port.out.FindEligibleDurableMemoriesPort findEligibleDurableMemoriesPort,
+            com.ar.crm2.application.agent.turn.port.out.CompletePreparedTurnPort completePreparedTurnPort,
+            com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort chatCompletionPort
+    ) {
+        return new com.ar.crm2.application.agent.turn.service.CompleteUserTurnService(
+                findCompletedAssistantContentPort,
+                findCompletedVisibleHistoryPort,
+                findEligibleDurableMemoriesPort,
+                completePreparedTurnPort,
+                chatCompletionPort);
+    }
+
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.RecallDurableMemoriesUseCase recallDurableMemoriesUseCase(
+            com.ar.crm2.application.agent.memory.port.out.FindEligibleDurableMemoriesPort findEligiblePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.RecallDurableMemoriesService(findEligiblePort);
+    }
+
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.RememberDurableMemoryUseCase rememberDurableMemoryUseCase(
+            com.ar.crm2.application.agent.memory.port.out.SaveDurableMemoryPort savePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.RememberDurableMemoryService(savePort);
+    }
+
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.ReplaceDurableMemoryUseCase replaceDurableMemoryUseCase(
+            com.ar.crm2.application.agent.memory.port.out.ReplaceDurableMemoryPort replacePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.ReplaceDurableMemoryService(replacePort);
+    }
+
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.DeleteDurableMemoryUseCase deleteDurableMemoryUseCase(
+            com.ar.crm2.application.agent.memory.port.out.DeleteDurableMemoryPort deletePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.DeleteDurableMemoryService(deletePort);
+    }
+
+    @Bean
+    public com.ar.crm2.application.agent.memory.port.in.PurgeDurableMemoriesUseCase purgeDurableMemoriesUseCase(
+            com.ar.crm2.application.agent.memory.port.out.PurgeDurableMemoriesPort purgePort
+    ) {
+        return new com.ar.crm2.application.agent.memory.service.PurgeDurableMemoriesService(purgePort);
+
+}
+
 }
