@@ -9,6 +9,7 @@ import com.ar.crm2.application.security.port.out.ResourceScopePort;
 import com.ar.crm2.application.security.service.DefaultCrmAuthorization;
 import com.ar.crm2.model.autorizacion.AccionCrm;
 import com.ar.crm2.model.autorizacion.AlcanceCrm;
+import com.ar.crm2.model.autorizacion.GrupoCampoSensible;
 import com.ar.crm2.model.autorizacion.PermisoRecurso;
 import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Rol;
@@ -21,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -210,6 +212,55 @@ class DefaultCrmAuthorizationTest {
                 Set.of(), Set.of(), Set.of()))));
 
         assertNotEquals(before, authorization.revision());
+    }
+
+    @Test
+    void authorizationCapabilitiesExposeOnlyEvaluableActionsAndCoarseScopeWithoutAllowedIds() {
+        UUID allowedBoardId = UUID.randomUUID();
+        Rol configured = role(List.of(
+                new PermisoRecurso(RecursoCrm.EMPRESA,
+                        Set.of(AccionCrm.LEER, AccionCrm.ACTUALIZAR), AlcanceCrm.TODO_COMPARTIDO,
+                        Set.of(), Set.of(GrupoCampoSensible.CONTACTO_PRIVADO), Set.of()),
+                new PermisoRecurso(RecursoCrm.TABLERO,
+                        Set.of(AccionCrm.ADMINISTRAR), AlcanceCrm.TABLEROS_PERMITIDOS,
+                        Set.of(allowedBoardId), Set.of(), Set.of()),
+                new PermisoRecurso(RecursoCrm.TAREA,
+                        Set.of(AccionCrm.LEER), AlcanceCrm.PROPIOS_O_ASIGNADOS,
+                        Set.of(), Set.of(), Set.of())
+        ));
+        CurrentActorPort actor = () -> Optional.of(new CurrentActor(USER_ID, ROLE_ID.value(), false));
+        ResourceScopePort boardScope = new ResourceScopePort() {
+            @Override public boolean supports(RecursoCrm resource) { return resource == RecursoCrm.TABLERO; }
+            @Override public boolean permits(UUID userId, RecursoCrm resource, UUID recordId,
+                                             AlcanceCrm scope, Set<UUID> allowedIds) { return false; }
+        };
+        CrmAuthorization authorization = new DefaultCrmAuthorization(actor,
+                id -> Optional.of(configured), List.of(boardScope));
+
+        AuthorizationCapabilities capabilities = authorization.authorizationCapabilities();
+
+        assertThat(capabilities.resources()).containsOnlyKeys(RecursoCrm.EMPRESA, RecursoCrm.TABLERO);
+        assertThat(capabilities.resources().get(RecursoCrm.EMPRESA).actions())
+                .containsExactlyInAnyOrder(AccionCrm.LEER, AccionCrm.ACTUALIZAR);
+        assertThat(capabilities.resources().get(RecursoCrm.EMPRESA).readableGroups())
+                .containsExactly(GrupoCampoSensible.CONTACTO_PRIVADO);
+        assertThat(capabilities.resources().get(RecursoCrm.EMPRESA).writableGroups()).isEmpty();
+        assertThat(capabilities.resources().get(RecursoCrm.TABLERO).actions())
+                .containsExactlyInAnyOrder(AccionCrm.LEER, AccionCrm.CREAR,
+                        AccionCrm.ACTUALIZAR, AccionCrm.ELIMINAR);
+        assertThat(capabilities.resources().get(RecursoCrm.TABLERO).scope())
+                .isEqualTo(AlcanceCrm.TABLEROS_PERMITIDOS);
+        assertThat(capabilities.toString()).doesNotContain(allowedBoardId.toString());
+    }
+
+    @Test
+    void authorizationCapabilitiesFailClosedForInactiveRole() {
+        Rol inactive = Rol.reconstitute(ROLE_ID, "Inactive", null, false, List.of());
+        CrmAuthorization authorization = new DefaultCrmAuthorization(
+                () -> Optional.of(new CurrentActor(USER_ID, ROLE_ID.value(), false)),
+                id -> Optional.of(inactive), List.of());
+
+        assertThrows(CrmActorUnavailableException.class, authorization::authorizationCapabilities);
     }
 
     private static Rol role(List<PermisoRecurso> grants) {

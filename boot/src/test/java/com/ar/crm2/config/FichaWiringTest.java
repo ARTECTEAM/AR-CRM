@@ -48,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class FichaWiringTest {
 
     @MockitoBean private ChatClient chatClient;
+    @MockitoBean private com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog agentToolCallbackCatalog;
     @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.repository.AgentConversationRepository agentConversationRepository;
     @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository agentTurnRepository;
     @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRequestRepository agentTurnRequestRepository;

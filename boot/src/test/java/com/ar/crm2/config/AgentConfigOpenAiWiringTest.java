@@ -164,7 +164,7 @@ class AgentConfigOpenAiWiringTest {
             ChatClient chatClient = context.getBean(chatClientBeans[0], ChatClient.class);
 
             String content = chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", "- wired-memory"))
+                    .system(spec -> spec.param("durable_memories", "- wired-memory").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                     .user("hi-from-context")
                     .call()
                     .content();
@@ -183,7 +183,7 @@ class AgentConfigOpenAiWiringTest {
             ChatClient chatClient = context.getBean(ChatClient.class);
 
             chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", "- wired-memory-2"))
+                    .system(spec -> spec.param("durable_memories", "- wired-memory-2").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                     .user("hello")
                     .call()
                     .content();
@@ -220,7 +220,7 @@ class AgentConfigOpenAiWiringTest {
     }
 
     @Test
-    void groupedResourceToolsAreResolvedAsTheExactDefaultToolCatalog() {
+    void groupedResourceToolsAreResolvedAsTheExactCatalogWithoutGlobalDefaults() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 OpenAiTestContext.class)) {
 
@@ -234,40 +234,31 @@ class AgentConfigOpenAiWiringTest {
             assertThat(context.getBean(EtiquetaTools.class)).isNotNull();
             assertThat(context.getBean(AgendaTools.class)).isNotNull();
 
-            ChatClient chatClient = context.getBean(ChatClient.class);
+            var catalog = context.getBean(com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog.class);
+            assertThat(catalog.registeredToolNames()).hasSize(50)
+                    .contains("find_contacts", "create_contact", "list_tableros", "move_ficha_to_columna");
 
-            // Round-trip confirms all resource groups reach the configured client.
+            ChatClient chatClient = context.getBean(ChatClient.class);
             chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", ""))
+                    .system(spec -> spec.param("durable_memories", "").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                     .user("hi")
                     .call()
                     .content();
 
-            var callbacks = ((ToolCallingChatOptions) ((CapturingChatModel) context.getBean("openAiChatModel"))
-                    .capturedPrompt().getOptions()).getToolCallbacks();
-            assertThat(callbacks).hasSize(50);
-            assertThat(callbacks.stream().map(callback -> callback.getToolDefinition().name()))
-                    .containsExactlyInAnyOrder(
-                            "find_contacts", "create_contact", "get_contact", "edit_contact", "change_contact_state", "delete_contact",
-                            "create_company", "list_companies", "edit_company", "change_company_state", "delete_company",
-                            "create_trato", "list_tratos", "get_trato", "edit_trato", "delete_trato",
-                            "create_tarea", "list_tareas", "get_tarea", "edit_tarea", "delete_tarea",
-                            "create_etiqueta", "list_etiquetas", "get_etiqueta", "edit_etiqueta", "delete_etiqueta",
-                            "create_agenda", "list_agendas", "get_agenda", "edit_agenda", "delete_agenda",
-                            "list_tableros", "get_tablero", "create_tablero", "edit_tablero", "delete_tablero",
-                            "eliminar_columna_del_tablero", "assign_columna_to_tablero", "reorder_tablero_columns",
-                            "list_columnas", "get_columna", "create_columna", "edit_columna", "delete_columna",
-                            "list_fichas", "get_ficha", "create_ficha", "edit_ficha", "delete_ficha", "move_ficha_to_columna");
+            Object promptOptions = ((CapturingChatModel) context.getBean("openAiChatModel"))
+                    .capturedPrompt().getOptions();
+            if (promptOptions instanceof ToolCallingChatOptions options) {
+                assertThat(options.getToolCallbacks()).isNullOrEmpty();
+            }
         }
     }
-
     @Test
     void wiredContextClosesCleanlyAfterOpenAiChatClientRoundTrip() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 OpenAiTestContext.class)) {
             ChatClient chatClient = context.getBean(ChatClient.class);
             chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", "- x"))
+                    .system(spec -> spec.param("durable_memories", "- x").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                     .user("y")
                     .call()
                     .content();

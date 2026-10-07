@@ -1,21 +1,25 @@
 package com.ar.crm2.adapter.out.ai;
 
+import com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog;
 import com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort;
+import com.ar.crm2.application.security.AuthorizationCapabilities;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.model.agent.enums.VisibleMessageRole;
 import com.ar.crm2.model.agent.vo.AgentOwnerId;
 import com.ar.crm2.model.agent.vo.TurnId;
 import com.ar.crm2.model.agent.vo.VisibleMessage;
-import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.tool.ToolCallback;
 
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
@@ -44,12 +48,10 @@ import java.util.stream.Collectors;
  *         {@code turnId} (the conversation turn) — per request through
  *         the framework {@code .toolContext(Map.of(...))} call so each
  *         allowlisted tool can assert ownership and authorization
- *         against server-derived values. The configured
-     *         {@link ChatClient} already carries its configuration-selected
-     *         CRM tools through {@code defaultTools(tools)}; the adapter does
- *         NOT call request {@code .tools(...)} because Spring AI 2.0
- *         runtime tools replace builder defaults. Identity stays
- *         outside the model-visible schema.</li>
+ *         against server-derived values. The shared {@link ChatClient} has
+ *         no global tool callbacks; this adapter derives the current role's
+ *         immutable callback subset and capability summary once per request.
+ *         Identity stays outside the model-visible schema.</li>
  *     <li>Returns only the final textual content from the model, and
  *         propagates provider failure through a controlled
  *         {@link IllegalStateException} without leaking the cause.</li>
@@ -59,7 +61,6 @@ import java.util.stream.Collectors;
  * streaming, structured output, and credential wiring are intentionally
  * absent and belong to later PRs (PR9–PR13).
  */
-@RequiredArgsConstructor
 public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
 
     static final String ACTOR_CONTEXT_KEY = "actorUsuarioId";
@@ -68,6 +69,28 @@ public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
     static final String TURN_CONTEXT_KEY = "turnId";
 
     private final ChatClient chatClient;
+    private final AgentToolCallbackCatalog toolCallbackCatalog;
+    private final Supplier<AuthorizationCapabilities> capabilitiesSupplier;
+
+    /** Fail-closed test constructor; production wiring supplies authorization and the fixed catalog. */
+    public SpringAiChatCompletionAdapter(ChatClient chatClient) {
+        this(chatClient, AgentToolCallbackCatalog.empty(), AuthorizationCapabilities::none);
+    }
+
+    public SpringAiChatCompletionAdapter(ChatClient chatClient,
+                                         AgentToolCallbackCatalog toolCallbackCatalog,
+                                         CrmAuthorization authorization) {
+        this(chatClient, toolCallbackCatalog,
+                Objects.requireNonNull(authorization, "authorization")::authorizationCapabilities);
+    }
+
+    SpringAiChatCompletionAdapter(ChatClient chatClient,
+                                  AgentToolCallbackCatalog toolCallbackCatalog,
+                                  Supplier<AuthorizationCapabilities> capabilitiesSupplier) {
+        this.chatClient = Objects.requireNonNull(chatClient, "chatClient");
+        this.toolCallbackCatalog = Objects.requireNonNull(toolCallbackCatalog, "toolCallbackCatalog");
+        this.capabilitiesSupplier = Objects.requireNonNull(capabilitiesSupplier, "capabilitiesSupplier");
+    }
 
     public String complete(
             AgentOwnerId ownerId,
@@ -95,16 +118,20 @@ public class SpringAiChatCompletionAdapter implements ChatCompletionPort {
                 .map(SpringAiChatCompletionAdapter::toSpringAiMessage)
                 .toList();
         try {
+            AuthorizationCapabilities capabilities = Objects.requireNonNullElse(
+                    capabilitiesSupplier.get(), AuthorizationCapabilities.none());
+            List<ToolCallback> allowedCallbacks = toolCallbackCatalog.callbacksFor(capabilities);
             Map<String, Object> trustedContext = trustedToolContext(
                     ownerId, actorUsuarioId, actorSuperUsuarioId, turnId);
             return chatClient.prompt()
                     .system(system -> system.param(
                             "durable_memories",
                             formatDurableMemories(durableMemories)
-                    ))
+                    ).param("agent_capabilities", toolCallbackCatalog.describeCapabilities(capabilities)))
                     .messages(historyMessages)
                     .user(normalizedPrompt)
                     .toolContext(Map.copyOf(trustedContext))
+                    .tools(allowedCallbacks.toArray())
                     .call()
                     .content();
         } catch (RuntimeException ex) {
