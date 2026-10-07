@@ -18,7 +18,7 @@ import java.util.*;
  * - {@code sub}             → subject
  * - {@code preferred_username} → username
  * - {@code email}           → email
- * - {@code usuario_id}      → usuarioId (custom Keycloak mapper, UUID as string)
+ * - CRM usuario identity is resolved from the active local user by JWT subject
  * - {@code super_usuario_id} → superUsuarioId (custom Keycloak mapper, UUID as string)
  * - {@code realm_access.roles} → roles (array from Keycloak token)
  *
@@ -31,7 +31,6 @@ public class  KeycloakJwtActorContextMapper {
     private static final String CLAIM_SUB = "sub";
     private static final String CLAIM_PREFERRED_USERNAME = "preferred_username";
     private static final String CLAIM_EMAIL = "email";
-    private static final String CLAIM_USUARIO_ID = "usuario_id";
     private static final String CLAIM_SUPER_USUARIO_ID = "super_usuario_id";
     private static final String CLAIM_REALM_ACCESS = "realm_access";
     private static final String CLAIM_ROLES = "roles";
@@ -47,7 +46,7 @@ public class  KeycloakJwtActorContextMapper {
         String subject = jwt.getClaimAsString(CLAIM_SUB);
         String username = jwt.getClaimAsString(CLAIM_PREFERRED_USERNAME);
         String email = jwt.getClaimAsString(CLAIM_EMAIL);
-        Optional<UUID> usuarioId = parseOptionalUuid(jwt, CLAIM_USUARIO_ID);
+        Optional<UUID> usuarioId = Optional.empty();
         Optional<UUID> superUsuarioId = parseOptionalUuid(jwt, CLAIM_SUPER_USUARIO_ID);
         Set<String> roles = extractRoles(jwt);
 

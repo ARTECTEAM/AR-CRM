@@ -55,6 +55,8 @@ class FichaWiringTest {
     @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.memory.DurableMemoryRepository durableMemoryRepository;
     @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionRepository agentToolActionRepository;
     @MockitoBean private org.springframework.transaction.PlatformTransactionManager platformTransactionManager;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.RoleManagerGovernance roleManagerGovernance;
+    @MockitoBean private com.ar.crm2.application.security.port.out.CurrentActorPort currentActorPort;
 
     @MockitoBean private EmpresaRepository empresaRepository;
     @MockitoBean private ContactoRepository contactoRepository;

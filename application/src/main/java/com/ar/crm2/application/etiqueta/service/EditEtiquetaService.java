@@ -6,6 +6,9 @@ import com.ar.crm2.application.etiqueta.port.in.EditEtiquetaUseCase;
 import com.ar.crm2.application.etiqueta.port.out.ExistsEtiquetaByNombreAndTipoPort;
 import com.ar.crm2.application.etiqueta.port.out.FindEtiquetaByIdPort;
 import com.ar.crm2.application.etiqueta.port.out.SaveEtiquetaPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.exception.DuplicateEtiquetaNameException;
 import com.ar.crm2.model.entity.Etiqueta;
 import com.ar.crm2.model.vo.EtiquetaId;
@@ -30,9 +33,12 @@ public class EditEtiquetaService implements EditEtiquetaUseCase {
     private final FindEtiquetaByIdPort findPort;
     private final SaveEtiquetaPort savePort;
     private final ExistsEtiquetaByNombreAndTipoPort existsPort;
+    private final CrmAuthorization authorization;
 
     @Override
     public Etiqueta edit(EditEtiquetaCommand command) {
+        authorization.require(RecursoCrm.ETIQUETA, AccionCrm.ACTUALIZAR);
+        authorization.requireRecord(RecursoCrm.ETIQUETA, AccionCrm.ACTUALIZAR, command.id());
         EtiquetaId id = EtiquetaId.from(command.id());
         Etiqueta existing = findPort.findById(id)
             .orElseThrow(() -> EtiquetaNotFoundException.forId(command.id()));

@@ -120,6 +120,15 @@ class AgentConfigTest {
         assertThat(constrained).isEqualTo(22);
     }
 
+    private static com.ar.crm2.adapter.out.ai.tool.CrmToolOutputProjector outputProjector() {
+        var authorization = mock(com.ar.crm2.application.security.CrmAuthorization.class);
+        var groups = java.util.Set.of(com.ar.crm2.model.autorizacion.GrupoCampoSensible.values());
+        when(authorization.fieldPolicy(org.mockito.ArgumentMatchers.any())).thenReturn(
+                new com.ar.crm2.application.security.ResourceReadPolicy(
+                        com.ar.crm2.model.autorizacion.AlcanceCrm.TODO_COMPARTIDO,
+                        groups, java.util.Set.of(), groups));
+        return new com.ar.crm2.adapter.out.ai.tool.CrmToolOutputProjector(authorization);
+    }
     private static Object[] newNoopTools() {
         return newTools(mock(SearchContactosForActorUseCase.class));
     }
@@ -133,7 +142,7 @@ class AgentConfigTest {
                         mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                         mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                         mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                        mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class)),
+                        mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class), outputProjector()),
                 new ColumnaTools(mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
                         mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
                         mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
@@ -148,15 +157,15 @@ class AgentConfigTest {
                 new ContactoTools(getAllContactosUseCase, mock(CreateContactoUseCase.class),
                         mock(EditContactoUseCase.class), mock(com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase.class),
                         mock(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class),
-                        mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class)),
+                        mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class), outputProjector()),
                 new EmpresaTools(mock(CreateEmpresaUseCase.class),
                         mock(com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class),
                         mock(EditEmpresaUseCase.class), mock(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class),
-                        mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class)),
+                        mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class), outputProjector()),
                 new TratoTools(mock(com.ar.crm2.application.trato.port.in.CreateTratoUseCase.class),
                         mock(com.ar.crm2.application.trato.port.in.GetAllTratosUseCase.class),
                         mock(com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase.class),
-                        mock(EditTratoUseCase.class), mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class)),
+                        mock(EditTratoUseCase.class), mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class), outputProjector()),
                 new TareaTools(mock(com.ar.crm2.application.tarea.port.in.CreateTareaUseCase.class),
                         mock(com.ar.crm2.application.tarea.port.in.GetAllTareasUseCase.class),
                         mock(com.ar.crm2.application.tarea.port.in.GetTareaByIdUseCase.class),

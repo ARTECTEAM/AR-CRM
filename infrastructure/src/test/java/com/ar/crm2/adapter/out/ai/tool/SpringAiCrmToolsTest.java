@@ -137,6 +137,13 @@ class SpringAiCrmToolsTest {
         return new ToolContext(Map.of(ACTOR_CONTEXT_KEY, actor));
     }
 
+    private static CrmToolOutputProjector outputProjector() {
+        var authorization = mock(com.ar.crm2.application.security.CrmAuthorization.class);
+        var groups = java.util.Set.of(com.ar.crm2.model.autorizacion.GrupoCampoSensible.values());
+        when(authorization.fieldPolicy(any())).thenReturn(new com.ar.crm2.application.security.ResourceReadPolicy(
+                com.ar.crm2.model.autorizacion.AlcanceCrm.TODO_COMPARTIDO, groups, java.util.Set.of(), groups));
+        return new CrmToolOutputProjector(authorization);
+    }
     private static Object[] newTools(
             SearchContactosForActorUseCase contactosUseCase,
             CreateContactoUseCase createUseCase,
@@ -148,6 +155,7 @@ class SpringAiCrmToolsTest {
                 createEmpresaUseCase, editEmpresaUseCase, editTratoUseCase,
                 mock(com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class));
     }
+
 
     private static Object[] newTools(
             SearchContactosForActorUseCase contactosUseCase,
@@ -184,7 +192,7 @@ class SpringAiCrmToolsTest {
                         mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                         mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                         mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                        mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class)),
+                        mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class), outputProjector()),
                 new ColumnaTools(mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
                         mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
                         mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
@@ -199,15 +207,15 @@ class SpringAiCrmToolsTest {
                 new ContactoTools(contactosUseCase, createUseCase, editContactoUseCase,
                         getContactoByIdUseCase,
                         mock(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class),
-                        mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class)),
+                        mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class), outputProjector()),
                 new EmpresaTools(createEmpresaUseCase,
                         getAllEmpresasUseCase,
                         editEmpresaUseCase, mock(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class),
-                        mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class)),
+                        mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class), outputProjector()),
                 new TratoTools(mock(com.ar.crm2.application.trato.port.in.CreateTratoUseCase.class),
                         mock(com.ar.crm2.application.trato.port.in.GetAllTratosUseCase.class),
                         getTratoByIdUseCase,
-                        editTratoUseCase, mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class)),
+                        editTratoUseCase, mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class), outputProjector()),
                 new TareaTools(mock(com.ar.crm2.application.tarea.port.in.CreateTareaUseCase.class),
                         mock(com.ar.crm2.application.tarea.port.in.GetAllTareasUseCase.class),
                         mock(com.ar.crm2.application.tarea.port.in.GetTareaByIdUseCase.class),
@@ -1247,7 +1255,7 @@ class SpringAiCrmToolsTest {
         when(columnaById.getById(any())).thenReturn(existingColumna);
         TableroTools tableroTools = new TableroTools(tableros, tableroById, createTablero, editTablero,
                 mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class), assign, reorder);
+                mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class), assign, reorder, outputProjector());
         ColumnaTools columnaTools = new ColumnaTools(createColumna, columnas, columnaById, editColumna,
                 mock(com.ar.crm2.application.columna.port.in.DeleteColumnaUseCase.class));
         FichaTools fichaTools = new FichaTools(createFicha, fichas, fichaById, editFicha,
@@ -1410,7 +1418,7 @@ class SpringAiCrmToolsTest {
                 mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                 mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                 mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class));
+                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class), outputProjector());
         return tools;
     }
 
@@ -1425,7 +1433,7 @@ class SpringAiCrmToolsTest {
                 mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                 mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                 mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class));
+                mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class), outputProjector());
         tools[1] = new ColumnaTools(createColumna, mock(com.ar.crm2.application.columna.port.in.GetAllColumnasUseCase.class),
                 mock(com.ar.crm2.application.columna.port.in.GetColumnaByIdUseCase.class),
                 mock(com.ar.crm2.application.columna.port.in.EditColumnaUseCase.class),

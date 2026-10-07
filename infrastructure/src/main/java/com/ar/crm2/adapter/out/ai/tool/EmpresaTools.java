@@ -11,6 +11,7 @@ import com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.EditEmpresaUseCase;
 import com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase;
 import com.ar.crm2.model.entity.Empresa;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.vo.EmpresaId;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,8 @@ public class EmpresaTools {
     private final DeleteEmpresaUseCase deleteEmpresaUseCase;
     private final CambiarEstadoEmpresaUseCase cambiarEstadoEmpresaUseCase;
 
+    private final CrmToolOutputProjector outputProjector;
+
     @Tool(name = "create_company", description = "Create a company. Required name must be supplied by the user; do not invent it. The actor identity is trusted server context and is not a model argument.")
     public CreateCompanyOutput createCompany(
             @ToolParam(description = "Company name; required, non-blank.") String nombre,
@@ -48,13 +51,13 @@ public class EmpresaTools {
         Empresa created = createEmpresaUseCase.create(CrmToolMapper.toCreateEmpresaCommand(
                 nombre, sector, telefono, paginaWeb, facebook, instagram, twitter,
                 estadoRelacion, responsableId, notas, trustedActor));
-        return CrmToolMapper.toCreateCompanyOutput(created);
+        return outputProjector.project(CrmToolMapper.toCreateCompanyOutput(created), RecursoCrm.EMPRESA);
     }
 
     @Tool(name = "list_companies", description = "List CRM companies in stable ID order with bounded output. Actor context is implicit.")
     public ResourceToolOutput.Companies listCompanies(ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toCompaniesOutput(getAllEmpresasUseCase.getAll());
+        return outputProjector.project(CrmToolMapper.toCompaniesOutput(getAllEmpresasUseCase.getAll()), RecursoCrm.EMPRESA);
     }
 
     @Tool(name = "edit_company", description = "Edit an existing company's editable business fields. Its identity and original creator are not changed. responsableId is the business assignee, not the authenticated actor. Ask about missing required data; null/omitted optional values preserve their current values. Empty optional text clears that text; a nullable responsible-user ID cannot be cleared through this tool.")
@@ -95,7 +98,7 @@ public class EmpresaTools {
                 responsableId != null ? responsableId
                         : current.getResponsableId() == null ? null : current.getResponsableId().value(),
                 notas != null ? notas : current.getNotas()));
-        return CrmToolMapper.toEditCompanyOutput(updated);
+        return outputProjector.project(CrmToolMapper.toEditCompanyOutput(updated), RecursoCrm.EMPRESA);
     }
 
     @Tool(name = "change_company_state", description = "Change a company's relationship state to the state explicitly selected by the user. Actor context is implicit.")
@@ -104,8 +107,8 @@ public class EmpresaTools {
             @ToolParam(description = "New relationship state.") EstadoRelacion nuevoEstado,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toCompanyOutput(cambiarEstadoEmpresaUseCase.cambiarEstado(
-                new CambiarEstadoEmpresaCommand(id, CrmToolMapper.requireEnum(nuevoEstado, "nuevoEstado"))));
+        return outputProjector.project(CrmToolMapper.toCompanyOutput(cambiarEstadoEmpresaUseCase.cambiarEstado(
+                new CambiarEstadoEmpresaCommand(id, CrmToolMapper.requireEnum(nuevoEstado, "nuevoEstado")))), RecursoCrm.EMPRESA);
     }
 
     @Tool(name = "delete_company", description = "Delete a company. This is destructive; call only when the user clearly requested deletion. Actor context is implicit.")

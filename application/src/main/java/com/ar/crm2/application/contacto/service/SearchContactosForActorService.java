@@ -3,6 +3,10 @@ package com.ar.crm2.application.contacto.service;
 import com.ar.crm2.application.contacto.command.GetAllContactosCommand;
 import com.ar.crm2.application.contacto.port.in.SearchContactosForActorUseCase;
 import com.ar.crm2.application.contacto.port.out.SearchContactosPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.model.autorizacion.AlcanceCrm;
+import com.ar.crm2.model.autorizacion.GrupoCampoSensible;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Contacto;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.vo.EmpresaId;
@@ -23,16 +27,12 @@ import java.util.List;
  *
  * <p>The Service converts the actor and optional filters to Domain
  * types (with explicit null-handling) and delegates to
- * {@link SearchContactosPort}. The actor is passed as the first port
- * parameter, separate from the optional {@code responsableId} filter:
- * actor scope is security, {@code responsableId} is an optional
- * narrowing predicate that can never replace actor scope. The Service
- * does not cap or truncate results; the database-level limit is the
- * adapter's concern.
+ * {@link SearchContactosPort}. Contact and parent-company actor scopes are passed separately from the optional {@code responsableId} filter. Each scope is derived from its own resource grant, and the adapter applies both in one query before the database-level result limit.
  */
 @RequiredArgsConstructor
 public class SearchContactosForActorService implements SearchContactosForActorUseCase {
 
+    private final CrmAuthorization crmAuthorization;
     private final SearchContactosPort searchPort;
 
     @Override
@@ -48,14 +48,22 @@ public class SearchContactosForActorService implements SearchContactosForActorUs
                 ? null
                 : UsuarioId.from(command.responsableId());
 
+        var policy = crmAuthorization.readPolicy(RecursoCrm.CONTACTO);
+        var empresaPolicy = crmAuthorization.readPolicy(RecursoCrm.EMPRESA);
+        UsuarioId scopeActorId = policy.scope() == AlcanceCrm.TODO_COMPARTIDO ? null : actorUsuarioId;
+        UsuarioId empresaScopeActorId = empresaPolicy.scope() == AlcanceCrm.TODO_COMPARTIDO ? null : actorUsuarioId;
+
         return searchPort.search(
-                actorUsuarioId,
+                scopeActorId,
+                empresaScopeActorId,
                 command.search(),
                 estadoRelacion,
                 empresaId,
                 responsableId,
                 command.comoNosConocio(),
-                command.maxResults()
+                command.maxResults(),
+                policy.readableGroups()
+                        .contains(GrupoCampoSensible.CONTACTO_PRIVADO)
         );
     }
 }

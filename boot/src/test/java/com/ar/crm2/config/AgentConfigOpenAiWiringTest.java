@@ -32,6 +32,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Narrow no-network Spring context wiring proof for the production
@@ -52,6 +53,15 @@ import static org.mockito.Mockito.mock;
  */
 class AgentConfigOpenAiWiringTest {
 
+    private static com.ar.crm2.adapter.out.ai.tool.CrmToolOutputProjector outputProjector() {
+        var authorization = mock(com.ar.crm2.application.security.CrmAuthorization.class);
+        var groups = java.util.Set.of(com.ar.crm2.model.autorizacion.GrupoCampoSensible.values());
+        when(authorization.fieldPolicy(org.mockito.ArgumentMatchers.any())).thenReturn(
+                new com.ar.crm2.application.security.ResourceReadPolicy(
+                        com.ar.crm2.model.autorizacion.AlcanceCrm.TODO_COMPARTIDO,
+                        groups, java.util.Set.of(), groups));
+        return new com.ar.crm2.adapter.out.ai.tool.CrmToolOutputProjector(authorization);
+    }
     @Configuration
     @Import(AgentConfig.class)
     static class OpenAiTestContext {
@@ -74,7 +84,7 @@ class AgentConfigOpenAiWiringTest {
                     mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                     mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                     mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                    mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class));
+                    mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class), outputProjector());
         }
         @Bean ColumnaTools columnaTools() {
             return new ColumnaTools(mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
@@ -95,19 +105,19 @@ class AgentConfigOpenAiWiringTest {
             return new ContactoTools(mock(SearchContactosForActorUseCase.class), mock(CreateContactoUseCase.class),
                     mock(EditContactoUseCase.class), mock(com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase.class),
                     mock(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class),
-                    mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class));
+                    mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class), outputProjector());
         }
         @Bean EmpresaTools empresaTools() {
             return new EmpresaTools(mock(CreateEmpresaUseCase.class),
                     mock(com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class),
                     mock(EditEmpresaUseCase.class), mock(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class),
-                    mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class));
+                    mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class), outputProjector());
         }
         @Bean TratoTools tratoTools() {
             return new TratoTools(mock(com.ar.crm2.application.trato.port.in.CreateTratoUseCase.class),
                     mock(com.ar.crm2.application.trato.port.in.GetAllTratosUseCase.class),
                     mock(com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase.class),
-                    mock(EditTratoUseCase.class), mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class));
+                    mock(EditTratoUseCase.class), mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class), outputProjector());
         }
         @Bean TareaTools tareaTools() {
             return new TareaTools(mock(com.ar.crm2.application.tarea.port.in.CreateTareaUseCase.class),

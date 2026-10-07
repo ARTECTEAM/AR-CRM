@@ -1,7 +1,12 @@
 package com.ar.crm2.adapter.out.persistence.entity;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.MapKeyColumn;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -9,6 +14,9 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * JPA entity for Rol persistence.
@@ -38,4 +46,10 @@ public class RolEntity {
 
     @Column(name = "activo", nullable = false)
     private boolean activo;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "rol_permisos", joinColumns = @JoinColumn(name = "rol_id"))
+    @MapKeyColumn(name = "recurso", length = 32)
+    @Builder.Default
+    private Map<String, RolPermisoEmbeddable> permisos = new HashMap<>();
 }

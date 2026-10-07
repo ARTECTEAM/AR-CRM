@@ -7,10 +7,18 @@ import com.ar.crm2.application.usuario.exception.UsuarioNotFoundException;
 import com.ar.crm2.application.usuario.port.in.EditUsuarioUseCase;
 import com.ar.crm2.application.usuario.port.out.FindUsuarioByIdPort;
 import com.ar.crm2.application.usuario.port.out.SaveUsuarioPort;
+import com.ar.crm2.application.usuario.port.out.PromoteBootstrapAdministratorPort;
+import com.ar.crm2.application.rol.port.out.FindRolByIdPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.CurrentActor;
+import com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
+import com.ar.crm2.application.security.port.out.AuthorizationMutationPort;
 import com.ar.crm2.model.entity.Usuario;
 import com.ar.crm2.model.vo.RolId;
 import com.ar.crm2.model.vo.UsuarioId;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -27,9 +35,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit tests for {@link EditUsuarioService} keycloakId preserve-vs-update semantics.
- * Verifies the service correctly preserves keycloakId when command.keycloakId() is null
- * and updates it when a new value is provided.
+ * Unit tests for immutable Keycloak identity-link semantics during user profile edits.
  */
 @ExtendWith(MockitoExtension.class)
 class EditUsuarioServiceKeycloakTest {
@@ -52,8 +58,34 @@ class EditUsuarioServiceKeycloakTest {
     @Mock
     private SetIdentityEnabledPort setEnabledPort;
 
+    @Mock
+    private CrmAuthorization authorization;
+
+    @Mock
+    private CurrentActorPort currentActorPort;
+
+    @Mock
+    private FindRolByIdPort findRolByIdPort;
+
+    @Mock
+    private PromoteBootstrapAdministratorPort promoteBootstrapAdministratorPort;
+
+    @Mock
+    private AuthorizationMutationPort mutationPort;
+
     @InjectMocks
     private EditUsuarioService service;
+
+    @BeforeEach
+    void configureMutationPort() {
+        lenient().when(mutationPort.execute(any())).thenAnswer(invocation ->
+                ((java.util.function.Supplier<?>) invocation.getArgument(0)).get());
+    }
+
+    private void setAuthenticatedActor() {
+        when(currentActorPort.currentActor()).thenReturn(Optional.of(
+                new CurrentActor(UUID.randomUUID(), UUID.randomUUID(), false)));
+    }
 
     private EditUsuarioCommand buildCommand(UUID id, String nombre, String correo,
                                             UUID rolId, String keycloakId) {
@@ -76,10 +108,11 @@ class EditUsuarioServiceKeycloakTest {
                     AHORA.minusDays(1), true, KEYCLOAK_ID_EXISTING
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
+            setAuthenticatedActor();
 
             EditUsuarioCommand cmd = buildCommand(
                     id, NOMBRE + " Updated", CORREO,
-                    UUID.randomUUID(), null
+                    existing.getRolId().value(), null
             );
 
             service.edit(cmd);
@@ -99,10 +132,11 @@ class EditUsuarioServiceKeycloakTest {
                     AHORA.minusDays(1), true, null
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
+            setAuthenticatedActor();
 
             EditUsuarioCommand cmd = buildCommand(
                     id, NOMBRE + " Updated", CORREO,
-                    UUID.randomUUID(), null
+                    existing.getRolId().value(), null
             );
 
             service.edit(cmd);
@@ -113,15 +147,15 @@ class EditUsuarioServiceKeycloakTest {
         }
     }
 
-    // ── keycloakId UPDATE semantics (command.keycloakId != null) ──────
+    // ── keycloakId immutability semantics (command.keycloakId != null) ──────
 
     @Nested
-    @DisplayName("keycloakId update — command.keycloakId() is non-null")
+    @DisplayName("keycloakId must match existing linkage when provided")
     class ActualizaKeycloakId {
 
         @Test
-        @DisplayName("updates to new keycloakId when command provides one")
-        void edit_conKeycloakIdNuevo_actualiza() {
+        @DisplayName("rejects a different keycloakId")
+        void edit_conKeycloakIdNuevo_rechazaCambio() {
             UUID id = UUID.randomUUID();
             UsuarioId usuarioId = UsuarioId.from(id);
             Usuario existing = Usuario.reconstitute(
@@ -129,22 +163,20 @@ class EditUsuarioServiceKeycloakTest {
                     AHORA.minusDays(1), true, KEYCLOAK_ID_EXISTING
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
+            setAuthenticatedActor();
 
             EditUsuarioCommand cmd = buildCommand(
                     id, NOMBRE + " Updated", CORREO,
-                    UUID.randomUUID(), KEYCLOAK_ID_NEW
+                    existing.getRolId().value(), KEYCLOAK_ID_NEW
             );
 
-            service.edit(cmd);
-
-            ArgumentCaptor<Usuario> captor = ArgumentCaptor.forClass(Usuario.class);
-            verify(savePort).save(captor.capture());
-            assertEquals(KEYCLOAK_ID_NEW, captor.getValue().getKeycloakId());
+            assertThrows(CrmAuthorizationDeniedException.class, () -> service.edit(cmd));
+            verify(savePort, never()).save(any());
         }
 
         @Test
-        @DisplayName("clears keycloakId when command explicitly passes blank string")
-        void edit_conKeycloakIdBlank_limpiaKeycloakId() {
+        @DisplayName("rejects a blank keycloakId rather than clearing linkage")
+        void edit_conKeycloakIdBlank_rechazaCambio() {
             UUID id = UUID.randomUUID();
             UsuarioId usuarioId = UsuarioId.from(id);
             Usuario existing = Usuario.reconstitute(
@@ -152,17 +184,15 @@ class EditUsuarioServiceKeycloakTest {
                     AHORA.minusDays(1), true, KEYCLOAK_ID_EXISTING
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
+            setAuthenticatedActor();
 
             EditUsuarioCommand cmd = buildCommand(
                     id, NOMBRE + " Updated", CORREO,
-                    UUID.randomUUID(), "   "
+                    existing.getRolId().value(), "   "
             );
 
-            service.edit(cmd);
-
-            ArgumentCaptor<Usuario> captor = ArgumentCaptor.forClass(Usuario.class);
-            verify(savePort).save(captor.capture());
-            assertNull(captor.getValue().getKeycloakId());
+            assertThrows(CrmAuthorizationDeniedException.class, () -> service.edit(cmd));
+            verify(savePort, never()).save(any());
         }
     }
 
@@ -183,10 +213,11 @@ class EditUsuarioServiceKeycloakTest {
                     originalCreadoEn, true, KEYCLOAK_ID_EXISTING
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
+            setAuthenticatedActor();
 
             EditUsuarioCommand cmd = buildCommand(
                     id, NOMBRE + " Updated", CORREO + ".ar",
-                    UUID.randomUUID(), KEYCLOAK_ID_NEW
+                    existing.getRolId().value(), KEYCLOAK_ID_EXISTING
             );
 
             service.edit(cmd);
@@ -198,6 +229,7 @@ class EditUsuarioServiceKeycloakTest {
             assertEquals(existing.getRolId(), saved.getRolId());
             assertEquals(originalCreadoEn, saved.getCreadoEn());
             assertTrue(saved.isActivo());
+            assertEquals(KEYCLOAK_ID_EXISTING, saved.getKeycloakId());
         }
 
         @Test

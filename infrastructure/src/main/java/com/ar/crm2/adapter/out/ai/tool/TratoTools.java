@@ -10,6 +10,7 @@ import com.ar.crm2.application.trato.port.in.DeleteTratoUseCase;
 import com.ar.crm2.application.trato.port.in.EditTratoUseCase;
 import com.ar.crm2.application.trato.port.in.GetAllTratosUseCase;
 import com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.enums.TipoContrato;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.model.ToolContext;
@@ -30,6 +31,8 @@ public class TratoTools {
     private final EditTratoUseCase editTratoUseCase;
     private final DeleteTratoUseCase deleteTratoUseCase;
 
+    private final CrmToolOutputProjector outputProjector;
+
     @Tool(name = "create_trato", description = "Create a deal. Required contact, responsible-user, name, and contract-type choices must be supplied by the user; do not invent UUIDs or defaults. The canonical use case also creates its initial Ficha, so do not create a second card. Actor identity is trusted server context and is not a model argument.")
     public ResourceToolOutput.Deal createTrato(
             @ToolParam(description = "Existing contact UUID.") UUID contactoId,
@@ -44,13 +47,13 @@ public class TratoTools {
         var created = createTratoUseCase.create(new CreateTratoCommand(contactoId, responsableId,
                 CrmToolMapper.requireNonBlank(nombre, "create_trato requires nombre"), valorEstimado,
                 probabilidad, fechaCierreEsperada, CrmToolMapper.requireEnum(tipoContrato, "tipoContrato")));
-        return CrmToolMapper.toDealOutput(created);
+        return outputProjector.project(CrmToolMapper.toDealOutput(created), RecursoCrm.TRATO);
     }
 
     @Tool(name = "list_tratos", description = "List CRM deals in stable ID order with bounded output. Actor context is implicit.")
     public ResourceToolOutput.Deals listTratos(ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toDealsOutput(getAllTratosUseCase.getAll());
+        return outputProjector.project(CrmToolMapper.toDealsOutput(getAllTratosUseCase.getAll()), RecursoCrm.TRATO);
     }
 
     @Tool(name = "get_trato", description = "Get a CRM deal by UUID. Actor context is implicit.")
@@ -58,7 +61,7 @@ public class TratoTools {
             @ToolParam(description = "Deal UUID.") UUID id,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toDealOutput(getTratoByIdUseCase.getById(new GetTratoByIdCommand(id)));
+        return outputProjector.project(CrmToolMapper.toDealOutput(getTratoByIdUseCase.getById(new GetTratoByIdCommand(id))), RecursoCrm.TRATO);
     }
 
     @Tool(
@@ -94,7 +97,7 @@ public class TratoTools {
                 probabilidad != null ? probabilidad : current.getProbabilidad(),
                 fechaCierreEsperada != null ? fechaCierreEsperada : current.getFechaCierreEsperada(),
                 resolvedTipoContrato));
-        return CrmToolMapper.toEditTratoOutput(updated);
+        return outputProjector.project(CrmToolMapper.toEditTratoOutput(updated), RecursoCrm.TRATO);
     }
 
     @Tool(name = "delete_trato", description = "Delete a CRM deal. This is destructive; call only when the user clearly requested deletion. Actor context is implicit.")

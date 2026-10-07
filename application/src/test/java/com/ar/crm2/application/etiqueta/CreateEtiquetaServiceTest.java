@@ -5,6 +5,7 @@ import com.ar.crm2.application.etiqueta.exception.EtiquetaNotFoundException;
 import com.ar.crm2.application.etiqueta.port.out.ExistsEtiquetaByNombreAndTipoPort;
 import com.ar.crm2.application.etiqueta.port.out.SaveEtiquetaPort;
 import com.ar.crm2.application.etiqueta.service.CreateEtiquetaService;
+import com.ar.crm2.application.support.TestCrmAuthorization;
 import com.ar.crm2.exception.DuplicateEtiquetaNameException;
 import com.ar.crm2.model.entity.Etiqueta;
 import com.ar.crm2.model.enums.TipoEtiqueta;
@@ -28,7 +29,8 @@ class CreateEtiquetaServiceTest {
         CatalogAdapter catalog = new CatalogAdapter();
         CreateEtiquetaService service = new CreateEtiquetaService(
             savePort,
-            catalog
+            catalog,
+            new TestCrmAuthorization()
         );
 
         Etiqueta result = service.create(new CreateEtiquetaCommand("Urgent", TipoEtiqueta.TAREA, "#FF0000"));
@@ -49,7 +51,8 @@ class CreateEtiquetaServiceTest {
         catalog.put(EtiquetaId.create(), "Urgent", TipoEtiqueta.TAREA);
         CreateEtiquetaService service = new CreateEtiquetaService(
             new InMemorySaveEtiquetaPort(),
-            catalog
+            catalog,
+            new TestCrmAuthorization()
         );
 
         assertThrows(DuplicateEtiquetaNameException.class,
@@ -62,7 +65,8 @@ class CreateEtiquetaServiceTest {
         catalog.put(EtiquetaId.create(), "Urgent", TipoEtiqueta.TAREA);
         CreateEtiquetaService service = new CreateEtiquetaService(
             new InMemorySaveEtiquetaPort(),
-            catalog
+            catalog,
+            new TestCrmAuthorization()
         );
 
         Etiqueta result = service.create(new CreateEtiquetaCommand("Urgent", TipoEtiqueta.TRATO, "#FF0000"));

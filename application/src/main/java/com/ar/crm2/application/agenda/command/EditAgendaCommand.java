@@ -18,7 +18,7 @@ public record EditAgendaCommand(
     UUID tratoId,
     String ubicacion,
     String linkVideollamada,
-    boolean recordatorioHabilitado,
+    Boolean recordatorioHabilitado,
     Integer minutosAntes
 ) {
 
@@ -37,9 +37,6 @@ public record EditAgendaCommand(
         }
         if (horaInicio == null) {
             throw new IllegalArgumentException("horaInicio is required");
-        }
-        if (recordatorioHabilitado && (minutosAntes == null || minutosAntes <= 0)) {
-            throw new IllegalArgumentException("minutosAntes must be greater than 0 when reminder is enabled");
         }
     }
 }
