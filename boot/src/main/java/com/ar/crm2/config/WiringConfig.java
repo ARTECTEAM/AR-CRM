@@ -1101,9 +1101,12 @@ public class WiringConfig {
     }
     @Bean
     public com.ar.crm2.application.agent.turn.port.out.ChatCompletionPort chatCompletionPort(
-            org.springframework.ai.chat.client.ChatClient chatClient
+            org.springframework.ai.chat.client.ChatClient chatClient,
+            com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog toolCallbackCatalog,
+            com.ar.crm2.application.security.CrmAuthorization authorization
     ) {
-        return new com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter(chatClient);
+        return new com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter(
+                chatClient, toolCallbackCatalog, authorization);
     }
 
     @Bean

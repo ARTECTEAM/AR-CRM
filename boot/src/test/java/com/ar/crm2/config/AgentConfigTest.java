@@ -87,8 +87,7 @@ class AgentConfigTest {
             }
         }
         CapturingChatModel model = new CapturingChatModel("ok");
-        new AgentConfig().chatClient(model, tools).prompt().user("hi").call().content();
-        var callbacks = ((ToolCallingChatOptions) model.capturedPrompt().getOptions()).getToolCallbacks();
+        var callbacks = java.util.Arrays.stream(org.springframework.ai.support.ToolCallbacks.from(tools)).toList();
         var originals = java.util.Arrays.stream(org.springframework.ai.support.ToolCallbacks.from(tools))
                 .collect(java.util.stream.Collectors.toMap(c -> c.getToolDefinition().name(), c -> c));
         assertThat(callbacks).hasSize(50);
@@ -183,8 +182,13 @@ class AgentConfigTest {
                         mock(com.ar.crm2.application.agenda.port.in.DeleteAgendaUseCase.class))};
     }
 
+    private static ChatClient buildClient(org.springframework.ai.chat.model.ChatModel model) {
+        return new AgentConfig().buildChatClient(model,
+                new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor());
+    }
+
     private static ChatClient newClientUnderTest() {
-        return new AgentConfig().chatClient(new CapturingChatModel("ok"), newNoopTools());
+        return buildClient(new CapturingChatModel("ok"));
     }
 
     @Test
@@ -222,31 +226,26 @@ class AgentConfigTest {
     }
 
     @Test
-    void chatClientFactoryConsumesAllResourceToolGroups() {
-        Method chatClientMethod = findChatClientFactoryMethod();
+    void callbackCatalogFactoryConsumesAllResourceToolGroups() {
+        Method catalogMethod = java.util.Arrays.stream(AgentConfig.class.getDeclaredMethods())
+                .filter(method -> method.getReturnType()
+                        == com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog.class)
+                .findFirst().orElseThrow();
 
-        Parameter[] parameters = chatClientMethod.getParameters();
-        Set<Class<?>> parameterTypes = java.util.Arrays.stream(parameters)
-                .map(Parameter::getType).collect(java.util.stream.Collectors.toSet());
-        assertThat(parameterTypes).contains(TableroTools.class, ColumnaTools.class, FichaTools.class,
-                ContactoTools.class, EmpresaTools.class, TratoTools.class, TareaTools.class,
-                EtiquetaTools.class, AgendaTools.class);
-        // The factory must NOT receive a binder/request-tools class.
-        for (Parameter parameter : parameters) {
-            assertThat(parameter.getType().getSimpleName())
-                    .as("chatClient factory must not depend on a per-invocation binder/request-tools class")
-                    .doesNotEndWith("Binder");
-        }
+        Set<Class<?>> parameterTypes = java.util.Arrays.stream(catalogMethod.getParameterTypes())
+                .collect(java.util.stream.Collectors.toSet());
+        assertThat(parameterTypes).containsExactlyInAnyOrder(TableroTools.class, ColumnaTools.class,
+                FichaTools.class, ContactoTools.class, EmpresaTools.class, TratoTools.class,
+                TareaTools.class, EtiquetaTools.class, AgendaTools.class);
     }
-
     @Test
     void defaultSystemTemplateReplacesPlaceholderWithFormattedBulletInRenderedSystemMessage() {
         CapturingChatModel model = new CapturingChatModel("ok");
-        ChatClient configured = new AgentConfig().chatClient(model, newNoopTools());
+        ChatClient configured = buildClient(model);
 
         configured.prompt()
                 .system(spec -> spec.param("durable_memories",
-                        "- alpha preference\n- beta handle"))
+                        "- alpha preference\n- beta handle").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                 .user("hi")
                 .call()
                 .content();
@@ -265,11 +264,13 @@ class AgentConfigTest {
     }
 
     @Test
-    void defaultSystemTemplateKeepsPlaceholderLiteralWhenNoValueSupplied() {
+    void defaultSystemTemplatePreservesAnExplicitLiteralMemoryValue() {
         CapturingChatModel model = new CapturingChatModel("ok");
-        ChatClient configured = new AgentConfig().chatClient(model, newNoopTools());
+        ChatClient configured = buildClient(model);
 
         configured.prompt()
+                .system(spec -> spec.param("durable_memories", "{durable_memories}")
+                        .param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                 .user("hi")
                 .call()
                 .content();
@@ -283,12 +284,12 @@ class AgentConfigTest {
     }
 
     @Test
-    void defaultSystemTemplateIsScopedToExistingPipelyCrmBehaviorAndReferencesAllAllowlistedTools() {
+    void defaultSystemTemplateIsScopedToProductBehaviorAndLeavesToolSelectionPerTurn() {
         CapturingChatModel model = new CapturingChatModel("ok");
-        ChatClient configured = new AgentConfig().chatClient(model, newNoopTools());
+        ChatClient configured = buildClient(model);
 
         configured.prompt()
-                .system(spec -> spec.param("durable_memories", "- memory"))
+                .system(spec -> spec.param("durable_memories", "- memory").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                 .user("hi")
                 .call()
                 .content();
@@ -299,23 +300,9 @@ class AgentConfigTest {
                 .as("template names the Pipely CRM context")
                 .contains("Pipely CRM");
         assertThat(text)
-                .as("template references every allowlisted tool name")
-                .contains("find_contacts")
-                .contains("create_contact")
-                .contains("edit_contact")
-                .contains("create_company")
-                .contains("edit_company", "edit_trato", "list_tableros", "get_tablero", "create_tablero",
-                        "edit_tablero", "delete_tablero", "eliminar_columna_del_tablero",
-                        "assign_columna_to_tablero", "reorder_tablero_columns", "list_columnas",
-                        "get_columna", "create_columna", "edit_columna", "delete_columna",
-                        "list_fichas", "get_ficha", "create_ficha", "edit_ficha", "delete_ficha",
-                        "move_ficha_to_columna", "create_tarea", "list_tareas", "get_tarea",
-                        "edit_tarea", "delete_tarea", "create_etiqueta", "list_etiquetas",
-                        "get_etiqueta", "edit_etiqueta", "delete_etiqueta", "create_agenda",
-                        "list_agendas", "get_agenda", "edit_agenda", "delete_agenda",
-                        "get_contact", "change_contact_state", "delete_contact", "list_companies",
-                        "change_company_state", "delete_company", "create_trato", "list_tratos",
-                        "get_trato", "delete_trato");
+                .as("the shared template leaves tool selection to the per-turn adapter")
+                .contains("Use only the tools explicitly provided for this turn")
+                .doesNotContain("find_contacts", "create_contact", "list_tableros");
         assertThat(text)
                 .as("template forbids the model from supplying actor identity")
                 .containsIgnoringCase("actor");
@@ -328,7 +315,7 @@ class AgentConfigTest {
                 .containsIgnoringCase("durable memory");
         assertThat(text)
                 .as("destructive tools and label deletion confirmation policy are disclosed")
-                .contains("delete_company", "Only delete records after the owner clearly requests deletion",
+                .contains("Only delete records after the owner clearly requests deletion",
                         "pass confirm=true only after explicit confirmation");
         assertThat(text)
                 .as("write choices belong to the owner, not silent model defaults")
@@ -341,9 +328,7 @@ class AgentConfigTest {
 
     @Test
     void boardCallbackExplainsMissingInputPolicyAndUserChosenType() throws Exception {
-        CapturingChatModel model = new CapturingChatModel("ok");
-        new AgentConfig().chatClient(model, newNoopTools()).prompt().user("hi").call().content();
-        var callbacks = ((ToolCallingChatOptions) model.capturedPrompt().getOptions()).getToolCallbacks();
+        var callbacks = java.util.Arrays.stream(org.springframework.ai.support.ToolCallbacks.from(newNoopTools())).toList();
         var board = callbacks.stream().filter(c -> c.getToolDefinition().name().equals("create_tablero"))
                 .findFirst().orElseThrow().getToolDefinition();
         assertThat(board.description()).contains("ask for missing description/type", "permission to choose them");
@@ -356,10 +341,10 @@ class AgentConfigTest {
     @Test
     void defaultSystemTemplateContainsNoAdapterOwnedDurableMemoryFallbackString() {
         CapturingChatModel model = new CapturingChatModel("ok");
-        ChatClient configured = new AgentConfig().chatClient(model, newNoopTools());
+        ChatClient configured = buildClient(model);
 
         configured.prompt()
-                .system(spec -> spec.param("durable_memories", ""))
+                .system(spec -> spec.param("durable_memories", "").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                 .user("hi")
                 .call()
                 .content();
@@ -393,10 +378,10 @@ class AgentConfigTest {
     @Test
     void exposedChatClientBeanSurvivesARoundTripPromptWithoutCrashing() {
         CapturingChatModel model = new CapturingChatModel("the-only-response");
-        ChatClient configured = new AgentConfig().chatClient(model, newNoopTools());
+        ChatClient configured = buildClient(model);
 
         String content = configured.prompt()
-                .system(spec -> spec.param("durable_memories", "- one"))
+                .system(spec -> spec.param("durable_memories", "- one").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                 .user("hi")
                 .call()
                 .content();
@@ -409,7 +394,7 @@ class AgentConfigTest {
     }
 
     @Test
-    void resourceToolGroupsAreRegisteredAsDefaultToolsOnTheConfiguredChatClient() {
+    void resourceToolGroupsFormTheExactCatalogWithoutSharedClientDefaults() {
          // The configured ChatClient must expose the full allowlisted catalog
         // through the maintained Spring AI 2.0 defaultTools path. The
         // exact tool names appear in the ChatClient's default callbacks
@@ -417,30 +402,30 @@ class AgentConfigTest {
         // the round-trip prompt that carries the schema to the model).
         CapturingChatModel model = new CapturingChatModel("ok");
         Object[] toolGroups = newNoopTools();
-        ChatClient configured = new AgentConfig().chatClient(model, toolGroups);
+        ChatClient configured = buildClient(model);
 
         // Round-trip exercises the configured ChatClient end-to-end.
         // The captured prompt includes the tool definitions sent to the
          // model. All allowlisted tool names must be present.
         configured.prompt()
-                .system(spec -> spec.param("durable_memories", ""))
+                .system(spec -> spec.param("durable_memories", "").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                 .user("hi")
                 .call()
                 .content();
 
         String renderedSystem = model.capturedPrompt().getInstructions().get(0).getText();
         assertThat(renderedSystem)
-                .as("the configured client must advertise all allowlisted tools by name")
-                .contains("find_contacts")
-                .contains("create_contact")
-                .contains("edit_contact")
-                .contains("create_company")
-                .contains("edit_company", "edit_trato", "list_tableros", "create_columna", "edit_ficha",
-                        "delete_company", "create_agenda", "delete_tarea", "delete_ficha");
+                .contains("Use only the tools explicitly provided for this turn")
+                .doesNotContain("find_contacts", "create_contact", "list_tableros");
+        Object promptOptions = model.capturedPrompt().getOptions();
+        if (promptOptions instanceof ToolCallingChatOptions options) {
+            assertThat(options.getToolCallbacks()).isNullOrEmpty();
+        }
 
         // The stateless resource groups are reusable across ChatClient builds.
         org.springframework.ai.tool.ToolCallback[] callbacks =
                 org.springframework.ai.support.ToolCallbacks.from(toolGroups);
+        new com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog(callbacks);
         Set<String> names = new HashSet<>();
         for (ToolCallback callback : callbacks) {
             names.add(callback.getToolDefinition().name());
@@ -461,18 +446,48 @@ class AgentConfigTest {
     }
 
     @Test
+    void contactOnlyRoleCannotExposeOrInvokeSearchContactsWithoutCompanyRead() {
+        SearchContactosForActorUseCase useCase = mock(SearchContactosForActorUseCase.class);
+        org.springframework.ai.tool.ToolCallback[] callbacks =
+                org.springframework.ai.support.ToolCallbacks.from(newTools(useCase));
+        var catalog = new com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog(callbacks);
+        var authorization = mock(com.ar.crm2.application.security.CrmAuthorization.class);
+        when(authorization.authorizationCapabilities()).thenReturn(
+                new com.ar.crm2.application.security.AuthorizationCapabilities(Map.of(
+                        com.ar.crm2.model.autorizacion.RecursoCrm.CONTACTO,
+                        new com.ar.crm2.application.security.ResourceCapabilities(
+                                com.ar.crm2.model.autorizacion.AlcanceCrm.TODO_COMPARTIDO,
+                                Set.of(com.ar.crm2.model.autorizacion.AccionCrm.LEER), Set.of(), Set.of()))));
+        SequentialToolCallingChatModel model = new SequentialToolCallingChatModel("find_contacts", "{}");
+        var adapter = new com.ar.crm2.adapter.out.ai.SpringAiChatCompletionAdapter(
+                buildClient(model), catalog, authorization);
+
+        Throwable failure = org.assertj.core.api.Assertions.catchThrowable(() -> adapter.complete(
+                com.ar.crm2.model.agent.vo.AgentOwnerId.from("denied-tool-test"), UUID.randomUUID(),
+                com.ar.crm2.model.agent.vo.TurnId.create(), List.of(), List.of(), "find contacts"));
+
+        if (failure == null) {
+            assertThat(model.prompts()).hasSize(2);
+        } else {
+            assertThat(failure).isInstanceOf(IllegalStateException.class)
+                    .hasMessage("Spring AI chat completion failed")
+                    .hasNoCause();
+        }
+        org.mockito.Mockito.verifyNoInteractions(useCase);
+        org.mockito.Mockito.verify(authorization).authorizationCapabilities();
+    }
+    @Test
     void realToolLoopRedactsSensitiveDownstreamFailureBeforeSecondModelRequest() {
         String sentinel = "SENSITIVE_SQL_PROVIDER_DETAIL";
         SearchContactosForActorUseCase useCase = mock(SearchContactosForActorUseCase.class);
         when(useCase.search(any())).thenThrow(new IllegalStateException(sentinel));
         SequentialToolCallingChatModel model =
                 new SequentialToolCallingChatModel("find_contacts", "{}");
-        ChatClient configured = new AgentConfig().buildChatClient(
-                model, new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(),
-                newTools(useCase));
+        ChatClient configured = buildClient(model);
 
         String content = configured.prompt()
-                .system(spec -> spec.param("durable_memories", ""))
+                .system(spec -> spec.param("durable_memories", "").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
+                .tools(newTools(useCase))
                 .user("find contacts")
                 .toolContext(Map.of("actorUsuarioId", UUID.randomUUID()))
                 .call()
@@ -493,12 +508,11 @@ class AgentConfigTest {
     void realToolLoopReturnsOnlyStableCodeForExplicitSafeValidationFailure() {
         SequentialToolCallingChatModel model = new SequentialToolCallingChatModel(
                 "create_contact", "{\"nombre\":\"Ada\",\"estadoRelacion\":\"ACTIVO\"}");
-        ChatClient configured = new AgentConfig().buildChatClient(
-                model, new com.ar.crm2.adapter.out.ai.tool.SafeToolExecutionExceptionProcessor(),
-                newNoopTools());
+        ChatClient configured = buildClient(model);
 
         configured.prompt()
-                .system(spec -> spec.param("durable_memories", ""))
+                .system(spec -> spec.param("durable_memories", "").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
+                .tools(newNoopTools())
                 .user("create contact")
                 .toolContext(Map.of("actorUsuarioId", UUID.randomUUID()))
                 .call()

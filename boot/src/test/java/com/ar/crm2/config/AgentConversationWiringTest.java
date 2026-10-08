@@ -440,6 +440,11 @@ class AgentConversationWiringTest {
             return mock(ChatClient.class);
         }
 
+        @Bean
+        com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog agentToolCallbackCatalog() {
+            return com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog.empty();
+        }
+
         // ── Platform transaction manager + clock for the tool ledger ──
 
         @Bean

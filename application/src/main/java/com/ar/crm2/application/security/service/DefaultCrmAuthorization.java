@@ -1,9 +1,11 @@
 package com.ar.crm2.application.security.service;
 
 import com.ar.crm2.application.rol.port.out.FindRolByIdPort;
+import com.ar.crm2.application.security.AuthorizationCapabilities;
 import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.application.security.CurrentActor;
 import com.ar.crm2.application.security.ResourceReadPolicy;
+import com.ar.crm2.application.security.ResourceCapabilities;
 import com.ar.crm2.application.security.ResourceScopeCandidate;
 import com.ar.crm2.application.security.exception.CrmActorUnavailableException;
 import com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException;
@@ -22,6 +24,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
 import java.util.Collection;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Set;
@@ -39,6 +43,51 @@ public final class DefaultCrmAuthorization implements CrmAuthorization {
         this.currentActorPort = currentActorPort;
         this.findRolByIdPort = findRolByIdPort;
         this.scopePorts = scopePorts == null ? List.of() : List.copyOf(scopePorts);
+    }
+
+    @Override
+    public AuthorizationCapabilities authorizationCapabilities() {
+        CurrentActor actor = requireCurrentActor();
+        Rol role = findRole(actor)
+                .orElseThrow(() -> new CrmActorUnavailableException("CRM role is unavailable"));
+        if (!role.isActivo()) {
+            throw new CrmActorUnavailableException("CRM role is inactive");
+        }
+
+        EnumMap<RecursoCrm, ResourceCapabilities> capabilities = new EnumMap<>(RecursoCrm.class);
+        for (RecursoCrm resource : RecursoCrm.values()) {
+            if (isBootstrapAdministrator(actor, resource)) {
+                EnumSet<AccionCrm> actions = EnumSet.allOf(AccionCrm.class);
+                actions.remove(AccionCrm.ADMINISTRAR);
+                capabilities.put(resource, new ResourceCapabilities(
+                        AlcanceCrm.TODO_COMPARTIDO, actions,
+                        Set.of(GrupoCampoSensible.values()), Set.of(GrupoCampoSensible.values())));
+                continue;
+            }
+
+            PermisoRecurso grant = grantFor(role, resource);
+            if (grant == null || (grant.alcance() != AlcanceCrm.TODO_COMPARTIDO
+                    && (!resource.supportsScope(grant.alcance())
+                    || supportingScopePorts(resource).size() != 1))) {
+                continue;
+            }
+            EnumSet<AccionCrm> actions = EnumSet.noneOf(AccionCrm.class);
+            for (AccionCrm action : AccionCrm.values()) {
+                if (action != AccionCrm.ADMINISTRAR && grant.permite(action)) {
+                    actions.add(action);
+                }
+            }
+            if (actions.isEmpty()) {
+                continue;
+            }
+            Set<GrupoCampoSensible> readableGroups = actions.contains(AccionCrm.LEER)
+                    ? grant.gruposLectura() : Set.of();
+            Set<GrupoCampoSensible> writableGroups = actions.contains(AccionCrm.CREAR)
+                    || actions.contains(AccionCrm.ACTUALIZAR) ? grant.gruposEscritura() : Set.of();
+            capabilities.put(resource, new ResourceCapabilities(
+                    grant.alcance(), actions, readableGroups, writableGroups));
+        }
+        return new AuthorizationCapabilities(capabilities);
     }
 
     @Override
