@@ -1,5 +1,6 @@
 package com.ar.crm2.application.ficha;
 
+import com.ar.crm2.application.security.AllowAllCrmAuthorization;
 import com.ar.crm2.application.etiqueta.exception.EtiquetaNotFoundException;
 import com.ar.crm2.application.etiqueta.port.out.FindEtiquetasByIdsPort;
 import com.ar.crm2.application.ficha.command.CreateFichaCommand;
@@ -36,7 +37,7 @@ class FichaEtiquetaResolutionTest {
             Etiqueta.reconstitute(e2, "B", TipoEtiqueta.TAREA, "#000000", java.time.LocalDateTime.now())
         ));
         InMemorySaveFichaPort savePort = new InMemorySaveFichaPort();
-        CreateFichaService service = new CreateFichaService(savePort, findEtiquetas);
+        CreateFichaService service = new CreateFichaService(new AllowAllCrmAuthorization(), savePort, findEtiquetas);
 
         Ficha ficha = service.create(new CreateFichaCommand(
             UUID.randomUUID(), TipoFicha.TAREA, null, UUID.randomUUID(), List.of(e1.value(), e2.value())
@@ -56,7 +57,7 @@ class FichaEtiquetaResolutionTest {
             Etiqueta.reconstitute(e1, "X", TipoEtiqueta.TRATO, "#FFFFFF", java.time.LocalDateTime.now())
         ));
         InMemorySaveFichaPort savePort = new InMemorySaveFichaPort();
-        CreateFichaService service = new CreateFichaService(savePort, findEtiquetas);
+        CreateFichaService service = new CreateFichaService(new AllowAllCrmAuthorization(), savePort, findEtiquetas);
 
         assertThrows(EtiquetaTypeMismatchException.class,
             () -> service.create(new CreateFichaCommand(
@@ -68,7 +69,7 @@ class FichaEtiquetaResolutionTest {
     void create_withEmptyEtiquetaIdsLeavesFichaWithoutTags() {
         InMemoryFindEtiquetasByIds findEtiquetas = new InMemoryFindEtiquetasByIds(List.of());
         InMemorySaveFichaPort savePort = new InMemorySaveFichaPort();
-        CreateFichaService service = new CreateFichaService(savePort, findEtiquetas);
+        CreateFichaService service = new CreateFichaService(new AllowAllCrmAuthorization(), savePort, findEtiquetas);
 
         Ficha ficha = service.create(new CreateFichaCommand(
             UUID.randomUUID(), TipoFicha.TAREA, null, UUID.randomUUID(), List.of()
@@ -94,7 +95,7 @@ class FichaEtiquetaResolutionTest {
         ));
         InMemoryFindFichaById findFichaPort = new InMemoryFindFichaById(holder);
         InMemorySaveFichaPort savePort = new InMemorySaveFichaPort();
-        EditFichaService service = new EditFichaService(findFichaPort, savePort, findEtiquetas);
+        EditFichaService service = new EditFichaService(new AllowAllCrmAuthorization(), findFichaPort, savePort, findEtiquetas);
 
         Ficha updated = service.edit(new com.ar.crm2.application.ficha.command.EditFichaCommand(
             holder.ficha.getId().value(),
@@ -114,7 +115,7 @@ class FichaEtiquetaResolutionTest {
         InMemoryFindEtiquetasByIds findEtiquetas = new InMemoryFindEtiquetasByIds(List.of());
         InMemorySaveFichaPort savePort = new InMemorySaveFichaPort();
         InMemoryFindFichaById findFichaPort = new InMemoryFindFichaById(new FichaIdHolder()); // empty holder
-        EditFichaService service = new EditFichaService(findFichaPort, savePort, findEtiquetas);
+        EditFichaService service = new EditFichaService(new AllowAllCrmAuthorization(), findFichaPort, savePort, findEtiquetas);
 
         assertThrows(FichaNotFoundException.class,
             () -> service.edit(new com.ar.crm2.application.ficha.command.EditFichaCommand(
@@ -134,7 +135,7 @@ class FichaEtiquetaResolutionTest {
             Etiqueta.reconstitute(present, "A", TipoEtiqueta.TAREA, "#FFFFFF", java.time.LocalDateTime.now())
         ));
         InMemorySaveFichaPort savePort = new InMemorySaveFichaPort();
-        CreateFichaService service = new CreateFichaService(savePort, findEtiquetas);
+        CreateFichaService service = new CreateFichaService(new AllowAllCrmAuthorization(), savePort, findEtiquetas);
 
         EtiquetaNotFoundException ex = assertThrows(EtiquetaNotFoundException.class,
             () -> service.create(new CreateFichaCommand(

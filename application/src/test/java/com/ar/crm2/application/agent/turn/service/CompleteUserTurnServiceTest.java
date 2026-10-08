@@ -22,6 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CompleteUserTurnServiceTest {
 
+    private static final UUID ACTOR_USUARIO_ID =
+            UUID.fromString("aaaaaaaa-1111-2222-3333-444444444444");
+    private static final UUID ACTOR_SUPER_USUARIO_ID =
+            UUID.fromString("bbbbbbbb-1111-2222-3333-444444444444");
+
     @Test
     void allowsDirectConstructionWithoutDependencyNullValidation() {
         assertDoesNotThrow(() -> new CompleteUserTurnService(null, null, null, null, null));
@@ -45,7 +50,7 @@ class CompleteUserTurnServiceTest {
         );
 
         String content = service.complete(new CompleteUserTurnCommand(
-                " owner-a ", turnId, " handle-a ", " prompt ", 12));
+                " owner-a ", ACTOR_USUARIO_ID, turnId, " handle-a ", " prompt ", 12));
 
         assertEquals("canonical persisted output", content);
         assertEquals(1, completedContentPort.calls);
@@ -79,11 +84,14 @@ class CompleteUserTurnServiceTest {
         );
 
         String content = service.complete(new CompleteUserTurnCommand(
-                "owner-a", turnId, "handle-a", "  current prompt  ", 7));
+                "owner-a", ACTOR_USUARIO_ID, ACTOR_SUPER_USUARIO_ID,
+                turnId, "handle-a", "  current prompt  ", 7));
 
         assertEquals("canonical converged output", content);
         assertEquals(1, chatCompletionPort.calls);
         assertEquals(AgentOwnerId.from("owner-a"), chatCompletionPort.ownerId);
+        assertEquals(ACTOR_USUARIO_ID, chatCompletionPort.actorUsuarioId);
+        assertEquals(ACTOR_SUPER_USUARIO_ID, chatCompletionPort.actorSuperUsuarioId);
         assertEquals(TurnId.from(turnId), chatCompletionPort.turnId);
         assertEquals(orderedHistory, chatCompletionPort.visibleHistory);
         assertEquals(List.of("remember the customer timezone"), chatCompletionPort.durableMemories);
@@ -119,7 +127,7 @@ class CompleteUserTurnServiceTest {
         );
 
         service.complete(new CompleteUserTurnCommand(
-                "owner-a", turnId, "handle-a", "prompt", 10));
+                "owner-a", ACTOR_USUARIO_ID, turnId, "handle-a", "prompt", 10));
 
         List<VisibleMessage> delivered = new ArrayList<>(chatCompletionPort.visibleHistory);
         assertEquals(orderedHistory, delivered);
@@ -148,7 +156,7 @@ class CompleteUserTurnServiceTest {
         );
 
         service.complete(new CompleteUserTurnCommand(
-                "owner-a", turnId, "handle-a", "prompt", 5));
+                "owner-a", ACTOR_USUARIO_ID, turnId, "handle-a", "prompt", 5));
 
         assertEquals(userOnlyHistory, chatCompletionPort.visibleHistory);
         for (VisibleMessage message : chatCompletionPort.visibleHistory) {
@@ -164,16 +172,60 @@ class CompleteUserTurnServiceTest {
                 (ownerId, turnId, opaqueHandle, maximumMessages) -> List.of(VisibleMessage.user("history")),
                 ownerId -> List.of("memory"),
                 completionPort,
-                (ownerId, turnId, visibleHistory, durableMemories, prompt) -> {
+                (ownerId, actorUsuarioId, actorSuperUsuarioId, turnId, visibleHistory, durableMemories, prompt) -> {
                     throw new IllegalStateException("provider failed");
                 }
         );
 
         IllegalStateException failure = assertThrows(IllegalStateException.class, () -> service.complete(
-                new CompleteUserTurnCommand("owner-a", UUID.randomUUID(), "handle-a", "prompt", 3)));
+                new CompleteUserTurnCommand(
+                        "owner-a", ACTOR_USUARIO_ID, UUID.randomUUID(), "handle-a", "prompt", 3)));
 
         assertEquals("provider failed", failure.getMessage());
         assertEquals(0, completionPort.calls);
+    }
+
+    @Test
+    void forwardsActorUsuarioIdToCompletionIndependentOfOwnerSubjectValue() {
+        UUID turnId = UUID.randomUUID();
+        UUID distinctActorUsuarioId =
+                UUID.fromString("99999999-8888-7777-6666-555555555555");
+        CapturingChatCompletionPort chatCompletionPort = new CapturingChatCompletionPort("provider output");
+        CompleteUserTurnService service = new CompleteUserTurnService(
+                (ownerId, turn, handle) -> Optional.empty(),
+                (ownerId, turn, handle, max) -> List.of(),
+                ownerId -> List.of(),
+                (owner, turn, handle, content) -> content,
+                chatCompletionPort
+        );
+
+        service.complete(new CompleteUserTurnCommand(
+                "owner-subject-not-crm-id", distinctActorUsuarioId, turnId, "handle-a", "prompt", 5));
+
+        assertEquals(AgentOwnerId.from("owner-subject-not-crm-id"), chatCompletionPort.ownerId);
+        assertEquals(distinctActorUsuarioId, chatCompletionPort.actorUsuarioId);
+        assertEquals("owner-subject-not-crm-id", AgentOwnerId.from("owner-subject-not-crm-id").value());
+    }
+
+    @Test
+    void forwardsActorUsuarioIdUnchangedEvenWhenOwnerSubjectIsIgnored() {
+        UUID turnId = UUID.randomUUID();
+        UUID repeatedActor =
+                UUID.fromString("cafebabe-0000-0000-0000-000000000000");
+        CapturingChatCompletionPort chatCompletionPort = new CapturingChatCompletionPort("provider output");
+        CompleteUserTurnService service = new CompleteUserTurnService(
+                (ownerId, turn, handle) -> Optional.empty(),
+                (ownerId, turn, handle, max) -> List.of(),
+                ownerId -> List.of(),
+                (owner, turn, handle, content) -> content,
+                chatCompletionPort
+        );
+
+        service.complete(new CompleteUserTurnCommand(
+                "different-owner", repeatedActor, turnId, "handle", "prompt", 5));
+
+        assertEquals(repeatedActor, chatCompletionPort.actorUsuarioId);
+        assertEquals(AgentOwnerId.from("different-owner"), chatCompletionPort.ownerId);
     }
 
     private static final class CapturingHistoryPort implements FindCompletedVisibleHistoryPort {
@@ -278,6 +330,8 @@ class CompleteUserTurnServiceTest {
         private final String output;
         private int calls;
         private AgentOwnerId ownerId;
+        private UUID actorUsuarioId;
+        private UUID actorSuperUsuarioId;
         private TurnId turnId;
         private List<VisibleMessage> visibleHistory;
         private List<String> durableMemories;
@@ -290,6 +344,8 @@ class CompleteUserTurnServiceTest {
         @Override
         public String complete(
                 AgentOwnerId ownerId,
+                UUID actorUsuarioId,
+                UUID actorSuperUsuarioId,
                 TurnId turnId,
                 List<VisibleMessage> visibleHistory,
                 List<String> durableMemories,
@@ -297,6 +353,8 @@ class CompleteUserTurnServiceTest {
         ) {
             calls++;
             this.ownerId = ownerId;
+            this.actorUsuarioId = actorUsuarioId;
+            this.actorSuperUsuarioId = actorSuperUsuarioId;
             this.turnId = turnId;
             this.visibleHistory = visibleHistory;
             this.durableMemories = durableMemories;

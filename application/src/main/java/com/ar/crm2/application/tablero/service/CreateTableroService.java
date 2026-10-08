@@ -1,11 +1,16 @@
 package com.ar.crm2.application.tablero.service;
 
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.ResourceScopeCandidate;
+
 import com.ar.crm2.application.columna.command.CreateColumnaCommand;
 import com.ar.crm2.application.columna.port.in.CreateColumnaUseCase;
 import com.ar.crm2.application.columna.port.out.FindAllColumnasPort;
 import com.ar.crm2.application.tablero.command.CreateTableroCommand;
 import com.ar.crm2.application.tablero.port.out.SaveTableroPort;
 import com.ar.crm2.application.tablero.port.in.CreateTableroUseCase;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Columna;
 import com.ar.crm2.model.entity.ColumnaTablero;
 import com.ar.crm2.model.entity.Tablero;
@@ -46,12 +51,22 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class CreateTableroService implements CreateTableroUseCase {
 
+    private final CrmAuthorization crmAuthorization;
+
     private final SaveTableroPort savePort;
     private final FindAllColumnasPort findAllColumnasPort;
     private final CreateColumnaUseCase createColumnaUseCase;
 
     @Override
     public Tablero create(CreateTableroCommand command) {
+        crmAuthorization.require(RecursoCrm.TABLERO, AccionCrm.CREAR);
+        crmAuthorization.requireCandidate(RecursoCrm.TABLERO, AccionCrm.CREAR,
+            new ResourceScopeCandidate(null, null, null, null));
+        // Board creation materializes default catalog columns; require both
+        // resource capabilities regardless of whether the defaults already exist.
+        crmAuthorization.require(RecursoCrm.COLUMNA, AccionCrm.CREAR);
+        crmAuthorization.requireCandidate(RecursoCrm.COLUMNA, AccionCrm.CREAR,
+            new ResourceScopeCandidate(null, null, null, null));
 
         List<ColumnaTablero> columnasPredeterminadas = buildDefaultColumns(command);
 

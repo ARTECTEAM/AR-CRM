@@ -3,7 +3,10 @@ package com.ar.crm2.application.etiqueta;
 import com.ar.crm2.application.etiqueta.exception.EtiquetaNotFoundException;
 import com.ar.crm2.application.etiqueta.port.in.GetEtiquetaByIdUseCase;
 import com.ar.crm2.application.etiqueta.port.out.FindEtiquetaByIdPort;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.application.etiqueta.service.GetEtiquetaByIdService;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Etiqueta;
 import com.ar.crm2.model.enums.TipoEtiqueta;
 import com.ar.crm2.model.vo.EtiquetaId;
@@ -32,6 +35,9 @@ class GetEtiquetaByIdServiceTest {
     @Mock
     private FindEtiquetaByIdPort findPort;
 
+    @Mock
+    private CrmAuthorization authorization;
+
     @InjectMocks
     private GetEtiquetaByIdService service;
 
@@ -45,9 +51,15 @@ class GetEtiquetaByIdServiceTest {
         );
     }
 
+    private void authorizeRead(UUID id) {
+        doNothing().when(authorization).require(RecursoCrm.ETIQUETA, AccionCrm.LEER);
+        doNothing().when(authorization).requireRecord(RecursoCrm.ETIQUETA, AccionCrm.LEER, id);
+    }
+
     @Test
     void getById_shouldReturnEtiquetaWhenFound() {
         UUID id = UUID.randomUUID();
+        authorizeRead(id);
         Etiqueta etiqueta = buildEtiqueta(id, "Urgent", TipoEtiqueta.TAREA, "#FF0000");
         when(findPort.findById(EtiquetaId.from(id))).thenReturn(Optional.of(etiqueta));
 
@@ -62,6 +74,7 @@ class GetEtiquetaByIdServiceTest {
     @Test
     void getById_shouldThrowNotFoundWhenMissing() {
         UUID id = UUID.randomUUID();
+        authorizeRead(id);
         when(findPort.findById(EtiquetaId.from(id))).thenReturn(Optional.empty());
 
         EtiquetaNotFoundException ex = assertThrows(
