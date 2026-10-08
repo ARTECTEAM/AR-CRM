@@ -31,13 +31,6 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- WhatsApp: infrastructure adapters implement whatsapp ports and use whatsapp domain entities. -->
-        <dependency>
-            <groupId>com.ar</groupId>
-            <artifactId>whatsapp</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
         <!-- Spring Web for REST controllers. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -104,6 +97,13 @@
             <artifactId>postgresql</artifactId>
             <version>42.7.4</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- Spring AI 2.0 provider-neutral ChatClient API used by infrastructure adapters.
+             Provider-specific client configuration and credentials stay in the boot module. -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-client-chat</artifactId>
         </dependency>
 
         <!-- Test dependencies: H2 for slice tests, Spring test MVC/Data JPA for WebMvcTest/DataJpaTest. -->

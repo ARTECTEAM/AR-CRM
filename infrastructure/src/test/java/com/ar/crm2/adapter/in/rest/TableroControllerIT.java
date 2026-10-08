@@ -27,9 +27,6 @@ import com.ar.crm2.model.enums.TipoTablero;
 import com.ar.crm2.model.vo.ColumnaId;
 import com.ar.crm2.model.vo.TableroId;
 import com.ar.crm2.security.KeycloakJwtActorContextMapper;
-import com.ar.crm2.security.WaProperties;
-import com.ar.crm2.whatsapp.application.bot.port.in.FindBotByTokenUseCase;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -69,9 +66,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * slice fails to bootstrap with NoSuchBeanDefinitionException.
  *
  * {@code @WithMockUser} permits requests to reach the controller through
- * Spring Security. The {@code @BeforeEach} stub returns a non-null
- * {@link ActorContext} for any Authentication, so the request attribute
- * expected by {@code TableroController.create} is always populated.
+ * Spring Security. The create test seeds the trusted actor request attribute
+ * directly, so this remains a controller-adapter test rather than a proof of
+ * JWT extraction; the actor filter's fail-closed behavior is covered separately.
  */
 @WebMvcTest(controllers = {TableroController.class, GlobalExceptionHandler.class})
 @Import(TableroResponseAssembler.class)
@@ -111,23 +108,9 @@ class TableroControllerIT {
     @MockitoBean
     private KeycloakJwtActorContextMapper actorContextMapper;
 
-    @MockitoBean
-    private FindBotByTokenUseCase findBotByTokenUseCase;
+    // ── Helpers ─────────────────────────────────────────────────────
 
-    @MockitoBean
-    private WaProperties waProperties;
-
-    // ── Setup ───────────────────────────────────────────────────────
-
-    @BeforeEach
-    void stubActorContextMapper() {
-        // ActorContextRequestAttributeFilter calls this on every authenticated
-        // request. The mapper's real implementation throws IllegalArgumentException
-        // for non-Jwt principals (which is what @WithMockUser provides), so the
-        // stub is required to keep the request flowing.
-        // TableroController.create derives the actor id from superUsuarioId() or
-        // usuarioId() — we set superUsuarioId to a random UUID so the request
-        // does not fail with AuthenticatedUsuarioRequiredException.
+    private org.springframework.test.web.servlet.request.RequestPostProcessor actorContextAttribute() {
         ActorContext actorContext = new ActorContext(
                 "test-subject",
                 "test-user",
@@ -136,10 +119,13 @@ class TableroControllerIT {
                 Optional.of(UUID.randomUUID()),
                 Set.of("USER")
         );
-        lenient().when(actorContextMapper.map(any(Authentication.class))).thenReturn(actorContext);
+        return request -> {
+            request.setAttribute(
+                    com.ar.crm2.security.ActorContextRequestAttributeFilter.ACTOR_CONTEXT_ATTRIBUTE,
+                    actorContext);
+            return request;
+        };
     }
-
-    // ── Helpers ─────────────────────────────────────────────────────
 
     private Tablero buildTablero(UUID id, String nombre) {
         return Tablero.reconstitute(
@@ -172,6 +158,7 @@ class TableroControllerIT {
                 """.formatted(UUID.randomUUID());
 
         mockMvc.perform(post("/api/tableros/create")
+                        .with(actorContextAttribute())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
                 .andExpect(status().isCreated())

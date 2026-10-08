@@ -3,6 +3,9 @@ package com.ar.crm2.adapter.out.persistence.repository;
 import com.ar.crm2.adapter.out.persistence.entity.TableroEntity;
 import com.ar.crm2.model.enums.TipoTablero;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import java.util.List;
 import org.springframework.stereotype.Repository;
 
 /**
@@ -49,4 +52,12 @@ public interface TableroRepository extends JpaRepository<TableroEntity, String> 
         String columnaId,
         TipoTablero tipoTablero
     );
-}
+
+    /** Returns all boards referencing a column without loading lazy aggregate collections. */
+    @Query("""
+        SELECT t.id
+        FROM TableroEntity t
+        JOIN t.columnasTablero ct
+        WHERE ct.columnaId = :columnaId
+        """)
+    List<String> findBoardIdsByColumnasTableroColumnaId(@Param("columnaId") String columnaId);}

@@ -3,9 +3,14 @@ package com.ar.crm2.application.ficha.service;
 import com.ar.crm2.application.ficha.command.MoverColumnaFichaCommand;
 import com.ar.crm2.application.ficha.exception.FichaMovimientoIncompatibleException;
 import com.ar.crm2.application.ficha.exception.FichaNotFoundException;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException;
 import com.ar.crm2.application.ficha.port.out.ExistsColumnaCompatibleConFichaPort;
 import com.ar.crm2.application.ficha.port.out.FindFichaByIdPort;
 import com.ar.crm2.application.ficha.port.out.SaveFichaPort;
+import com.ar.crm2.application.support.TestCrmAuthorization;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Ficha;
 import com.ar.crm2.model.enums.TipoFicha;
 import com.ar.crm2.model.enums.TipoTablero;
@@ -25,6 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -39,11 +45,13 @@ class MoverColumnaFichaServiceTest {
     @Mock
     private ExistsColumnaCompatibleConFichaPort compatibilityPort;
 
+    private CrmAuthorization crmAuthorization;
     private MoverColumnaFichaService service;
 
     @BeforeEach
     void setUp() {
-        service = new MoverColumnaFichaService(findPort, savePort, compatibilityPort);
+        crmAuthorization = new TestCrmAuthorization();
+        service = new MoverColumnaFichaService(crmAuthorization, findPort, savePort, compatibilityPort);
     }
 
     @Test
@@ -114,6 +122,34 @@ class MoverColumnaFichaServiceTest {
 
         assertThatThrownBy(() -> service.moverAColumna(new MoverColumnaFichaCommand(fichaId.value(), target.value())))
             .isInstanceOf(FichaNotFoundException.class);
+
+        verify(compatibilityPort, never()).existsCompatibleColumn(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(savePort, never()).save(org.mockito.ArgumentMatchers.any(Ficha.class));
+    }
+
+    @Test
+    void movimientoFueraDelAlcanceDeFichaSeDeniegaAntesDeConsultar() {
+        FichaId fichaId = FichaId.create();
+        ColumnaId target = ColumnaId.create();
+        ((TestCrmAuthorization) crmAuthorization).denyAction(RecursoCrm.FICHA, AccionCrm.ACTUALIZAR);
+
+        assertThatThrownBy(() -> service.moverAColumna(new MoverColumnaFichaCommand(fichaId.value(), target.value())))
+            .isInstanceOf(CrmAuthorizationDeniedException.class);
+
+        verifyNoInteractions(findPort, compatibilityPort, savePort);
+    }
+
+    @Test
+    void movimientoDenegadoSiNoPuedeLeerFichaComercialVinculada() {
+        var tareaId = TareaId.create();
+        Ficha ficha = Ficha.create(ColumnaId.create(), TipoFicha.TAREA, null, tareaId);
+        ColumnaId target = ColumnaId.create();
+        crmAuthorization = new TestCrmAuthorization().denyRecord(tareaId.value());
+        service = new MoverColumnaFichaService(crmAuthorization, findPort, savePort, compatibilityPort);
+        when(findPort.findById(ficha.getId())).thenReturn(Optional.of(ficha));
+
+        assertThatThrownBy(() -> service.moverAColumna(new MoverColumnaFichaCommand(ficha.getId().value(), target.value())))
+            .isInstanceOf(CrmAuthorizationDeniedException.class);
 
         verify(compatibilityPort, never()).existsCompatibleColumn(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         verify(savePort, never()).save(org.mockito.ArgumentMatchers.any(Ficha.class));

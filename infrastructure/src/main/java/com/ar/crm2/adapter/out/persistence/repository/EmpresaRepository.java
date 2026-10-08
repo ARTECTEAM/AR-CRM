@@ -22,4 +22,14 @@ public interface EmpresaRepository extends JpaRepository<EmpresaEntity, String>,
         WHERE c.empresaId = :empresaId
         """)
     boolean existsTratosByEmpresaId(@Param("empresaId") String empresaId);
-}
+
+    @Query("""
+        SELECT COUNT(e) > 0
+        FROM EmpresaEntity e
+        WHERE e.id = :empresaId
+          AND (e.creadoPor = :actor OR e.responsableId = :actor)
+        """)
+    boolean isVisibleToActor(
+            @Param("empresaId") String empresaId,
+            @Param("actor") String actor
+    );}

@@ -1,5 +1,7 @@
 package com.ar.crm2.application.rol.command;
 
+import com.ar.crm2.model.autorizacion.PermisoRecurso;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -10,8 +12,14 @@ import java.util.UUID;
 public record EditRolCommand(
     UUID id,
     String nombre,
-    String descripcion
+    String descripcion,
+    Boolean activo,
+    List<PermisoRecurso> permisos
 ) {
+
+    public EditRolCommand(UUID id, String nombre, String descripcion) {
+        this(id, nombre, descripcion, null, null);
+    }
 
     public EditRolCommand {
         if (id == null) {
@@ -20,5 +28,6 @@ public record EditRolCommand(
         if (nombre == null || nombre.isBlank()) {
             throw new IllegalArgumentException("nombre is required");
         }
+        permisos = permisos == null ? null : List.copyOf(permisos);
     }
 }

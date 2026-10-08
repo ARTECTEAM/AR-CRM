@@ -6,9 +6,13 @@ import com.ar.crm2.adapter.out.persistence.repository.ContactoRepository;
 import com.ar.crm2.application.contacto.port.out.DeleteContactoByIdPort;
 import com.ar.crm2.application.contacto.port.out.ExistsTratosByContactoIdPort;
 import com.ar.crm2.application.contacto.port.out.FindAllContactosPort;
+import com.ar.crm2.application.contacto.port.out.SearchContactosPort;
 import com.ar.crm2.application.contacto.port.out.FindContactoByIdPort;
 import com.ar.crm2.application.contacto.port.out.SaveContactoPort;
 import com.ar.crm2.application.contacto.query.ContactoFilterCriteria;
+import com.ar.crm2.model.enums.EstadoRelacion;
+import com.ar.crm2.model.vo.EmpresaId;
+import com.ar.crm2.model.vo.UsuarioId;
 import com.ar.crm2.application.shared.query.ListPageRequest;
 import com.ar.crm2.application.shared.query.PagedResult;
 import com.ar.crm2.model.entity.Contacto;
@@ -26,7 +30,7 @@ import java.util.List;
 import java.util.Optional;
 
 @RequiredArgsConstructor
-public class ContactoRepositoryAdapter implements SaveContactoPort, FindAllContactosPort, FindContactoByIdPort, DeleteContactoByIdPort, ExistsTratosByContactoIdPort {
+public class ContactoRepositoryAdapter implements SaveContactoPort, FindAllContactosPort, SearchContactosPort, FindContactoByIdPort, DeleteContactoByIdPort, ExistsTratosByContactoIdPort {
 
     private final ContactoRepository repository;
 
@@ -59,6 +63,44 @@ public class ContactoRepositoryAdapter implements SaveContactoPort, FindAllConta
         return new PagedResult<>(page.getContent(), page.getTotalElements(), page.getNumber(), page.getSize(), page.getTotalPages(), page.hasNext(), page.hasPrevious());
     }
 
+    @Override
+    public List<Contacto> search(
+            UsuarioId actorUsuarioId,
+            UsuarioId empresaScopeActorUsuarioId,
+            String search,
+            EstadoRelacion estadoRelacion,
+            EmpresaId empresaId,
+            UsuarioId responsableId,
+            String comoNosConocio,
+            Integer maxResults,
+            boolean includePrivateFields
+    ) {
+        Pageable pageable = maxResults == null
+                ? Pageable.unpaged()
+                : PageRequest.ofSize(maxResults);
+        return repository.searchScoped(
+                        actorUsuarioId != null ? actorUsuarioId.value().toString() : null,
+                        empresaScopeActorUsuarioId != null ? empresaScopeActorUsuarioId.value().toString() : null,
+                        escapeLikePattern(search),
+                        estadoRelacion,
+                        empresaId == null ? null : empresaId.value().toString(),
+                        responsableId == null ? null : responsableId.value().toString(),
+                        comoNosConocio,
+                        includePrivateFields,
+                        pageable
+                ).stream()
+                .map(ContactoMapper::toDomain)
+                .toList();
+    }
+
+    private static String escapeLikePattern(String value) {
+        if (value == null) {
+            return null;
+        }
+        return value.replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
+    }
     private Specification<ContactoEntity> spec(ContactoFilterCriteria criteria) {
         ContactoFilterCriteria resolved = criteria == null ? ContactoFilterCriteria.empty() : criteria;
         return (root, query, cb) -> {
