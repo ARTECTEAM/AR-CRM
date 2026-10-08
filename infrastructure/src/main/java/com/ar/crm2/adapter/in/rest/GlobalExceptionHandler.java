@@ -1,6 +1,7 @@
 package com.ar.crm2.adapter.in.rest;
 
 import com.ar.crm2.application.agenda.exception.AgendaNotFoundException;
+import com.ar.crm2.application.agent.turn.exception.IdempotencyKeyReusedException;
 import com.ar.crm2.application.columna.exception.ColumnaHasAssociatedFichasException;
 import com.ar.crm2.application.columna.exception.ColumnaNotFoundException;
 import com.ar.crm2.application.contacto.exception.ContactoHasAssociatedTratosException;
@@ -15,6 +16,8 @@ import com.ar.crm2.application.identity.model.IdentityProvisioningException;
 import com.ar.crm2.application.rol.exception.RolHasAssociatedUsuariosException;
 import com.ar.crm2.application.rol.exception.RolNotFoundException;
 import com.ar.crm2.application.security.exception.AuthenticatedUsuarioRequiredException;
+import com.ar.crm2.application.security.exception.CrmActorUnavailableException;
+import com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException;
 import com.ar.crm2.application.superusuario.exception.SuperUsuarioNotFoundException;
 import com.ar.crm2.application.tablero.exception.TableroNotFoundException;
 import com.ar.crm2.application.tarea.exception.TareaNotFoundException;
@@ -263,11 +266,27 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Maps reuse of an idempotency key with a different message fingerprint to a conflict.
+     */
+    @ExceptionHandler(IdempotencyKeyReusedException.class)
+    public ResponseEntity<Map<String, String>> handleIdempotencyKeyReusedException(IdempotencyKeyReusedException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(Map.of("error", "idempotencyKey was reused with a different message; "
+                    + "send the same message body to retry or use a new idempotencyKey for a new turn"));
+    }
+
+    /**
      * Handles AuthenticatedUsuarioRequiredException as 403 Forbidden.
-     * This exception is thrown when the JWT token lacks the required usuario_id claim.
+     * This exception is thrown when the validated JWT subject cannot be linked to an active local CRM user.
      */
     @ExceptionHandler(AuthenticatedUsuarioRequiredException.class)
     public ResponseEntity<Map<String, String>> handleAuthenticatedUsuarioRequiredException(AuthenticatedUsuarioRequiredException ex) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+            .body(Map.of("error", ex.getMessage()));
+    }
+
+    @ExceptionHandler({CrmActorUnavailableException.class, CrmAuthorizationDeniedException.class})
+    public ResponseEntity<Map<String, String>> handleCrmAuthorization(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
             .body(Map.of("error", ex.getMessage()));
     }

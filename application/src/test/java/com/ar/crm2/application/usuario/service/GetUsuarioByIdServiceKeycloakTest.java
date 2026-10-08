@@ -4,6 +4,7 @@ import com.ar.crm2.application.usuario.command.GetUsuarioByIdCommand;
 import com.ar.crm2.application.usuario.exception.UsuarioNotFoundException;
 import com.ar.crm2.application.usuario.port.in.GetUsuarioByIdUseCase;
 import com.ar.crm2.application.usuario.port.out.FindUsuarioByIdPort;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.model.entity.Usuario;
 import com.ar.crm2.model.vo.RolId;
 import com.ar.crm2.model.vo.UsuarioId;
@@ -36,6 +37,9 @@ class GetUsuarioByIdServiceKeycloakTest {
 
     @Mock
     private FindUsuarioByIdPort findPort;
+
+    @Mock
+    private CrmAuthorization authorization;
 
     @InjectMocks
     private GetUsuarioByIdService service;

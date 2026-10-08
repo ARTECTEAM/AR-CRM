@@ -1,28 +1,36 @@
 package com.ar.crm2.adapter.in.rest.dto.response;
 
+import com.ar.crm2.model.autorizacion.PermisoRecurso;
 import com.ar.crm2.model.entity.Rol;
 
+import java.util.List;
 import java.util.UUID;
 
-/**
- * REST response DTO for Rol.
- * Exposes all fields needed for front-end list/create/edit views.
- */
+/** REST response DTO exposing the configurable role catalog to authorized administrators. */
 public record RolResponse(
     UUID id,
     String nombre,
     String descripcion,
-    boolean activo
+    boolean activo,
+    List<PermisoRecurso> permisos
 ) {
-    /**
-     * Maps a domain Rol to this response DTO.
-     */
+    /** Preserves source compatibility with callers using the legacy four-field response. */
+    public RolResponse(UUID id, String nombre, String descripcion, boolean activo) {
+        this(id, nombre, descripcion, activo, List.of());
+    }
+
+    public RolResponse {
+        permisos = permisos == null ? List.of() : List.copyOf(permisos);
+    }
+
+    /** Maps a domain role and its effective permission catalog to this response DTO. */
     public static RolResponse fromDomain(Rol rol) {
         return new RolResponse(
             rol.getId().value(),
             rol.getNombre(),
             rol.getDescripcion(),
-            rol.isActivo()
+            rol.isActivo(),
+            rol.getPermisos()
         );
     }
 }

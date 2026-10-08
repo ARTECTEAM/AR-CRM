@@ -26,7 +26,7 @@ public final class ContactoCommandMapper {
     public static CreateContactoCommand toCommand(CreateContactoRequest request, ActorContext actorContext) {
         UUID creadoPor = actorContext.usuarioId()
                 .orElseThrow(() -> new IllegalStateException(
-                        "usuarioId not found in actor context — ensure the JWT contains the usuario_id claim"));
+                        "no active CRM user is associated with the authenticated identity"));
         return new CreateContactoCommand(
             request.empresaId(),
             request.nombre(),

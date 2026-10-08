@@ -10,14 +10,15 @@ import java.util.UUID;
  * This is a pure application-layer abstraction — no Spring Security, JWT,
  * or Keycloak types leak into domain/application layers.
  *
- * All fields are derived from the validated JWT token; the {@link ActorContext}
- * is assembled in the infrastructure layer and passed to application services
- * through assembler/mapper code (never injected as a framework artifact).
+ * Token attributes are derived from a validated JWT, while {@code usuarioId} is
+ * resolved from the active local CRM user linked to the token subject. The context
+ * is assembled in infrastructure and passed to application services through
+ * mapper code (never injected as a framework artifact).
  *
  * @param subject      Keycloak subject (sub claim) — the unique identity identifier
  * @param username     Keycloak preferred_username claim
  * @param email        Keycloak email claim (may be absent for service accounts)
- * @param usuarioId     Custom Keycloak claim (usuario_id) — the CRM Usuario entity ID
+ * @param usuarioId     Active local CRM Usuario ID resolved from the validated subject
  * @param superUsuarioId Custom Keycloak claim (super_usuario_id) — the CRM SuperUsuario entity ID
  * @param roles         Keycloak realm_access.roles — set of role strings assigned in the realm
  */

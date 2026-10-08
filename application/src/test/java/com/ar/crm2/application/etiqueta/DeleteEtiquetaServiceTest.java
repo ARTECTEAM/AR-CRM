@@ -7,7 +7,9 @@ import com.ar.crm2.application.etiqueta.port.out.CountFichaEtiquetasByEtiquetaId
 import com.ar.crm2.application.etiqueta.port.out.DeleteEtiquetaByIdPort;
 import com.ar.crm2.application.etiqueta.port.out.DeleteFichaEtiquetasByEtiquetaIdPort;
 import com.ar.crm2.application.etiqueta.port.out.FindEtiquetaByIdPort;
+import com.ar.crm2.application.etiqueta.port.out.FindFichaIdsByEtiquetaIdPort;
 import com.ar.crm2.application.etiqueta.service.DeleteEtiquetaService;
+import com.ar.crm2.application.support.TestCrmAuthorization;
 import com.ar.crm2.model.entity.Etiqueta;
 import com.ar.crm2.model.enums.TipoEtiqueta;
 import com.ar.crm2.model.vo.EtiquetaId;
@@ -37,7 +39,8 @@ class DeleteEtiquetaServiceTest {
         InMemoryDeleteById deleteByIdPort = new InMemoryDeleteById();
 
         DeleteEtiquetaService service = new DeleteEtiquetaService(
-            findPort, countPort, deleteRelPort, deleteByIdPort
+            findPort, countPort, deleteRelPort, deleteByIdPort,
+            fichaIdsPort(List.of(UUID.randomUUID())), new TestCrmAuthorization()
         );
 
         assertThrows(EtiquetaRequiresConfirmationException.class,
@@ -58,7 +61,8 @@ class DeleteEtiquetaServiceTest {
         InMemoryDeleteById deleteByIdPort = new InMemoryDeleteById();
 
         DeleteEtiquetaService service = new DeleteEtiquetaService(
-            findPort, countPort, deleteRelPort, deleteByIdPort
+            findPort, countPort, deleteRelPort, deleteByIdPort,
+            fichaIdsPort(List.of(UUID.randomUUID())), new TestCrmAuthorization()
         );
 
         service.delete(new DeleteEtiquetaCommand(id.value(), true));
@@ -79,7 +83,8 @@ class DeleteEtiquetaServiceTest {
         InMemoryDeleteById deleteByIdPort = new InMemoryDeleteById();
 
         DeleteEtiquetaService service = new DeleteEtiquetaService(
-            findPort, countPort, deleteRelPort, deleteByIdPort
+            findPort, countPort, deleteRelPort, deleteByIdPort,
+            fichaIdsPort(List.of()), new TestCrmAuthorization()
         );
 
         service.delete(new DeleteEtiquetaCommand(id.value(), false));
@@ -93,11 +98,41 @@ class DeleteEtiquetaServiceTest {
             new InMemoryFindById(EtiquetaId.create(), null),
             new InMemoryCount(0),
             new InMemoryDeleteRelations(),
-            new InMemoryDeleteById()
+            new InMemoryDeleteById(),
+            fichaIdsPort(List.of()),
+            new TestCrmAuthorization()
         );
 
         assertThrows(EtiquetaNotFoundException.class,
             () -> service.delete(new DeleteEtiquetaCommand(UUID.randomUUID(), true)));
+    }
+
+    @Test
+    void delete_rejectsCascadeWhenAnyLinkedFichaIsUnauthorized() {
+        EtiquetaId id = EtiquetaId.create();
+        Etiqueta etiqueta = Etiqueta.reconstitute(
+                id, "X", TipoEtiqueta.TAREA, "#FFFFFF", LocalDateTime.now());
+        UUID allowedFicha = UUID.randomUUID();
+        UUID deniedFicha = UUID.randomUUID();
+        InMemoryDeleteRelations deleteRelPort = new InMemoryDeleteRelations();
+        InMemoryDeleteById deleteByIdPort = new InMemoryDeleteById();
+        TestCrmAuthorization authorization = new TestCrmAuthorization().denyRecord(deniedFicha);
+        DeleteEtiquetaService service = new DeleteEtiquetaService(
+                new InMemoryFindById(id, etiqueta),
+                new InMemoryCount(2),
+                deleteRelPort,
+                deleteByIdPort,
+                fichaIdsPort(List.of(allowedFicha, deniedFicha)),
+                authorization);
+
+        assertThrows(com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException.class,
+                () -> service.delete(new DeleteEtiquetaCommand(id.value(), true)));
+        assertTrue(deleteRelPort.deletedIds.isEmpty());
+        assertTrue(deleteByIdPort.deletedIds.isEmpty());
+    }
+
+    private static FindFichaIdsByEtiquetaIdPort fichaIdsPort(List<UUID> fichaIds) {
+        return ignored -> fichaIds;
     }
 
     // ── Test doubles ──────────────────────────────────────────────

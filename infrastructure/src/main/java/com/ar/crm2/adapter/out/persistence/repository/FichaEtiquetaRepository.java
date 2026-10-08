@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 /**
  * Spring Data JPA repository for the FichaEtiqueta owned relation.
  *
@@ -30,6 +32,10 @@ public interface FichaEtiquetaRepository extends JpaRepository<FichaEtiquetaEnti
      * Used by the delete flow to decide whether the catalog row is in use.
      */
     long countByEtiquetaId(String etiquetaId);
+
+    /** Returns affected card IDs so authorization can be checked before a cross-board cascade. */
+    @Query("SELECT DISTINCT fe.ficha.id FROM FichaEtiquetaEntity fe WHERE fe.etiquetaId = :etiquetaId")
+    List<String> findFichaIdsByEtiquetaId(@Param("etiquetaId") String etiquetaId);
 
     /**
      * Bulk-deletes all FichaEtiqueta rows that reference the given Etiqueta id.
