@@ -66,23 +66,27 @@ public class ContactoRepositoryAdapter implements SaveContactoPort, FindAllConta
     @Override
     public List<Contacto> search(
             UsuarioId actorUsuarioId,
+            UsuarioId empresaScopeActorUsuarioId,
             String search,
             EstadoRelacion estadoRelacion,
             EmpresaId empresaId,
             UsuarioId responsableId,
             String comoNosConocio,
-            Integer maxResults
+            Integer maxResults,
+            boolean includePrivateFields
     ) {
         Pageable pageable = maxResults == null
                 ? Pageable.unpaged()
                 : PageRequest.ofSize(maxResults);
         return repository.searchScoped(
-                        actorUsuarioId.value().toString(),
+                        actorUsuarioId != null ? actorUsuarioId.value().toString() : null,
+                        empresaScopeActorUsuarioId != null ? empresaScopeActorUsuarioId.value().toString() : null,
                         escapeLikePattern(search),
                         estadoRelacion,
                         empresaId == null ? null : empresaId.value().toString(),
                         responsableId == null ? null : responsableId.value().toString(),
                         comoNosConocio,
+                        includePrivateFields,
                         pageable
                 ).stream()
                 .map(ContactoMapper::toDomain)

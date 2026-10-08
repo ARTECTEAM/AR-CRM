@@ -23,6 +23,7 @@ import com.ar.crm2.application.ficha.port.out.SaveFichaPort;
 import com.ar.crm2.application.ficha.service.CreateFichaService;
 import com.ar.crm2.application.ficha.service.EditFichaService;
 import org.junit.jupiter.api.Test;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
@@ -46,6 +47,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringJUnitConfig(classes = WiringConfig.class)
 class FichaWiringTest {
 
+    @MockitoBean private ChatClient chatClient;
+    @MockitoBean private com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog agentToolCallbackCatalog;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.repository.AgentConversationRepository agentConversationRepository;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRepository agentTurnRepository;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.repository.AgentTurnRequestRepository agentTurnRequestRepository;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.repository.AgentVisibleHistoryRepository agentVisibleHistoryRepository;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.memory.DurableMemoryRepository durableMemoryRepository;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.agent.tool.AgentToolActionRepository agentToolActionRepository;
+    @MockitoBean private org.springframework.transaction.PlatformTransactionManager platformTransactionManager;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.RoleManagerGovernance roleManagerGovernance;
+    @MockitoBean private com.ar.crm2.application.security.port.out.CurrentActorPort currentActorPort;
+
     @MockitoBean private EmpresaRepository empresaRepository;
     @MockitoBean private ContactoRepository contactoRepository;
     @MockitoBean private TableroRepository tableroRepository;
@@ -59,6 +72,7 @@ class FichaWiringTest {
     @MockitoBean private EtiquetaRepository etiquetaRepository;
     @MockitoBean private FichaEtiquetaRepository fichaEtiquetaRepository;
     @MockitoBean private AgendaRepository agendaRepository;
+    @MockitoBean private com.ar.crm2.adapter.out.persistence.repository.NotaTratoRepository notaTratoRepository;
 
     @MockitoBean private com.ar.crm2.adapter.out.keycloak.KeycloakUserProvisioningAdapter keycloakUserProvisioningAdapter;
     @MockitoBean private com.ar.crm2.adapter.out.email.AgendaEmailAdapter agendaEmailAdapter;

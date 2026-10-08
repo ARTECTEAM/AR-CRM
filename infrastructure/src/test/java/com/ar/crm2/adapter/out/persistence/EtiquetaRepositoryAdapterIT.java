@@ -8,6 +8,7 @@ import com.ar.crm2.adapter.out.persistence.repository.FichaEtiquetaRepository;
 import com.ar.crm2.adapter.out.persistence.repository.FichaRepository;
 import com.ar.crm2.application.etiqueta.exception.EtiquetaRequiresConfirmationException;
 import com.ar.crm2.application.etiqueta.service.DeleteEtiquetaService;
+import com.ar.crm2.application.security.CrmAuthorization;
 import com.ar.crm2.model.entity.Etiqueta;
 import com.ar.crm2.model.enums.TipoEtiqueta;
 import com.ar.crm2.model.enums.TipoFicha;
@@ -204,6 +205,19 @@ class EtiquetaRepositoryAdapterIT {
         assertEquals(2L, count);
     }
 
+    @Test
+    void findFichaIdsByEtiquetaId_shouldReturnOnlyLinkedFichaIds() {
+        EtiquetaEntity etiqueta = saveEtiqueta("E", TipoEtiqueta.TAREA);
+        FichaEntity linkedFicha = saveFichaWithEtiqueta(etiqueta.getId(), TipoEtiqueta.TAREA);
+        EtiquetaEntity otherEtiqueta = saveEtiqueta("Other", TipoEtiqueta.TAREA);
+        saveFichaWithEtiqueta(otherEtiqueta.getId(), TipoEtiqueta.TAREA);
+
+        List<UUID> fichaIds = adapter.findFichaIdsByEtiquetaId(
+                EtiquetaId.from(UUID.fromString(etiqueta.getId())));
+
+        assertEquals(List.of(UUID.fromString(linkedFicha.getId())), fichaIds);
+    }
+
     // ── DeleteEtiquetaByIdPort (cascade atomicity) ────────────────
 
     @Test
@@ -260,7 +274,7 @@ class EtiquetaRepositoryAdapterIT {
         saveFichaWithEtiqueta(e.getId(), TipoEtiqueta.TAREA);
 
         DeleteEtiquetaService service = new DeleteEtiquetaService(
-            adapter, adapter, adapter, adapter);
+            adapter, adapter, adapter, adapter, adapter, org.mockito.Mockito.mock(CrmAuthorization.class));
 
         assertThrows(EtiquetaRequiresConfirmationException.class, () ->
             service.delete(new com.ar.crm2.application.etiqueta.command.DeleteEtiquetaCommand(

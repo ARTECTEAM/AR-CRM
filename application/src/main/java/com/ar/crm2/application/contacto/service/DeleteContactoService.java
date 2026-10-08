@@ -7,6 +7,9 @@ import com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase;
 import com.ar.crm2.application.contacto.port.out.DeleteContactoByIdPort;
 import com.ar.crm2.application.contacto.port.out.ExistsTratosByContactoIdPort;
 import com.ar.crm2.application.contacto.port.out.FindContactoByIdPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.vo.ContactoId;
 import lombok.RequiredArgsConstructor;
 
@@ -20,9 +23,12 @@ public class DeleteContactoService implements DeleteContactoUseCase {
     private final FindContactoByIdPort findPort;
     private final ExistsTratosByContactoIdPort existsTratosPort;
     private final DeleteContactoByIdPort deletePort;
+    private final CrmAuthorization authorization;
 
     @Override
     public void delete(DeleteContactoCommand command) {
+        authorization.require(RecursoCrm.CONTACTO, AccionCrm.ELIMINAR);
+        authorization.requireRecord(RecursoCrm.CONTACTO, AccionCrm.ELIMINAR, command.id());
         ContactoId contactoId = ContactoId.from(command.id());
 
         // Verify contacto exists

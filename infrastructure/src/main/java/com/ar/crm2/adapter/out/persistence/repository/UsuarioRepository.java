@@ -22,4 +22,7 @@ public interface UsuarioRepository extends JpaRepository<UsuarioEntity, String> 
     java.util.Optional<UsuarioEntity> findByCorreo(String correo);
 
     java.util.List<UsuarioEntity> findByActivoTrue();
-}
+
+    long countByActivoTrueAndRolIdIn(java.util.Collection<String> roleIds);
+
+    long countByActivoTrueAndRolId(String roleId);}

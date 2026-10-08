@@ -10,6 +10,7 @@ import com.ar.crm2.application.etiqueta.port.out.DeleteFichaEtiquetasByEtiquetaI
 import com.ar.crm2.application.etiqueta.port.out.ExistsEtiquetaByNombreAndTipoPort;
 import com.ar.crm2.application.etiqueta.port.out.FindAllEtiquetasPort;
 import com.ar.crm2.application.etiqueta.port.out.FindEtiquetaByIdPort;
+import com.ar.crm2.application.etiqueta.port.out.FindFichaIdsByEtiquetaIdPort;
 import com.ar.crm2.application.etiqueta.port.out.FindEtiquetasByIdsPort;
 import com.ar.crm2.application.etiqueta.port.out.SaveEtiquetaPort;
 import com.ar.crm2.model.entity.Etiqueta;
@@ -23,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Single adapter implementing every Etiqueta outbound port defined in the
@@ -50,7 +52,8 @@ public class EtiquetaRepositoryAdapter implements
     DeleteEtiquetaByIdPort,
     DeleteFichaEtiquetasByEtiquetaIdPort,
     CountFichaEtiquetasByEtiquetaIdPort,
-    FindEtiquetasByIdsPort {
+    FindEtiquetasByIdsPort,
+    FindFichaIdsByEtiquetaIdPort {
 
     private final EtiquetaRepository etiquetaRepository;
     private final FichaEtiquetaRepository fichaEtiquetaRepository;
@@ -134,6 +137,14 @@ public class EtiquetaRepositoryAdapter implements
     @Override
     public long countByEtiquetaId(EtiquetaId id) {
         return fichaEtiquetaRepository.countByEtiquetaId(id.value().toString());
+    }
+
+    @Override
+    public List<UUID> findFichaIdsByEtiquetaId(EtiquetaId id) {
+        return fichaEtiquetaRepository.findFichaIdsByEtiquetaId(id.value().toString())
+                .stream()
+                .map(UUID::fromString)
+                .toList();
     }
 
     // ── FindEtiquetasByIdsPort ────────────────────────────────────

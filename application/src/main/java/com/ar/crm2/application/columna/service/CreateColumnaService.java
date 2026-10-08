@@ -1,9 +1,14 @@
 package com.ar.crm2.application.columna.service;
 
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.ResourceScopeCandidate;
+
 import com.ar.crm2.application.columna.command.CreateColumnaCommand;
 import com.ar.crm2.application.columna.port.in.CreateColumnaUseCase;
 import com.ar.crm2.application.columna.port.out.FindAllColumnasPort;
 import com.ar.crm2.application.columna.port.out.SaveColumnaPort;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Columna;
 import com.ar.crm2.model.enums.TipoColumna;
 import com.ar.crm2.model.vo.SuperUsuarioId;
@@ -33,11 +38,16 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class CreateColumnaService implements CreateColumnaUseCase {
 
+    private final CrmAuthorization crmAuthorization;
+
     private final SaveColumnaPort savePort;
     private final FindAllColumnasPort findAllPort;
 
     @Override
     public Columna create(CreateColumnaCommand command) {
+        crmAuthorization.require(RecursoCrm.COLUMNA, AccionCrm.CREAR);
+        crmAuthorization.requireCandidate(RecursoCrm.COLUMNA, AccionCrm.CREAR,
+            new ResourceScopeCandidate(null, null, null, null));
         if (command.tipoColumna() == TipoColumna.PREDETERMINADA
             && !command.defaultCatalogBootstrap()
             && command.superUsuarioId().isEmpty()) {

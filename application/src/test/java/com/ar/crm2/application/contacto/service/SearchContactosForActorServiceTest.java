@@ -2,7 +2,14 @@ package com.ar.crm2.application.contacto.service;
 
 import com.ar.crm2.application.contacto.command.GetAllContactosCommand;
 import com.ar.crm2.application.contacto.port.out.SearchContactosPort;
+import com.ar.crm2.application.security.ResourceReadPolicy;
+import com.ar.crm2.application.support.TestCrmAuthorization;
+import com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException;
 import com.ar.crm2.model.entity.Contacto;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.AlcanceCrm;
+import com.ar.crm2.model.autorizacion.GrupoCampoSensible;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import com.ar.crm2.model.vo.EmpresaId;
 import com.ar.crm2.model.vo.UsuarioId;
@@ -10,11 +17,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class SearchContactosForActorServiceTest {
 
@@ -26,7 +35,7 @@ class SearchContactosForActorServiceTest {
         UUID empresaId = UUID.randomUUID();
         UUID responsableId = UUID.randomUUID();
         CapturingSearchPort port = new CapturingSearchPort(expected);
-        SearchContactosForActorService service = new SearchContactosForActorService(port);
+        SearchContactosForActorService service = service(port);
 
         List<Contacto> result = service.search(new GetAllContactosCommand(
                 ACTOR,
@@ -50,6 +59,7 @@ class SearchContactosForActorServiceTest {
                         + "independent of the mandatory actor scope");
         assertEquals("LinkedIn", port.comoNosConocio);
         assertEquals(20, port.maxResults);
+        assertEquals(true, port.includePrivateFields);
     }
 
     @Test
@@ -57,7 +67,7 @@ class SearchContactosForActorServiceTest {
         UUID actor = UUID.fromString("33333333-3333-3333-3333-333333333333");
         UUID responsableId = UUID.randomUUID();
         CapturingSearchPort port = new CapturingSearchPort(List.of());
-        SearchContactosForActorService service = new SearchContactosForActorService(port);
+        SearchContactosForActorService service = service(port);
 
         service.search(new GetAllContactosCommand(
                 actor, null, null, null, responsableId, null, null));
@@ -71,7 +81,7 @@ class SearchContactosForActorServiceTest {
     @Test
     void getAll_passesNullResponsableIdWhenAbsent() {
         CapturingSearchPort port = new CapturingSearchPort(List.of());
-        SearchContactosForActorService service = new SearchContactosForActorService(port);
+        SearchContactosForActorService service = service(port);
 
         service.search(new GetAllContactosCommand(
                 ACTOR, null, null, null, null, null, null));
@@ -84,7 +94,7 @@ class SearchContactosForActorServiceTest {
     @Test
     void getAll_normalizesBlankAndWhitespaceEstadoRelacionToAbsentFilter() {
         CapturingSearchPort port = new CapturingSearchPort(List.of());
-        SearchContactosForActorService service = new SearchContactosForActorService(port);
+        SearchContactosForActorService service = service(port);
 
         List<Contacto> result = service.search(new GetAllContactosCommand(
                 ACTOR,
@@ -103,7 +113,7 @@ class SearchContactosForActorServiceTest {
     @Test
     void getAll_normalizesTabAndNewlineEstadoRelacionToAbsentFilter() {
         CapturingSearchPort port = new CapturingSearchPort(List.of());
-        SearchContactosForActorService service = new SearchContactosForActorService(port);
+        SearchContactosForActorService service = service(port);
 
         service.search(new GetAllContactosCommand(
                 ACTOR,
@@ -132,7 +142,7 @@ class SearchContactosForActorServiceTest {
                 null);
         List<Contacto> expected = Collections.nCopies(25, contacto);
         CapturingSearchPort port = new CapturingSearchPort(expected);
-        SearchContactosForActorService service = new SearchContactosForActorService(port);
+        SearchContactosForActorService service = service(port);
 
         List<Contacto> result = service.search(new GetAllContactosCommand(
                 ACTOR, null, null, null, null, null, null));
@@ -145,17 +155,88 @@ class SearchContactosForActorServiceTest {
         assertNull(port.responsableId);
         assertNull(port.comoNosConocio);
         assertNull(port.maxResults);
+        assertEquals(true, port.includePrivateFields);
+    }
+
+    @Test
+    void privateEmailAndPhoneDoNotParticipateInSearchWithoutPrivateFieldGrant() {
+        CapturingSearchPort port = new CapturingSearchPort(List.of());
+        TestCrmAuthorization authorization = new TestCrmAuthorization().policy(
+            RecursoCrm.CONTACTO,
+            new ResourceReadPolicy(AlcanceCrm.TODO_COMPARTIDO, Set.of(), Set.of(), Set.of())
+        );
+        SearchContactosForActorService service = new SearchContactosForActorService(authorization, port);
+
+        service.search(new GetAllContactosCommand(ACTOR, "hidden@example.test", null, null, null, null, 10));
+
+        assertEquals(false, port.includePrivateFields);
+        assertNull(port.actorUsuarioId, "shared scope must not add an owner-only actor predicate");
+    }
+
+    @Test
+    void sharedContactScopeDoesNotConstrainSearchToTheCurrentActor() {
+        CapturingSearchPort port = new CapturingSearchPort(List.of());
+        TestCrmAuthorization authorization = new TestCrmAuthorization().policy(
+            RecursoCrm.CONTACTO,
+            new ResourceReadPolicy(AlcanceCrm.TODO_COMPARTIDO,
+                Set.of(GrupoCampoSensible.values()), Set.of(), Set.of(GrupoCampoSensible.values()))
+        );
+
+        new SearchContactosForActorService(authorization, port).search(
+            new GetAllContactosCommand(ACTOR, null, null, null, null, null, null)
+        );
+
+        assertNull(port.actorUsuarioId);
+    }
+
+    @Test
+    void searchRequiresRelatedCompanyReadGrantBeforeQueryingContacts() {
+        CapturingSearchPort port = new CapturingSearchPort(List.of());
+        TestCrmAuthorization authorization = new TestCrmAuthorization()
+                .denyAction(RecursoCrm.EMPRESA, AccionCrm.LEER);
+        SearchContactosForActorService service = new SearchContactosForActorService(authorization, port);
+
+        assertThrows(CrmAuthorizationDeniedException.class,
+                () -> service.search(new GetAllContactosCommand(ACTOR, null, null, null, null, null, 10)));
+        assertEquals(0, port.calls, "No contact query or result limit may run without linked Empresa read access");
+    }
+
+    @Test
+    void searchPassesCompanyRowScopeToDatabaseBeforeApplyingResultLimit() {
+        CapturingSearchPort port = new CapturingSearchPort(List.of());
+        TestCrmAuthorization authorization = new TestCrmAuthorization()
+                .policy(RecursoCrm.CONTACTO, new ResourceReadPolicy(AlcanceCrm.TODO_COMPARTIDO,
+                        Set.of(), Set.of(), Set.of()))
+                .policy(RecursoCrm.EMPRESA, new ResourceReadPolicy(AlcanceCrm.PROPIOS_O_ASIGNADOS,
+                        Set.of(), Set.of(), Set.of()));
+        SearchContactosForActorService service = new SearchContactosForActorService(authorization, port);
+
+        service.search(new GetAllContactosCommand(ACTOR, null, null, null, null, null, 1));
+
+        assertEquals(UsuarioId.from(ACTOR), port.empresaScopeActorUsuarioId,
+                "Empresa scope must be pushed into the same query before maxResults is applied");
+    }
+    private static SearchContactosForActorService service(CapturingSearchPort port) {
+        TestCrmAuthorization authorization = new TestCrmAuthorization().policy(
+            RecursoCrm.CONTACTO,
+            new ResourceReadPolicy(AlcanceCrm.PROPIOS_O_ASIGNADOS,
+                Set.of(GrupoCampoSensible.values()), Set.of(), Set.of(GrupoCampoSensible.values()))
+        );
+        return new SearchContactosForActorService(authorization, port);
     }
 
     private static final class CapturingSearchPort implements SearchContactosPort {
         private final List<Contacto> result;
         private UsuarioId actorUsuarioId;
+        private UsuarioId empresaScopeActorUsuarioId;
         private String search;
         private EstadoRelacion estadoRelacion;
         private EmpresaId empresaId;
         private UsuarioId responsableId;
         private String comoNosConocio;
         private Integer maxResults;
+        private boolean includePrivateFields;
+        private int calls;
 
         private CapturingSearchPort(List<Contacto> result) {
             this.result = result;
@@ -164,20 +245,25 @@ class SearchContactosForActorServiceTest {
         @Override
         public List<Contacto> search(
                 UsuarioId actorUsuarioId,
+                UsuarioId empresaScopeActorUsuarioId,
                 String search,
                 EstadoRelacion estadoRelacion,
                 EmpresaId empresaId,
                 UsuarioId responsableId,
                 String comoNosConocio,
-                Integer maxResults
+                Integer maxResults,
+                boolean includePrivateFields
         ) {
+            calls++;
             this.actorUsuarioId = actorUsuarioId;
+            this.empresaScopeActorUsuarioId = empresaScopeActorUsuarioId;
             this.search = search;
             this.estadoRelacion = estadoRelacion;
             this.empresaId = empresaId;
             this.responsableId = responsableId;
             this.comoNosConocio = comoNosConocio;
             this.maxResults = maxResults;
+            this.includePrivateFields = includePrivateFields;
             return result;
         }
     }

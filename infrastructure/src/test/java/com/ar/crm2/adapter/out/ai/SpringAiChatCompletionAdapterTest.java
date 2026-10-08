@@ -16,6 +16,7 @@ import org.springframework.ai.chat.model.Generation;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,7 +49,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *     <li>Does NOT call request {@code .tools(...)} — Spring AI 2.0 runtime
  *         tools would replace builder defaults, so the adapter only supplies
  *         trusted per-request tool context and lets the configured
- *         {@code defaultTools} (the three allowlisted CRM tools) reach the
+     *         {@code defaultTools} (the 50 allowlisted CRM tools) reach the
  *         model unchanged.</li>
  * </ul>
  *
@@ -75,7 +76,7 @@ class SpringAiChatCompletionAdapterTest {
     /**
      * Memory-aware fixture that mirrors the shape of what the production
      * {@code com.ar.crm2.config.AgentConfig} bean owns at runtime, plus
-     * the three shared {@code defaultTools} the agent advertises. The
+     * the six shared {@code defaultTools} the agent advertises. The
      * adapter is constructed only with the configured {@link ChatClient};
      * it MUST NOT need the tools at construction time because the
      * defaults carry the tool catalog.
@@ -372,8 +373,58 @@ class SpringAiChatCompletionAdapterTest {
     }
 
     @Test
+    void trustedToolContextCarriesDistinctOptionalSuperUsuarioClaim() {
+        UUID superUsuarioId = UUID.fromString("11111111-2222-3333-4444-555555555555");
+
+        Map<String, Object> privileged = SpringAiChatCompletionAdapter.trustedToolContext(
+                OWNER, ACTOR_USUARIO_ID, superUsuarioId, TURN);
+        Map<String, Object> normal = SpringAiChatCompletionAdapter.trustedToolContext(
+                OWNER, ACTOR_USUARIO_ID, null, TURN);
+
+        assertThat(privileged).containsEntry("actorUsuarioId", ACTOR_USUARIO_ID)
+                .containsEntry("actorSuperUsuarioId", superUsuarioId);
+        assertThat(normal).containsEntry("actorUsuarioId", ACTOR_USUARIO_ID)
+                .doesNotContainKey("actorSuperUsuarioId");
+    }
+
+    @Test
+    void ownerTurnAndActorAreNeverEmbeddedInAnyModelVisiblePromptPart() {
+        // Spring AI 2.0 stores `.toolContext(Map)` on the request spec /
+        // ChatClientRequest.context, not on the Prompt options the
+        // ChatModel observes. We therefore assert the no-leak contract
+        // from the ChatModel side: every instruction must NOT carry the
+        // server-derived owner, turn, or actor identity or their key
+        // names. Trusted propagation is asserted separately at the
+        // @Tool side in SpringAiCrmToolsTest.
+        final String ownerSentinel = "actor-pr9c4-c1-owner-not-leaked";
+        final String turnSentinel = "00000000-0000-0000-0000-000000c1c1ee";
+        AgentOwnerId c1Owner = AgentOwnerId.from(ownerSentinel);
+        TurnId c1Turn = TurnId.from(UUID.fromString(turnSentinel));
+        CapturingChatModel model = new CapturingChatModel("ok");
+        ChatClient client = newMemoryAwareClient(model);
+        SpringAiChatCompletionAdapter adapter = new SpringAiChatCompletionAdapter(client);
+
+        adapter.complete(c1Owner, ACTOR_USUARIO_ID, c1Turn,
+                List.of(VisibleMessage.user("hi"), VisibleMessage.assistant("ack")),
+                List.of(), "prompt");
+
+        List<Message> instructions = model.capturedPrompt().getInstructions();
+        for (Message instruction : instructions) {
+            String text = instruction.getText();
+            assertThat(text)
+                    .as("model-visible instruction (%s) must never contain owner/turn/actor identity", instruction)
+                    .doesNotContain(ownerSentinel)
+                    .doesNotContain(turnSentinel)
+                    .doesNotContain(ACTOR_USUARIO_ID.toString())
+                    .doesNotContain("agentOwnerId")
+                    .doesNotContain("turnId")
+                    .doesNotContain("actorUsuarioId");
+        }
+    }
+
+    @Test
     void adapterConstructsWithoutToolsArgumentAndDoesNotRequestToolsPerInvocation() {
-        // The corrected adapter must NOT take a SpringAiCrmToolsBinder or
+        // The corrected adapter must NOT take a per-request tools binder or
         // any tools at construction — defaults are registered once on the
         // ChatClient by AgentConfig. The adapter also must NOT call
         // .tools(...) at request time (Spring AI 2.0 runtime tools

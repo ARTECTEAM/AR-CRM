@@ -15,11 +15,18 @@ import java.util.UUID;
 public record RegenerateUserTurnCommand(
         String actorSubject,
         UUID actorUsuarioId,
+        UUID actorSuperUsuarioId,
         UUID turnId,
         String opaqueHandle,
         String idempotencyKey,
         int visibleHistoryLimit
 ) {
+
+    public RegenerateUserTurnCommand(
+            String actorSubject, UUID actorUsuarioId, UUID turnId, String opaqueHandle,
+            String idempotencyKey, int visibleHistoryLimit) {
+        this(actorSubject, actorUsuarioId, null, turnId, opaqueHandle, idempotencyKey, visibleHistoryLimit);
+    }
 
     public RegenerateUserTurnCommand {
         actorSubject = ApplicationAssert.requiredTrimmed(actorSubject, "actorSubject");
