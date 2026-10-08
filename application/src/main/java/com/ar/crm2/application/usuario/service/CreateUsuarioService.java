@@ -6,6 +6,15 @@ import com.ar.crm2.application.identity.port.out.SetIdentityAttributesPort;
 import com.ar.crm2.application.usuario.command.CreateUsuarioCommand;
 import com.ar.crm2.application.usuario.port.in.CreateUsuarioUseCase;
 import com.ar.crm2.application.usuario.port.out.SaveUsuarioPort;
+import com.ar.crm2.application.rol.exception.RolNotFoundException;
+import com.ar.crm2.application.rol.port.out.FindRolByIdPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.CurrentActor;
+import com.ar.crm2.application.security.exception.CrmActorUnavailableException;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
+import com.ar.crm2.application.security.port.out.AuthorizationMutationPort;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Usuario;
 import com.ar.crm2.model.vo.RolId;
 import lombok.RequiredArgsConstructor;
@@ -16,12 +25,10 @@ import java.util.Map;
  * Application service implementing CreateUsuarioUseCase.
  * <p>
  * Consistency model: Keycloak is provisioned first, then the locally
- * generated {@code usuario_id} is pushed to Keycloak as a custom user
- * attribute (consumed by the configured protocol mapper to emit the
- * {@code usuario_id} JWT claim) BEFORE the local row is persisted. This keeps
- * Keycloak and the local DB in lockstep: if either external step fails, the
- * whole flow is rolled back via compensation deletes, and the caller observes
- * a single, attributable failure.
+ * generated {@code usuario_id} is stored as compatibility metadata on the
+ * identity. Authorization does not trust that custom claim: it resolves the
+ * validated JWT subject to the active local CRM user. If identity provisioning
+ * or local persistence fails, compensation deletes the provisioned identity.
  * <p>
  * Flow:
  * <ol>
@@ -36,7 +43,7 @@ import java.util.Map;
  *   <li>Persist the local row. If this fails after the attribute sync, the
  *       Keycloak user is deleted as compensation and the original save
  *       failure is rethrown — leaving a Keycloak user without a CRM
- *       counterpart would leave the JWT {@code usuario_id} claim dangling.</li>
+ *       counterpart would leave an external identity without a CRM user.</li>
  * </ol>
  * Compensation failures (Keycloak delete itself failing) are swallowed and
  * do not mask the original error.
@@ -50,9 +57,19 @@ public class CreateUsuarioService implements CreateUsuarioUseCase {
     private final ProvisionIdentityPort provisionPort;
     private final DeleteIdentityPort deleteIdentityPort;
     private final SetIdentityAttributesPort setAttributesPort;
+    private final CrmAuthorization authorization;
+    private final CurrentActorPort currentActorPort;
+    private final FindRolByIdPort findRolByIdPort;
+    private final AuthorizationMutationPort mutationPort;
 
     @Override
     public Usuario create(CreateUsuarioCommand command) {
+        validateAssignment(command);
+
+        // The preflight prevents unnecessary identity-provider work, but its
+        // snapshots are never trusted for the local assignment below.
+        RolId targetRolId = RolId.from(command.rolId());
+
         // Provision Keycloak first — we need keycloakId before we can build the
         // local Usuario entity, and a Keycloak failure must short-circuit
         // before any local work happens.
@@ -67,48 +84,57 @@ public class CreateUsuarioService implements CreateUsuarioUseCase {
         Usuario usuario = Usuario.create(
             command.nombre(),
             command.correo(),
-            RolId.from(command.rolId()),
+            targetRolId,
             provisioned.keycloakId()
         );
 
         // Sync usuario_id to Keycloak BEFORE the local save. If this fails,
-        // the Keycloak user is rolled back (it has no CRM counterpart) and
-        // the original failure is surfaced to the caller.
+        // the Keycloak user is rolled back and the original failure is surfaced.
         try {
             setAttributesPort.setAttributes(
                 provisioned.keycloakId(),
                 Map.of("usuario_id", usuario.getId().value().toString())
             );
         } catch (RuntimeException syncFailure) {
-            // Compensate: delete the Keycloak user — it has no CRM counterpart
-            // and would otherwise emit a stale usuario_id claim on next login.
-            try {
-                deleteIdentityPort.delete(provisioned.keycloakId());
-            } catch (RuntimeException compensationFailure) {
-                // Log but don't mask the original sync failure.
-                // The Keycloak user may remain orphaned — operator must review.
-            }
+            compensateIdentity(provisioned.keycloakId());
             throw syncFailure;
         }
 
-        // Persist locally. If this fails after the attribute sync, the
-        // Keycloak user is rolled back for the same reason as above: leaving
-        // a Keycloak user with no CRM link would leak a stale usuario_id
-        // claim on subsequent logins.
-        Usuario saved;
         try {
-            saved = savePort.save(usuario);
+            return mutationPort.execute(() -> {
+                // Re-read actor and target role after the ordered role lock is held.
+                validateAssignment(command);
+                return savePort.save(usuario);
+            });
         } catch (RuntimeException saveFailure) {
-            // Compensate: delete the Keycloak user.
-            try {
-                deleteIdentityPort.delete(provisioned.keycloakId());
-            } catch (RuntimeException compensationFailure) {
-                // Log but don't mask the original save failure.
-                // The Keycloak user may remain orphaned — operator must review.
-            }
+            // Late authorization denial and persistence failure both leave no
+            // local CRM user; remove the already-provisioned identity.
+            compensateIdentity(provisioned.keycloakId());
             throw saveFailure;
         }
+    }
 
-        return saved;
+    private void validateAssignment(CreateUsuarioCommand command) {
+        authorization.require(RecursoCrm.USUARIO, AccionCrm.CREAR);
+        CurrentActor actor = currentActorPort.currentActor()
+                .orElseThrow(() -> new CrmActorUnavailableException("No active CRM user is linked to this request"));
+        RolId targetRolId = RolId.from(command.rolId());
+        var targetRole = findRolByIdPort.findById(targetRolId)
+                .orElseThrow(() -> RolNotFoundException.forId(command.rolId()));
+        if (!targetRole.isActivo()) {
+            throw new CrmActorUnavailableException("Cannot assign an inactive CRM role");
+        }
+        authorization.requireCanDelegateGrants(targetRole.getPermisos());
+        if (!actor.rolId().equals(command.rolId())) {
+            authorization.require(RecursoCrm.USUARIO, AccionCrm.ADMINISTRAR);
+        }
+    }
+
+    private void compensateIdentity(String keycloakId) {
+        try {
+            deleteIdentityPort.delete(keycloakId);
+        } catch (RuntimeException compensationFailure) {
+            // Preserve the original failure; an orphan identity can be reconciled by an operator.
+        }
     }
 }

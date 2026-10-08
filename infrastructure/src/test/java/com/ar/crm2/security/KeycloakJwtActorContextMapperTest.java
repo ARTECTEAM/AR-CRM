@@ -59,8 +59,7 @@ class KeycloakJwtActorContextMapperTest {
         assertEquals("auth-subject-123", ctx.subject());
         assertEquals("testuser", ctx.username());
         assertEquals("test@crm2.com", ctx.email());
-        assertTrue(ctx.usuarioId().isPresent());
-        assertEquals(usuarioId, ctx.usuarioId().get());
+        assertTrue(ctx.usuarioId().isEmpty());
         assertTrue(ctx.superUsuarioId().isPresent());
         assertEquals(superUsuarioId, ctx.superUsuarioId().get());
         assertTrue(ctx.hasRole("ADMIN"));
@@ -68,6 +67,15 @@ class KeycloakJwtActorContextMapperTest {
         assertTrue(ctx.isSuperUsuario());
     }
 
+    @Test
+    @DisplayName("map(Jwt) — forged usuario_id is not trusted as a local CRM identity")
+    void map_jwt_usuarioIdClaimIsNotTrusted() {
+        UUID forgedUsuarioId = UUID.randomUUID();
+        ActorContext actor = mapper.map(mockJwt("verified-sub", "user", null,
+                forgedUsuarioId.toString(), null, List.of()));
+
+        assertTrue(actor.usuarioId().isEmpty());
+    }
     // ------------------------------------------------------------------
     // Sub-claim extraction
     // ------------------------------------------------------------------
@@ -83,8 +91,7 @@ class KeycloakJwtActorContextMapperTest {
         ActorContext ctx = mapper.map(auth);
 
         assertEquals("sub", ctx.subject());
-        assertTrue(ctx.usuarioId().isPresent());
-        assertEquals(id, ctx.usuarioId().get());
+        assertTrue(ctx.usuarioId().isEmpty());
     }
 
     @Test

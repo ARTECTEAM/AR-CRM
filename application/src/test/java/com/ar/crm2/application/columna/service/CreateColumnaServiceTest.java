@@ -1,10 +1,15 @@
 package com.ar.crm2.application.columna.service;
 
+import com.ar.crm2.application.security.AllowAllCrmAuthorization;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.ResourceScopeCandidate;
 import com.ar.crm2.application.columna.command.CreateColumnaCommand;
 import com.ar.crm2.application.columna.port.out.FindAllColumnasPort;
 import com.ar.crm2.application.columna.port.out.SaveColumnaPort;
 import com.ar.crm2.exception.NombreColumnaYaExisteException;
 import com.ar.crm2.model.entity.Columna;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.enums.TipoColumna;
 import com.ar.crm2.model.enums.TipoTablero;
 import com.ar.crm2.model.vo.SuperUsuarioId;
@@ -16,8 +21,26 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 class CreateColumnaServiceTest {
+
+    @Test
+    void create_deniesScopedGlobalColumnCandidateBeforeCatalogReadOrSave() {
+        CrmAuthorization authorization = mock(CrmAuthorization.class);
+        FindAllColumnasPort findPort = mock(FindAllColumnasPort.class);
+        SaveColumnaPort savePort = mock(SaveColumnaPort.class);
+        ResourceScopeCandidate candidate = new ResourceScopeCandidate(null, null, null, null);
+        doThrow(new com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException("Denied"))
+            .when(authorization).requireCandidate(RecursoCrm.COLUMNA, AccionCrm.CREAR, candidate);
+        CreateColumnaService service = new CreateColumnaService(authorization, savePort, findPort);
+
+        assertThrows(com.ar.crm2.application.security.exception.CrmAuthorizationDeniedException.class,
+            () -> service.create(command("Scoped", TipoTablero.TAREAS)));
+        verifyNoInteractions(findPort, savePort);
+    }
 
     @Test
     void create_rejectsTrimmedDuplicateNameWithinSameBoardType() {
@@ -30,7 +53,7 @@ class CreateColumnaServiceTest {
             false
         );
 
-        CreateColumnaService service = new CreateColumnaService(passThroughSavePort(), fixedCatalog(existing));
+        CreateColumnaService service = new CreateColumnaService(new AllowAllCrmAuthorization(), passThroughSavePort(), fixedCatalog(existing));
 
         assertThrows(
             NombreColumnaYaExisteException.class,
@@ -49,7 +72,7 @@ class CreateColumnaServiceTest {
             false
         );
 
-        CreateColumnaService service = new CreateColumnaService(passThroughSavePort(), fixedCatalog(existing));
+        CreateColumnaService service = new CreateColumnaService(new AllowAllCrmAuthorization(), passThroughSavePort(), fixedCatalog(existing));
 
         Columna created = service.create(command("pendiente", TipoTablero.TAREAS));
 
@@ -67,7 +90,7 @@ class CreateColumnaServiceTest {
             false
         );
 
-        CreateColumnaService service = new CreateColumnaService(passThroughSavePort(), fixedCatalog(existing));
+        CreateColumnaService service = new CreateColumnaService(new AllowAllCrmAuthorization(), passThroughSavePort(), fixedCatalog(existing));
 
         Columna created = service.create(command("Pendiente", TipoTablero.TRATOS));
 

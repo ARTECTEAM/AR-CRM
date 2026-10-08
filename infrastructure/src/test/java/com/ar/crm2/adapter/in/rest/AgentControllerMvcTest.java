@@ -67,6 +67,8 @@ class AgentControllerMvcTest {
     @Autowired private MockMvc mockMvc;
     @MockitoBean private CreateUserTurnUseCase createUserTurnUseCase;
     @MockitoBean private CompleteUserTurnUseCase completeUserTurnUseCase;
+    @MockitoBean private com.ar.crm2.application.security.port.out.CurrentActorPort currentActorPort;
+    @MockitoBean private com.ar.crm2.application.security.CrmAuthorization crmAuthorization;
 
     @Test
     void anonymousRequest_returns403() throws Exception {

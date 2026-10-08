@@ -42,11 +42,16 @@ public interface ContactoRepository extends JpaRepository<ContactoEntity, String
      */
     @Query("""
         SELECT c FROM ContactoEntity c
-        WHERE (c.creadoPor = :actor OR c.responsableId = :actor)
+        WHERE (:actor IS NULL OR c.creadoPor = :actor OR c.responsableId = :actor)
+          AND (:empresaActor IS NULL OR EXISTS (
+              SELECT e.id FROM EmpresaEntity e
+              WHERE e.id = c.empresaId
+                AND (e.creadoPor = :empresaActor OR e.responsableId = :empresaActor)
+          ))
           AND (:search IS NULL
                OR LOWER(c.nombre) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!'
-               OR LOWER(c.correo) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!'
-               OR LOWER(c.telefono) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!'
+               OR (:includePrivateFields = true AND LOWER(c.correo) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!')
+               OR (:includePrivateFields = true AND LOWER(c.telefono) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!')
                OR LOWER(c.cargo) LIKE LOWER(CONCAT('%', :search, '%')) ESCAPE '!')
           AND (:estadoRelacion IS NULL OR c.estadoRelacion = :estadoRelacion)
           AND (:empresaId IS NULL OR c.empresaId = :empresaId)
@@ -57,11 +62,23 @@ public interface ContactoRepository extends JpaRepository<ContactoEntity, String
         """)
     List<ContactoEntity> searchScoped(
             @Param("actor") String actor,
+            @Param("empresaActor") String empresaActor,
             @Param("search") String search,
             @Param("estadoRelacion") EstadoRelacion estadoRelacion,
             @Param("empresaId") String empresaId,
             @Param("responsableId") String responsableId,
             @Param("comoNosConocio") String comoNosConocio,
+            @Param("includePrivateFields") boolean includePrivateFields,
             Pageable pageable
     );
-}
+
+    @Query("""
+        SELECT COUNT(c) > 0
+        FROM ContactoEntity c
+        WHERE c.id = :contactoId
+          AND (c.creadoPor = :actor OR c.responsableId = :actor)
+        """)
+    boolean isVisibleToActor(
+            @Param("contactoId") String contactoId,
+            @Param("actor") String actor
+    );}

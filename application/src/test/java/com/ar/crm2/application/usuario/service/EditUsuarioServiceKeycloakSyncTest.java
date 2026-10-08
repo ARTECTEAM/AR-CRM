@@ -7,10 +7,17 @@ import com.ar.crm2.application.usuario.command.EditUsuarioCommand;
 import com.ar.crm2.application.usuario.exception.UsuarioNotFoundException;
 import com.ar.crm2.application.usuario.port.out.FindUsuarioByIdPort;
 import com.ar.crm2.application.usuario.port.out.SaveUsuarioPort;
+import com.ar.crm2.application.usuario.port.out.PromoteBootstrapAdministratorPort;
+import com.ar.crm2.application.rol.port.out.FindRolByIdPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.CurrentActor;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
+import com.ar.crm2.application.security.port.out.AuthorizationMutationPort;
 import com.ar.crm2.model.entity.Usuario;
 import com.ar.crm2.model.vo.RolId;
 import com.ar.crm2.model.vo.UsuarioId;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -53,8 +60,31 @@ class EditUsuarioServiceKeycloakSyncTest {
     @Mock
     private SetIdentityEnabledPort setEnabledPort;
 
+    @Mock
+    private CrmAuthorization authorization;
+
+    @Mock
+    private CurrentActorPort currentActorPort;
+
+    @Mock
+    private FindRolByIdPort findRolByIdPort;
+
+    @Mock
+    private AuthorizationMutationPort mutationPort;
+
+    @Mock
+    private PromoteBootstrapAdministratorPort promoteBootstrapAdministratorPort;
+
     @InjectMocks
     private EditUsuarioService service;
+
+    @BeforeEach
+    void setAuthenticatedActor() {
+        when(mutationPort.execute(any())).thenAnswer(invocation ->
+                ((java.util.function.Supplier<?>) invocation.getArgument(0)).get());
+        when(currentActorPort.currentActor()).thenReturn(Optional.of(
+                new CurrentActor(UUID.randomUUID(), UUID.randomUUID(), false)));
+    }
 
     // ── Email sync ────────────────────────────────────────────────
 
@@ -69,7 +99,7 @@ class EditUsuarioServiceKeycloakSyncTest {
             UUID id = UUID.randomUUID();
             UsuarioId usuarioId = UsuarioId.from(id);
             Usuario existing = Usuario.reconstitute(
-                usuarioId, NOMBRE, CORREO_OLD, RolId.create(),
+                usuarioId, NOMBRE, CORREO_OLD, RolId.from(ROL_ID),
                 AHORA.minusDays(1), true, KEYCLOAK_ID
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
@@ -96,7 +126,7 @@ class EditUsuarioServiceKeycloakSyncTest {
             UUID id = UUID.randomUUID();
             UsuarioId usuarioId = UsuarioId.from(id);
             Usuario existing = Usuario.reconstitute(
-                usuarioId, NOMBRE, CORREO_OLD, RolId.create(),
+                usuarioId, NOMBRE, CORREO_OLD, RolId.from(ROL_ID),
                 AHORA.minusDays(1), true, KEYCLOAK_ID
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
@@ -120,7 +150,7 @@ class EditUsuarioServiceKeycloakSyncTest {
             UUID id = UUID.randomUUID();
             UsuarioId usuarioId = UsuarioId.from(id);
             Usuario existing = Usuario.reconstitute(
-                usuarioId, NOMBRE, CORREO_OLD, RolId.create(),
+                usuarioId, NOMBRE, CORREO_OLD, RolId.from(ROL_ID),
                 AHORA.minusDays(1), true, KEYCLOAK_ID
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
@@ -152,7 +182,7 @@ class EditUsuarioServiceKeycloakSyncTest {
             UUID id = UUID.randomUUID();
             UsuarioId usuarioId = UsuarioId.from(id);
             Usuario existing = Usuario.reconstitute(
-                usuarioId, NOMBRE, CORREO_OLD, RolId.create(),
+                usuarioId, NOMBRE, CORREO_OLD, RolId.from(ROL_ID),
                 AHORA.minusDays(1), true, KEYCLOAK_ID
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
@@ -176,7 +206,7 @@ class EditUsuarioServiceKeycloakSyncTest {
             UUID id = UUID.randomUUID();
             UsuarioId usuarioId = UsuarioId.from(id);
             Usuario existing = Usuario.reconstitute(
-                usuarioId, NOMBRE, CORREO_OLD, RolId.create(),
+                usuarioId, NOMBRE, CORREO_OLD, RolId.from(ROL_ID),
                 AHORA.minusDays(1), false, KEYCLOAK_ID
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));
@@ -200,7 +230,7 @@ class EditUsuarioServiceKeycloakSyncTest {
             UUID id = UUID.randomUUID();
             UsuarioId usuarioId = UsuarioId.from(id);
             Usuario existing = Usuario.reconstitute(
-                usuarioId, NOMBRE, CORREO_OLD, RolId.create(),
+                usuarioId, NOMBRE, CORREO_OLD, RolId.from(ROL_ID),
                 AHORA.minusDays(1), true, null
             );
             when(findPort.findById(usuarioId)).thenReturn(Optional.of(existing));

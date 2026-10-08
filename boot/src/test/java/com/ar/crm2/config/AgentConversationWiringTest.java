@@ -440,6 +440,11 @@ class AgentConversationWiringTest {
             return mock(ChatClient.class);
         }
 
+        @Bean
+        com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog agentToolCallbackCatalog() {
+            return com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog.empty();
+        }
+
         // ── Platform transaction manager + clock for the tool ledger ──
 
         @Bean
@@ -461,6 +466,16 @@ class AgentConversationWiringTest {
         @Bean AgentVisibleHistoryRepository agentVisibleHistoryRepository() { return mock(AgentVisibleHistoryRepository.class); }
         @Bean DurableMemoryRepository durableMemoryRepository() { return mock(DurableMemoryRepository.class); }
         @Bean AgentToolActionRepository agentToolActionRepository() { return mock(AgentToolActionRepository.class); }
+
+        // ── PR4 authorization collaborators in the composition root ──
+
+        @Bean com.ar.crm2.adapter.out.persistence.RoleManagerGovernance roleManagerGovernance() {
+            return mock(com.ar.crm2.adapter.out.persistence.RoleManagerGovernance.class);
+        }
+
+        @Bean com.ar.crm2.application.security.port.out.CurrentActorPort currentActorPort() {
+            return mock(com.ar.crm2.application.security.port.out.CurrentActorPort.class);
+        }
 
         // ── Unrelated JPA repositories WiringConfig needs to fully boot ──
 

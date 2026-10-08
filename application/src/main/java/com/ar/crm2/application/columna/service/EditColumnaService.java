@@ -1,11 +1,15 @@
 package com.ar.crm2.application.columna.service;
 
+import com.ar.crm2.application.security.CrmAuthorization;
+
 import com.ar.crm2.application.columna.command.EditColumnaCommand;
 import com.ar.crm2.application.columna.exception.ColumnaNotFoundException;
 import com.ar.crm2.application.columna.port.in.EditColumnaUseCase;
 import com.ar.crm2.application.columna.port.out.FindAllColumnasPort;
 import com.ar.crm2.application.columna.port.out.FindColumnaByIdPort;
 import com.ar.crm2.application.columna.port.out.SaveColumnaPort;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.entity.Columna;
 import com.ar.crm2.model.vo.ColumnaId;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +35,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class EditColumnaService implements EditColumnaUseCase {
 
+    private final CrmAuthorization crmAuthorization;
+
     private final FindColumnaByIdPort findPort;
     private final FindAllColumnasPort findAllPort;
     private final SaveColumnaPort savePort;
@@ -38,6 +44,7 @@ public class EditColumnaService implements EditColumnaUseCase {
     @Override
     public Columna edit(EditColumnaCommand command) {
         ColumnaId columnaId = ColumnaId.from(command.id());
+        crmAuthorization.requireRecord(RecursoCrm.COLUMNA, AccionCrm.ACTUALIZAR, command.id());
 
         Columna existing = findPort.findById(columnaId)
                 .orElseThrow(() -> ColumnaNotFoundException.forId(command.id()));

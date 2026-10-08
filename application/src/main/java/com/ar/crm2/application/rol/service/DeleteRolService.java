@@ -7,6 +7,10 @@ import com.ar.crm2.application.rol.port.in.DeleteRolUseCase;
 import com.ar.crm2.application.rol.port.out.DeleteRolByIdPort;
 import com.ar.crm2.application.rol.port.out.ExistsUsuariosByRolIdPort;
 import com.ar.crm2.application.rol.port.out.FindRolByIdPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.port.out.AuthorizationMutationPort;
+import com.ar.crm2.model.autorizacion.AccionCrm;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.vo.RolId;
 import lombok.RequiredArgsConstructor;
 
@@ -20,20 +24,24 @@ public class DeleteRolService implements DeleteRolUseCase {
     private final FindRolByIdPort findPort;
     private final ExistsUsuariosByRolIdPort existsUsuariosPort;
     private final DeleteRolByIdPort deletePort;
+    private final CrmAuthorization authorization;
+    private final AuthorizationMutationPort mutationPort;
 
     @Override
     public void delete(DeleteRolCommand command) {
-        RolId rolId = RolId.from(command.id());
+        mutationPort.execute(() -> {
+            authorization.require(RecursoCrm.ROL, AccionCrm.ADMINISTRAR);
+            RolId rolId = RolId.from(command.id());
 
-        // Verify rol exists
-        findPort.findById(rolId)
-                .orElseThrow(() -> RolNotFoundException.forId(command.id()));
+            findPort.findById(rolId)
+                    .orElseThrow(() -> RolNotFoundException.forId(command.id()));
 
-        // Check for associated usuarios
-        if (existsUsuariosPort.existsUsuariosByRolId(rolId)) {
-            throw RolHasAssociatedUsuariosException.forId(command.id());
-        }
+            if (existsUsuariosPort.existsUsuariosByRolId(rolId)) {
+                throw RolHasAssociatedUsuariosException.forId(command.id());
+            }
 
-        deletePort.deleteById(rolId);
+            deletePort.deleteById(rolId);
+            return null;
+        });
     }
 }

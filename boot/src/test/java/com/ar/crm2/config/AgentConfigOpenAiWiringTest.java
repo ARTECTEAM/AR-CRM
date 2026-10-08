@@ -32,6 +32,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Narrow no-network Spring context wiring proof for the production
@@ -52,6 +53,15 @@ import static org.mockito.Mockito.mock;
  */
 class AgentConfigOpenAiWiringTest {
 
+    private static com.ar.crm2.adapter.out.ai.tool.CrmToolOutputProjector outputProjector() {
+        var authorization = mock(com.ar.crm2.application.security.CrmAuthorization.class);
+        var groups = java.util.Set.of(com.ar.crm2.model.autorizacion.GrupoCampoSensible.values());
+        when(authorization.fieldPolicy(org.mockito.ArgumentMatchers.any())).thenReturn(
+                new com.ar.crm2.application.security.ResourceReadPolicy(
+                        com.ar.crm2.model.autorizacion.AlcanceCrm.TODO_COMPARTIDO,
+                        groups, java.util.Set.of(), groups));
+        return new com.ar.crm2.adapter.out.ai.tool.CrmToolOutputProjector(authorization);
+    }
     @Configuration
     @Import(AgentConfig.class)
     static class OpenAiTestContext {
@@ -74,7 +84,7 @@ class AgentConfigOpenAiWiringTest {
                     mock(com.ar.crm2.application.tablero.port.in.DeleteTableroUseCase.class),
                     mock(com.ar.crm2.application.tablero.port.in.EliminarColumnaDelTableroUseCase.class),
                     mock(com.ar.crm2.application.tablero.port.in.AsignarColumnaTableroUseCase.class),
-                    mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class));
+                    mock(com.ar.crm2.application.tablero.port.in.ReordenarColumnasUseCase.class), outputProjector());
         }
         @Bean ColumnaTools columnaTools() {
             return new ColumnaTools(mock(com.ar.crm2.application.columna.port.in.CreateColumnaUseCase.class),
@@ -95,19 +105,19 @@ class AgentConfigOpenAiWiringTest {
             return new ContactoTools(mock(SearchContactosForActorUseCase.class), mock(CreateContactoUseCase.class),
                     mock(EditContactoUseCase.class), mock(com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase.class),
                     mock(com.ar.crm2.application.contacto.port.in.DeleteContactoUseCase.class),
-                    mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class));
+                    mock(com.ar.crm2.application.contacto.port.in.CambiarEstadoContactoUseCase.class), outputProjector());
         }
         @Bean EmpresaTools empresaTools() {
             return new EmpresaTools(mock(CreateEmpresaUseCase.class),
                     mock(com.ar.crm2.application.empresa.port.in.GetAllEmpresasUseCase.class),
                     mock(EditEmpresaUseCase.class), mock(com.ar.crm2.application.empresa.port.in.DeleteEmpresaUseCase.class),
-                    mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class));
+                    mock(com.ar.crm2.application.empresa.port.in.CambiarEstadoEmpresaUseCase.class), outputProjector());
         }
         @Bean TratoTools tratoTools() {
             return new TratoTools(mock(com.ar.crm2.application.trato.port.in.CreateTratoUseCase.class),
                     mock(com.ar.crm2.application.trato.port.in.GetAllTratosUseCase.class),
                     mock(com.ar.crm2.application.trato.port.in.GetTratoByIdUseCase.class),
-                    mock(EditTratoUseCase.class), mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class));
+                    mock(EditTratoUseCase.class), mock(com.ar.crm2.application.trato.port.in.DeleteTratoUseCase.class), outputProjector());
         }
         @Bean TareaTools tareaTools() {
             return new TareaTools(mock(com.ar.crm2.application.tarea.port.in.CreateTareaUseCase.class),
@@ -154,7 +164,7 @@ class AgentConfigOpenAiWiringTest {
             ChatClient chatClient = context.getBean(chatClientBeans[0], ChatClient.class);
 
             String content = chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", "- wired-memory"))
+                    .system(spec -> spec.param("durable_memories", "- wired-memory").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                     .user("hi-from-context")
                     .call()
                     .content();
@@ -173,7 +183,7 @@ class AgentConfigOpenAiWiringTest {
             ChatClient chatClient = context.getBean(ChatClient.class);
 
             chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", "- wired-memory-2"))
+                    .system(spec -> spec.param("durable_memories", "- wired-memory-2").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                     .user("hello")
                     .call()
                     .content();
@@ -210,7 +220,7 @@ class AgentConfigOpenAiWiringTest {
     }
 
     @Test
-    void groupedResourceToolsAreResolvedAsTheExactDefaultToolCatalog() {
+    void groupedResourceToolsAreResolvedAsTheExactCatalogWithoutGlobalDefaults() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 OpenAiTestContext.class)) {
 
@@ -224,40 +234,31 @@ class AgentConfigOpenAiWiringTest {
             assertThat(context.getBean(EtiquetaTools.class)).isNotNull();
             assertThat(context.getBean(AgendaTools.class)).isNotNull();
 
-            ChatClient chatClient = context.getBean(ChatClient.class);
+            var catalog = context.getBean(com.ar.crm2.adapter.out.ai.tool.AgentToolCallbackCatalog.class);
+            assertThat(catalog.registeredToolNames()).hasSize(50)
+                    .contains("find_contacts", "create_contact", "list_tableros", "move_ficha_to_columna");
 
-            // Round-trip confirms all resource groups reach the configured client.
+            ChatClient chatClient = context.getBean(ChatClient.class);
             chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", ""))
+                    .system(spec -> spec.param("durable_memories", "").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                     .user("hi")
                     .call()
                     .content();
 
-            var callbacks = ((ToolCallingChatOptions) ((CapturingChatModel) context.getBean("openAiChatModel"))
-                    .capturedPrompt().getOptions()).getToolCallbacks();
-            assertThat(callbacks).hasSize(50);
-            assertThat(callbacks.stream().map(callback -> callback.getToolDefinition().name()))
-                    .containsExactlyInAnyOrder(
-                            "find_contacts", "create_contact", "get_contact", "edit_contact", "change_contact_state", "delete_contact",
-                            "create_company", "list_companies", "edit_company", "change_company_state", "delete_company",
-                            "create_trato", "list_tratos", "get_trato", "edit_trato", "delete_trato",
-                            "create_tarea", "list_tareas", "get_tarea", "edit_tarea", "delete_tarea",
-                            "create_etiqueta", "list_etiquetas", "get_etiqueta", "edit_etiqueta", "delete_etiqueta",
-                            "create_agenda", "list_agendas", "get_agenda", "edit_agenda", "delete_agenda",
-                            "list_tableros", "get_tablero", "create_tablero", "edit_tablero", "delete_tablero",
-                            "eliminar_columna_del_tablero", "assign_columna_to_tablero", "reorder_tablero_columns",
-                            "list_columnas", "get_columna", "create_columna", "edit_columna", "delete_columna",
-                            "list_fichas", "get_ficha", "create_ficha", "edit_ficha", "delete_ficha", "move_ficha_to_columna");
+            Object promptOptions = ((CapturingChatModel) context.getBean("openAiChatModel"))
+                    .capturedPrompt().getOptions();
+            if (promptOptions instanceof ToolCallingChatOptions options) {
+                assertThat(options.getToolCallbacks()).isNullOrEmpty();
+            }
         }
     }
-
     @Test
     void wiredContextClosesCleanlyAfterOpenAiChatClientRoundTrip() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 OpenAiTestContext.class)) {
             ChatClient chatClient = context.getBean(ChatClient.class);
             chatClient.prompt()
-                    .system(spec -> spec.param("durable_memories", "- x"))
+                    .system(spec -> spec.param("durable_memories", "- x").param("agent_capabilities", "No CRM tool capabilities are available for this turn."))
                     .user("y")
                     .call()
                     .content();

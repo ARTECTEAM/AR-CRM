@@ -2,6 +2,7 @@ package com.ar.crm2.adapter.out.persistence;
 
 import com.ar.crm2.adapter.out.persistence.entity.UsuarioEntity;
 import com.ar.crm2.adapter.out.persistence.mapper.UsuarioMapper;
+import com.ar.crm2.adapter.out.persistence.RoleManagerGovernance;
 import com.ar.crm2.adapter.out.persistence.repository.UsuarioRepository;
 import com.ar.crm2.model.entity.Usuario;
 import com.ar.crm2.model.vo.RolId;
@@ -10,12 +11,15 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,6 +34,9 @@ class UsuarioRepositoryAdapterKeycloakTest {
 
     @Mock
     private UsuarioRepository repository;
+
+    @Mock
+    private RoleManagerGovernance governance;
 
     @InjectMocks
     private UsuarioRepositoryAdapter adapter;
@@ -123,6 +130,8 @@ class UsuarioRepositoryAdapterKeycloakTest {
                     .build();
 
             when(repository.save(any(UsuarioEntity.class))).thenReturn(savedEntity);
+            when(governance.lockRoles()).thenReturn(List.of());
+            when(repository.findById(usuarioId.value().toString())).thenReturn(Optional.empty());
 
             Usuario result = adapter.save(domain);
 
@@ -156,10 +165,41 @@ class UsuarioRepositoryAdapterKeycloakTest {
                     .build();
 
             when(repository.save(any(UsuarioEntity.class))).thenReturn(savedEntity);
+            when(governance.lockRoles()).thenReturn(List.of());
+            when(repository.findById(usuarioId.value().toString())).thenReturn(Optional.empty());
 
             Usuario result = adapter.save(domain);
 
             assertNull(result.getKeycloakId());
         }
+    }
+
+    @Test
+    @DisplayName("delete checks manager governance under a transaction before deleting")
+    void delete_checksManagerGovernanceInsideTransaction() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UsuarioId usuarioId = UsuarioId.from(userId);
+        String roleId = UUID.randomUUID().toString();
+        UsuarioEntity existing = UsuarioEntity.builder()
+                .id(userId.toString())
+                .nombre(NOMBRE)
+                .correo(CORREO)
+                .rolId(roleId)
+                .creadoEn(AHORA)
+                .activo(true)
+                .keycloakId(KEYCLOAK_ID)
+                .build();
+        when(governance.lockRoles()).thenReturn(List.of());
+        when(repository.findById(userId.toString())).thenReturn(Optional.of(existing));
+
+        adapter.deleteById(usuarioId);
+
+        InOrder inOrder = inOrder(governance, repository);
+        inOrder.verify(governance).lockRoles();
+        inOrder.verify(repository).findById(userId.toString());
+        inOrder.verify(governance).assertUserRemoval(eq(List.of()), any(Usuario.class));
+        inOrder.verify(repository).deleteById(userId.toString());
+        assertNotNull(UsuarioRepositoryAdapter.class.getMethod("deleteById", UsuarioId.class)
+                .getAnnotation(Transactional.class));
     }
 }

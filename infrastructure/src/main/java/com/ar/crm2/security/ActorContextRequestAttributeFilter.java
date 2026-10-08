@@ -1,6 +1,8 @@
 package com.ar.crm2.security;
 
 import com.ar.crm2.application.security.ActorContext;
+import com.ar.crm2.application.security.CurrentActor;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -34,9 +36,12 @@ public class ActorContextRequestAttributeFilter extends OncePerRequestFilter {
     public static final String ACTOR_CONTEXT_ATTRIBUTE = "actorContext";
 
     private final KeycloakJwtActorContextMapper actorContextMapper;
+    private final CurrentActorPort currentActorPort;
 
-    public ActorContextRequestAttributeFilter(KeycloakJwtActorContextMapper actorContextMapper) {
+    public ActorContextRequestAttributeFilter(KeycloakJwtActorContextMapper actorContextMapper,
+                                               CurrentActorPort currentActorPort) {
         this.actorContextMapper = actorContextMapper;
+        this.currentActorPort = currentActorPort;
     }
 
     @Override
@@ -49,7 +54,11 @@ public class ActorContextRequestAttributeFilter extends OncePerRequestFilter {
         if (authentication != null
                 && authentication.isAuthenticated()
                 && authentication.getPrincipal() instanceof Jwt) {
-            request.setAttribute(ACTOR_CONTEXT_ATTRIBUTE, actorContextMapper.map(authentication));
+            ActorContext jwtActor = actorContextMapper.map(authentication);
+            var localActor = currentActorPort.currentActor();
+            request.setAttribute(ACTOR_CONTEXT_ATTRIBUTE, new ActorContext(
+                    jwtActor.subject(), jwtActor.username(), jwtActor.email(),
+                    localActor.map(CurrentActor::usuarioId), jwtActor.superUsuarioId(), jwtActor.roles()));
         }
         // Intentionally no fallback: missing/invalid principal leaves the attribute
         // unset. Controllers MUST reject the request via requireAuthenticatedActor.

@@ -14,6 +14,7 @@ import com.ar.crm2.application.contacto.port.in.EditContactoUseCase;
 import com.ar.crm2.application.contacto.port.in.SearchContactosForActorUseCase;
 import com.ar.crm2.application.contacto.port.in.GetContactoByIdUseCase;
 import com.ar.crm2.model.entity.Contacto;
+import com.ar.crm2.model.autorizacion.RecursoCrm;
 import com.ar.crm2.model.enums.EstadoRelacion;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.model.ToolContext;
@@ -34,6 +35,8 @@ public class ContactoTools {
     private final DeleteContactoUseCase deleteContactoUseCase;
     private final CambiarEstadoContactoUseCase cambiarEstadoContactoUseCase;
 
+    private final CrmToolOutputProjector outputProjector;
+
     @Tool(name = "find_contacts", description = "Search contacts using optional filters. The current actor is supplied by trusted server context and is not a model-visible argument. Results are capped at 20.")
     public FindContactsOutput findContacts(
             @ToolParam(required = false, description = "Optional free-text search applied to contact name.") String search,
@@ -45,7 +48,7 @@ public class ContactoTools {
         UUID trustedActor = ToolContextSupport.requireActor(toolContext);
         List<Contacto> contacts = searchContactosForActorUseCase.search(CrmToolMapper.toGetAllContactosCommand(
                 search, estadoRelacion, empresaId, responsableId, comoNosConocio, trustedActor));
-        return CrmToolMapper.toFindContactsOutput(contacts);
+        return outputProjector.project(CrmToolMapper.toFindContactsOutput(contacts), RecursoCrm.CONTACTO);
     }
 
     @Tool(name = "create_contact", description = "Create a contact. Required fields must be supplied by the user; ask about missing required data. The actor identity is trusted server context and is not a model argument.")
@@ -63,7 +66,7 @@ public class ContactoTools {
         Contacto created = createContactoUseCase.create(CrmToolMapper.toCreateContactoCommand(
                 empresaId, nombre, correo, estadoRelacion, responsableId, telefono, cargo,
                 comoNosConocio, trustedActor));
-        return CrmToolMapper.toCreateContactOutput(created);
+        return outputProjector.project(CrmToolMapper.toCreateContactOutput(created), RecursoCrm.CONTACTO);
     }
 
     @Tool(name = "get_contact", description = "Get a contact by UUID. Actor context is implicit.")
@@ -71,7 +74,7 @@ public class ContactoTools {
             @ToolParam(description = "Contact UUID.") UUID id,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toContactOutput(getContactoByIdUseCase.getById(new GetContactoByIdCommand(id)));
+        return outputProjector.project(CrmToolMapper.toContactOutput(getContactoByIdUseCase.getById(new GetContactoByIdCommand(id))), RecursoCrm.CONTACTO);
     }
 
     @Tool(name = "edit_contact", description = "Edit an existing contact's editable business fields. Its identity, company, and original creator are not changed. responsableId is the business assignee, not the authenticated actor. Ask instead of inventing required values; null/omitted optional values preserve their current values. Empty optional text clears that text; a nullable responsible-user ID cannot be cleared through this tool.")
@@ -104,7 +107,7 @@ public class ContactoTools {
                 telefono != null ? telefono : current.getTelefono(),
                 cargo != null ? cargo : current.getCargo(),
                 comoNosConocio != null ? comoNosConocio : current.getComoNosConocio()));
-        return CrmToolMapper.toEditContactOutput(updated);
+        return outputProjector.project(CrmToolMapper.toEditContactOutput(updated), RecursoCrm.CONTACTO);
     }
 
     @Tool(name = "change_contact_state", description = "Change a contact's relationship state to the state explicitly selected by the user. Actor context is implicit.")
@@ -113,8 +116,8 @@ public class ContactoTools {
             @ToolParam(description = "New relationship state.") EstadoRelacion nuevoEstado,
             ToolContext toolContext) {
         ToolContextSupport.requireActor(toolContext);
-        return CrmToolMapper.toContactOutput(cambiarEstadoContactoUseCase.cambiarEstado(
-                new CambiarEstadoContactoCommand(id, CrmToolMapper.requireEnum(nuevoEstado, "nuevoEstado"))));
+        return outputProjector.project(CrmToolMapper.toContactOutput(cambiarEstadoContactoUseCase.cambiarEstado(
+                new CambiarEstadoContactoCommand(id, CrmToolMapper.requireEnum(nuevoEstado, "nuevoEstado")))), RecursoCrm.CONTACTO);
     }
 
     @Tool(name = "delete_contact", description = "Delete a contact. This is destructive; call only when the user clearly requested deletion. Existing CRM checks apply. Actor context is implicit.")

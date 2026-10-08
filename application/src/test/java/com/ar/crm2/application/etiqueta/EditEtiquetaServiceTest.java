@@ -6,6 +6,7 @@ import com.ar.crm2.application.etiqueta.port.out.ExistsEtiquetaByNombreAndTipoPo
 import com.ar.crm2.application.etiqueta.port.out.FindEtiquetaByIdPort;
 import com.ar.crm2.application.etiqueta.port.out.SaveEtiquetaPort;
 import com.ar.crm2.application.etiqueta.service.EditEtiquetaService;
+import com.ar.crm2.application.support.TestCrmAuthorization;
 import com.ar.crm2.exception.DuplicateEtiquetaNameException;
 import com.ar.crm2.model.entity.Etiqueta;
 import com.ar.crm2.model.enums.TipoEtiqueta;
@@ -36,7 +37,8 @@ class EditEtiquetaServiceTest {
         EditEtiquetaService service = new EditEtiquetaService(
             new InMemoryFindByIdPort(id, original),
             new InMemorySaveEtiquetaPort(),
-            catalog
+            catalog,
+            new TestCrmAuthorization()
         );
 
         Etiqueta updated = service.edit(new EditEtiquetaCommand(id.value(), "New", "#000000"));
@@ -55,7 +57,8 @@ class EditEtiquetaServiceTest {
         EditEtiquetaService service = new EditEtiquetaService(
             new InMemoryFindByIdPort(EtiquetaId.create(), null),
             new InMemorySaveEtiquetaPort(),
-            new CatalogAdapter()
+            new CatalogAdapter(),
+            new TestCrmAuthorization()
         );
 
         assertThrows(EtiquetaNotFoundException.class,
@@ -74,7 +77,8 @@ class EditEtiquetaServiceTest {
         EditEtiquetaService service = new EditEtiquetaService(
             new InMemoryFindByIdPort(id, original),
             new InMemorySaveEtiquetaPort(),
-            catalog
+            catalog,
+            new TestCrmAuthorization()
         );
 
         assertThrows(DuplicateEtiquetaNameException.class,
@@ -97,7 +101,8 @@ class EditEtiquetaServiceTest {
         EditEtiquetaService service = new EditEtiquetaService(
             new InMemoryFindByIdPort(id, original),
             new InMemorySaveEtiquetaPort(),
-            catalog
+            catalog,
+            new TestCrmAuthorization()
         );
 
         Etiqueta updated = service.edit(new EditEtiquetaCommand(id.value(), "Stable", "#123456"));
@@ -117,7 +122,8 @@ class EditEtiquetaServiceTest {
         EditEtiquetaService service = new EditEtiquetaService(
             new InMemoryFindByIdPort(id, original),
             new InMemorySaveEtiquetaPort(),
-            catalog
+            catalog,
+            new TestCrmAuthorization()
         );
 
         Etiqueta updated = service.edit(new EditEtiquetaCommand(id.value(), "Blue", "#00FF00"));
@@ -139,7 +145,8 @@ class EditEtiquetaServiceTest {
         EditEtiquetaService service = new EditEtiquetaService(
             new InMemoryFindByIdPort(id, original),
             new InMemorySaveEtiquetaPort(),
-            catalog
+            catalog,
+            new TestCrmAuthorization()
         );
 
         assertThrows(DuplicateEtiquetaNameException.class,

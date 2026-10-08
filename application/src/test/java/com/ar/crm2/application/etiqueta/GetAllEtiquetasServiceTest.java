@@ -2,6 +2,7 @@ package com.ar.crm2.application.etiqueta;
 
 import com.ar.crm2.application.etiqueta.port.out.FindAllEtiquetasPort;
 import com.ar.crm2.application.etiqueta.service.GetAllEtiquetasService;
+import com.ar.crm2.application.support.TestCrmAuthorization;
 import com.ar.crm2.model.entity.Etiqueta;
 import com.ar.crm2.model.enums.TipoEtiqueta;
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,7 @@ class GetAllEtiquetasServiceTest {
             Etiqueta.create("Urgent", TipoEtiqueta.TAREA, "#FF0000"),
             Etiqueta.create("Premium", TipoEtiqueta.TRATO, "#0000FF")
         );
-        GetAllEtiquetasService service = new GetAllEtiquetasService(new InMemoryFindAll(all));
+        GetAllEtiquetasService service = new GetAllEtiquetasService(new InMemoryFindAll(all), new TestCrmAuthorization());
 
         List<Etiqueta> result = service.getAll(Optional.empty());
 
@@ -31,7 +32,7 @@ class GetAllEtiquetasServiceTest {
         List<Etiqueta> tareas = List.of(
             Etiqueta.create("Urgent", TipoEtiqueta.TAREA, "#FF0000")
         );
-        GetAllEtiquetasService service = new GetAllEtiquetasService(new InMemoryFindAll(tareas));
+        GetAllEtiquetasService service = new GetAllEtiquetasService(new InMemoryFindAll(tareas), new TestCrmAuthorization());
 
         List<Etiqueta> result = service.getAll(Optional.of(TipoEtiqueta.TAREA));
 

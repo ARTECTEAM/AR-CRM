@@ -70,6 +70,13 @@ class EtiquetaControllerIT {
     @MockitoBean
     private KeycloakJwtActorContextMapper actorContextMapper;
 
+    // Response advice is component-scanned even in this controller slice.
+    @MockitoBean
+    private com.ar.crm2.application.security.port.out.CurrentActorPort currentActorPort;
+
+    @MockitoBean
+    private com.ar.crm2.application.security.CrmAuthorization crmAuthorization;
+
     // ── Helpers ─────────────────────────────────────────────────────
 
     private Etiqueta buildEtiqueta(UUID id, String nombre, TipoEtiqueta tipo, String color) {

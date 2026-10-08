@@ -5,11 +5,18 @@ import com.ar.crm2.application.identity.model.ProvisionedIdentity;
 import com.ar.crm2.application.identity.port.out.DeleteIdentityPort;
 import com.ar.crm2.application.identity.port.out.ProvisionIdentityPort;
 import com.ar.crm2.application.identity.port.out.SetIdentityAttributesPort;
+import com.ar.crm2.application.rol.port.out.FindRolByIdPort;
+import com.ar.crm2.application.security.CrmAuthorization;
+import com.ar.crm2.application.security.CurrentActor;
+import com.ar.crm2.application.security.port.out.CurrentActorPort;
+import com.ar.crm2.application.security.port.out.AuthorizationMutationPort;
 import com.ar.crm2.application.usuario.command.CreateUsuarioCommand;
 import com.ar.crm2.application.usuario.port.out.SaveUsuarioPort;
 import com.ar.crm2.model.entity.Usuario;
+import com.ar.crm2.model.entity.Rol;
 import com.ar.crm2.model.vo.RolId;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +27,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.Map;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -55,8 +64,30 @@ class CreateUsuarioServiceKeycloakTest {
     @Mock
     private SetIdentityAttributesPort setAttributesPort;
 
+    @Mock
+    private CrmAuthorization authorization;
+
+    @Mock
+    private CurrentActorPort currentActorPort;
+
+    @Mock
+    private FindRolByIdPort findRolByIdPort;
+
+    @Mock
+    private AuthorizationMutationPort mutationPort;
+
     @InjectMocks
     private CreateUsuarioService service;
+
+    @BeforeEach
+    void configureAuthorizedActorAndRole() {
+        lenient().when(mutationPort.execute(any())).thenAnswer(invocation ->
+                ((java.util.function.Supplier<?>) invocation.getArgument(0)).get());
+        when(currentActorPort.currentActor()).thenReturn(Optional.of(
+                new CurrentActor(UUID.randomUUID(), ROL_ID, false)));
+        when(findRolByIdPort.findById(RolId.from(ROL_ID))).thenReturn(Optional.of(
+                Rol.reconstitute(RolId.from(ROL_ID), "Test role", null, true, List.of())));
+    }
 
     // ── Happy path ─────────────────────────────────────────────────
 
